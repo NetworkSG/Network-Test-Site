@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sora Studios – Find Us</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: transparent;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* ── MAIN CARD ── */
+  .card {
+    position: relative;
+    width: 1136px;
+    height: 537px;
+    border-radius: 22px;
+    overflow: hidden;
+
+  }
+
+  /* ── MAP ── */
+  .map-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    /* matches the dark navy desaturated look in the screenshot */
+    filter: saturate(0.18) brightness(0.48) hue-rotate(200deg);
+    transition: filter 0.5s;
+  }
+
+  .card:hover .map-frame {
+    filter: saturate(0.25) brightness(0.55) hue-rotate(200deg);
+  }
+
+
+
+  /* ── PIN ── */
+  .pin {
+    position: absolute;
+    top: 43%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .ring-outer {
+    width: 78px; height: 78px;
+    border-radius: 50%;
+    background: rgba(220, 48, 48, 0.2);
+    display: flex; align-items: center; justify-content: center;
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+
+  .ring-mid {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: rgba(220, 48, 48, 0.35);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .pin-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: #dc3030;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.2), 0 4px 16px rgba(220,48,48,0.5);
+  }
+
+  .pin-dot svg { width: 14px; height: 14px; fill: #fff; }
+
+  @keyframes breathe {
+    0%,100% { transform: scale(1); opacity: 0.9; }
+    50%      { transform: scale(1.1); opacity: 0.6; }
+  }
+
+  .pin-tag {
+    background: rgba(255,255,255,0.94);
+    color: #1a1f2e;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 5px 14px;
+    border-radius: 30px;
+
+    white-space: nowrap;
+  }
+
+  /* ── INPUT — always fixed at bottom, never moves ── */
+  .float-input {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    width: min(480px, calc(100% - 40px));
+  }
+
+  /* ── ETA CARD — independently anchored just below input ── */
+  .result-card {
+    position: absolute;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(480px, calc(100% - 40px));
+    background: rgba(255,255,255,0.97);
+    border-radius: 16px;
+    padding: 16px 20px;
+
+    display: none;
+    z-index: 3;
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+
+  .result-card.show {
+    display: block;
+    animation: fadeDown 0.3s cubic-bezier(0.16,1,0.3,1) both;
+  }
+
+  .res-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .eta-num {
+    font-size: 32px;
+    font-weight: 500;
+    color: #1a1f2e;
+    line-height: 1;
+  }
+
+  .eta-unit-label {
+    font-size: 14px;
+    color: #9aa0b4;
+    font-weight: 400;
+    margin-left: 3px;
+  }
+
+  .eta-sub {
+    font-size: 11px;
+    color: #9aa0b4;
+    margin-top: 4px;
+  }
+
+  .open-btn {
+    flex-shrink: 0;
+    background: #1a1f2e;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.18s;
+    white-space: nowrap;
+  }
+
+  .open-btn:hover { background: #2d3449; }
+
+  .divider { height: 1px; background: #edf0f5; margin: 13px 0; }
+
+  .meta-row { display: flex; gap: 24px; }
+  .m-item { display: flex; flex-direction: column; gap: 2px; }
+  .m-lbl { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: #b0b8cc; }
+  .m-val { font-size: 13px; font-weight: 500; color: #2a3040; }
+
+  /* ── ROW: icon + input + button ── */
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.96);
+    border-radius: 14px;
+    padding: 9px 9px 9px 15px;
+
+    width: 100%;
+  }
+
+  .loc-svg {
+    flex-shrink: 0;
+    width: 17px; height: 17px;
+    color: #b0b8cc;
+  }
+
+  .input-row input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13.5px;
+    font-weight: 400;
+    color: #1a1f2e;
+    background: transparent;
+    min-width: 0;
+  }
+
+  .input-row input::placeholder { color: #b8bece; }
+
+  .go-btn {
+    flex-shrink: 0;
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    background: #3b4260;
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.18s, transform 0.12s;
+  }
+
+  .go-btn:hover  { background: #4e5580; }
+  .go-btn:active { transform: scale(0.93); }
+  .go-btn svg { width: 16px; height: 16px; fill: #fff; }
+
+  /* error */
+  .err {
+    font-size: 11px;
+    color: #c0392b;
+    text-align: center;
+    margin-top: 7px;
+    display: none;
+  }
+
+  /* spinner */
+  .spin {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 2.5px solid #dde1ec;
+    border-top-color: #3b4260;
+    border-radius: 50%;
+    animation: rot 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <!-- MAP — pinned to 33 Ubi Ave 3, #01-17, Singapore 408868 -->
+  <iframe
+    class="map-frame"
+    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d996.4!2d103.8918!3d1.3271!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31da181f5dc73855%3A0x0!2s33+Ubi+Ave+3%2C+Singapore+408868!5e0!3m2!1sen!2ssg!4v1700000000000!5m2!1sen!2ssg&gestureHandling=none&zoomControl=false&mapTypeControl=false&scaleControl=false&streetViewControl=false&rotateControl=false&fullscreenControl=false"
+    loading="lazy"
+    referrerpolicy="no-referrer-when-downgrade"
+    scrolling="no"
+    style="pointer-events: none;">
+  </iframe>
+
+
+  <!-- PIN -->
+  <div class="pin">
+    <div class="ring-outer">
+      <div class="ring-mid">
+        <div class="pin-dot">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="pin-tag">Sora Studios HQ</div>
+  </div>
+
+  <!-- ETA RESULT — independent, sits above input, never moves input -->
+  <div class="result-card" id="resultCard">
+    <div class="res-top">
+      <div>
+        <div>
+          <span class="eta-num" id="etaNum">—</span>
+          <span class="eta-unit-label" id="etaUnitLabel"></span>
+        </div>
+        <div class="eta-sub" id="etaSub">via best route</div>
+      </div>
+      <a class="open-btn" id="openBtn" href="#" target="_blank">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+        Open in Maps
+      </a>
+    </div>
+    <div class="divider"></div>
+    <div class="meta-row">
+      <div class="m-item"><span class="m-lbl">Distance</span><span class="m-val" id="mDist">—</span></div>
+      <div class="m-item"><span class="m-lbl">Arrive by</span><span class="m-val" id="mArrive">—</span></div>
+      <div class="m-item"><span class="m-lbl">Mode</span><span class="m-val">Driving</span></div>
+    </div>
+  </div>
+
+  <!-- INPUT — always fixed at bottom, never moves -->
+  <div class="float-input">
+    <div class="input-row">
+      <svg class="loc-svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+      </svg>
+      <input
+        id="postalInput"
+        type="text"
+        inputmode="numeric"
+        maxlength="6"
+        placeholder="Enter Postal Code"
+      />
+      <button class="go-btn" onclick="getETA()" title="Get ETA">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+    <div class="err" id="errMsg"></div>
+  </div>
+
+</div>
+
+<script>
+  // ── Sora Studios Singapore destination ──
+  const DEST    = "33 Ubi Ave 3, Singapore 408868";
+  const DEST_SG = "1.3521,103.8198"; // central SG fallback coords
+
+  // Singapore postal codes are exactly 6 digits, starting with 01–82
+  function isValidSGPostal(v) {
+    return /^\d{6}$/.test(v) && parseInt(v.slice(0,2)) >= 1 && parseInt(v.slice(0,2)) <= 82;
+  }
+
+  document.getElementById('postalInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') getETA();
+  });
+
+  // Only allow digits
+  document.getElementById('postalInput').addEventListener('input', e => {
+    e.target.value = e.target.value.replace(/\D/g, '');
+  });
+
+  async function getETA() {
+    const raw   = document.getElementById('postalInput').value.trim();
+    const err   = document.getElementById('errMsg');
+    const card  = document.getElementById('resultCard');
+
+    err.style.display = 'none';
+
+    if (!raw) {
+      err.textContent = '⚠ Please enter a Singapore postal code.';
+      err.style.display = 'block';
+      return;
+    }
+
+    if (!isValidSGPostal(raw)) {
+      err.textContent = '⚠ Please enter a valid 6-digit Singapore postal code (e.g. 238859).';
+      err.style.display = 'block';
+      return;
+    }
+
+    // Show loading
+    card.classList.add('show');
+    document.getElementById('etaNum').innerHTML     = '<span class="spin"></span>';
+    document.getElementById('etaUnitLabel').textContent = '';
+    document.getElementById('etaSub').textContent   = 'Finding best route…';
+    document.getElementById('mDist').textContent    = '—';
+    document.getElementById('mArrive').textContent  = '—';
+
+    // Build Google Maps directions link (Singapore to Sora Studios)
+    const origin = `Singapore ${raw}`;
+    const gmUrl  = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(DEST)}&travelmode=driving`;
+    document.getElementById('openBtn').href = gmUrl;
+
+    // Simulate ETA (swap in Distance Matrix API for production)
+    await new Promise(r => setTimeout(r, 900 + Math.random() * 700));
+
+    // Singapore is small — realistic ranges
+    const mins = Math.round(5 + Math.random() * 35);
+    const km   = (0.8 + Math.random() * 18).toFixed(1);
+    const eta  = new Date();
+    eta.setMinutes(eta.getMinutes() + mins);
+    const arrStr = eta.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
+
+    const routes = [
+      'via Central Expressway (CTE)',
+      'via Pan Island Expressway (PIE)',
+      'via Ayer Rajah Expressway (AYE)',
+      'via East Coast Parkway (ECP)',
+      'via Orchard Road',
+      'via Bukit Timah Road',
+    ];
+    const route = routes[Math.floor(Math.random() * routes.length)];
+
+    let display, unit;
+    if (mins >= 60) {
+      const h = Math.floor(mins/60), m = mins%60;
+      display = h + (m ? `:${String(m).padStart(2,'0')}` : '');
+      unit = ' hr';
+    } else {
+      display = mins;
+      unit = ' min';
+    }
+
+    document.getElementById('etaNum').textContent        = display;
+    document.getElementById('etaUnitLabel').textContent  = unit;
+    document.getElementById('etaSub').textContent        = route;
+    document.getElementById('mDist').textContent         = km + ' km';
+    document.getElementById('mArrive').textContent       = arrStr;
+  }
+</script>
+
+</body>
+</html>

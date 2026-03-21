@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sora Studio Reviews</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{height:100%;overflow:hidden}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:transparent;padding:20px;-webkit-font-smoothing:antialiased;height:100%;overflow:hidden}
+
+.reviews-wrapper{max-width:1275px;margin:0 auto}
+
+.reviews-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+
+/* Collapsed container with fade */
+.reviews-container{position:relative;max-height:420px;overflow:hidden;transition:max-height 0.8s cubic-bezier(0.4,0,0.2,1)}
+.reviews-container.expanded{max-height:none}
+
+/* Fade gradient inside the container */
+.reviews-container::after{content:'';position:absolute;bottom:0;left:0;right:0;height:200px;background:linear-gradient(to bottom,rgba(255,255,255,0) 0%,rgba(255,255,255,0.85) 50%,rgba(255,255,255,1) 100%);pointer-events:none;z-index:2;transition:opacity 0.5s ease;opacity:1}
+.reviews-container.expanded::after{opacity:0}
+
+/* View More button */
+.view-more-btn{display:flex;flex-direction:column;align-items:center;gap:8px;margin:28px auto 0;cursor:pointer;border:none;background:none;font-family:'Inter',sans-serif;position:relative;z-index:10;padding:8px 16px}
+.view-more-btn:hover .arrow-circle{border-color:#888;background:rgba(0,0,0,0.04)}
+.btn-label{font-size:15px;font-weight:500;color:#333;letter-spacing:0.01em}
+.arrow-circle{width:44px;height:44px;border-radius:50%;border:1.5px solid #ccc;display:flex;align-items:center;justify-content:center;transition:transform 0.4s ease}
+.arrow-circle svg{width:18px;height:18px;color:#555}
+
+/* Cards */
+.review-card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08),0 1px 3px rgba(0,0,0,0.06);transition:box-shadow 0.3s ease;display:flex;flex-direction:column}
+.review-card:hover{box-shadow:0 8px 30px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.08)}
+.card-image{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+.card-image-wrapper{position:relative;overflow:hidden;flex-shrink:0}
+.play-button{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;background:rgba(0,0,0,0.55);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.play-button svg{width:20px;height:20px;fill:#fff;margin-left:3px}
+.card-body{padding:16px 20px 20px;display:flex;flex-direction:column;flex:1}
+.rating-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.stars{display:flex;gap:2px}
+.star{width:16px;height:16px;color:#F5A623}
+.verified-badge{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:500;color:#1a73e8}
+.verified-badge .g-icon{width:16px;height:16px}
+.review-title{font-size:15px;font-weight:700;color:#1a1a1a;line-height:1.35;margin-bottom:10px}
+.review-text{font-size:13.5px;font-weight:400;color:#444;line-height:1.55;flex:1}
+.read-more{font-size:13.5px;font-weight:500;color:#E8913A;text-decoration:none;cursor:pointer}
+.read-more:hover{text-decoration:underline}
+.reviewer{display:flex;align-items:center;gap:10px;margin-top:18px}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#fff;flex-shrink:0}
+.avatar-e{background:#E8913A}
+.avatar-r{background:#5B7FDB}
+.avatar-a{background:#5B7FDB}
+.reviewer-info{display:flex;flex-direction:column}
+.reviewer-name{font-size:13px;font-weight:600;color:#1a1a1a;line-height:1.3}
+.reviewer-date{font-size:12px;color:#888;line-height:1.3}
+
+@media(max-width:1000px){.reviews-grid{grid-template-columns:repeat(2,1fr)}.reviews-container{max-height:380px}}
+@media(max-width:600px){.reviews-grid{grid-template-columns:1fr}.reviews-container{max-height:350px}}
+</style>
+</head>
+<body>
+
+<div class="reviews-wrapper" id="reviewsWrapper">
+
+  <div class="reviews-container" id="reviewsContainer">
+    <div class="reviews-grid">
+
+      <!-- Card 1 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=600&q=80" alt="Interior"></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Highly Responsive and Meticulous Designer</div>
+          <div class="review-text">Did a full condo renovation with Sora Studio and had a fantastic experience. Mina and Sana were incredibly responsive and attentive to every detail — from mater... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-e">E</div><div class="reviewer-info"><span class="reviewer-name">Emily Chen</span><span class="reviewer-date">March 2024</span></div></div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=600&q=80" alt="Interior"><div class="play-button"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Thoughtful design &amp; smooth execution</div>
+          <div class="review-text">We chose Sora Studio after meeting a few firms and felt most comfortable with Mina's practical yet creative design suggestions. The final result looked exactly ... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-r">R</div><div class="reviewer-info"><span class="reviewer-name">Ryan Teo</span><span class="reviewer-date">February 2024</span></div></div>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&q=80" alt="Interior"></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Seamless renovation from start to finish</div>
+          <div class="review-text">We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the proces... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-a">A</div><div class="reviewer-info"><span class="reviewer-name">Alicia Wong</span><span class="reviewer-date">January 2024</span></div></div>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=80" alt="Interior"></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Professional, creative, and reliable</div>
+          <div class="review-text">From the first consultation to handover, the experience was smooth and reassuring. The designer understood our vision immediately and proposed practical solutio... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-e">E</div><div class="reviewer-info"><span class="reviewer-name">Emily Chen</span><span class="reviewer-date">March 2024</span></div></div>
+        </div>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&q=80" alt="Interior"></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Efficient and caring BTO renovation</div>
+          <div class="review-text">Momo from Sora Studio helped me with a partial kitchen and living room revamp. She was cheerful and open to our ideas, offering great budget-friendly alternativ... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-r">R</div><div class="reviewer-info"><span class="reviewer-name">Ryan Teo</span><span class="reviewer-date">February 2024</span></div></div>
+        </div>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="review-card">
+        <div class="card-image-wrapper"><img class="card-image" src="https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=600&q=80" alt="Interior"></div>
+        <div class="card-body">
+          <div class="rating-row">
+            <div class="stars"><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><svg class="star" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <span class="verified-badge"><svg class="g-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Verified</span>
+          </div>
+          <div class="review-title">Seamless renovation from start to finish</div>
+          <div class="review-text">We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the proces... <a class="read-more">Read more</a></div>
+          <div class="reviewer"><div class="avatar avatar-a">A</div><div class="reviewer-info"><span class="reviewer-name">Alicia Wong</span><span class="reviewer-date">January 2024</span></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <button class="view-more-btn" id="viewMoreBtn">
+    <span class="btn-label" id="btnLabel">View More</span>
+    <div class="arrow-circle" id="arrowCircle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </button>
+
+</div>
+
+<script>
+  var isExpanded = false;
+  var btn = document.getElementById('viewMoreBtn');
+  var container = document.getElementById('reviewsContainer');
+  var label = document.getElementById('btnLabel');
+  var arrow = document.getElementById('arrowCircle');
+
+  btn.addEventListener('click', function() {
+    isExpanded = !isExpanded;
+    if (isExpanded) {
+      container.classList.add('expanded');
+      label.textContent = 'View Less';
+      arrow.style.transform = 'rotate(180deg)';
+      // Allow body to show full content
+      document.documentElement.style.overflow = 'visible';
+      document.body.style.overflow = 'visible';
+      document.documentElement.style.height = 'auto';
+      document.body.style.height = 'auto';
+    } else {
+      container.classList.remove('expanded');
+      label.textContent = 'View More';
+      arrow.style.transform = 'rotate(0deg)';
+      // Lock body back down
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+    }
+  });
+</script>
+
+</body>
+</html>
