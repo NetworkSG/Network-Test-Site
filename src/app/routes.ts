@@ -15,6 +15,7 @@ import { ProjectPage } from "./components/ProjectPage";
 import { DesignerDashboard } from "./components/DesignerDashboard";
 import { HomeownerDashboard } from "./components/HomeownerDashboard";
 import { ExplorePage } from "./components/ExplorePage";
+import { HandshakeLanding } from "./components/HandshakeLanding";
 
 const LazyFloorPlan3DEditor = lazy(() =>
   import("./components/FloorPlan3DEditor").then((m) => ({ default: m.FloorPlan3DEditor }))
@@ -93,5 +94,6 @@ export const router = createBrowserRouter([
   { path: "/designer-dashboard", Component: DesignerDashboard },
   { path: "/profile", Component: HomeownerDashboard },
   { path: "/explore", Component: ExplorePage },
+  { path: "/handshake", Component: HandshakeLanding },
   ]},
 ]);
