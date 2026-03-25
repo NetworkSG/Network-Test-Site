@@ -94,6 +94,6 @@ export const router = createBrowserRouter([
   { path: "/designer-dashboard", Component: DesignerDashboard },
   { path: "/profile", Component: HomeownerDashboard },
   { path: "/explore", Component: ExplorePage },
-  { path: "/handshake", Component: HandshakeLanding },
+  { path: "/networkxhandshake", Component: HandshakeLanding },
   ]},
 ]);
