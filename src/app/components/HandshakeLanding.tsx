@@ -489,7 +489,13 @@ function HowItWorksCard({ step, index }: { step: { num: string; title: string; b
       <div className="bg-[#e8e4db] p-8 md:p-10 flex flex-col md:min-h-[480px]" style={{ borderRadius: 12 }}>
         <span className="text-[13px] font-medium text-[#6b6860] tracking-[1px] mb-4">{step.num}</span>
         <h3 className="text-[28px] md:text-[32px] font-bold text-[#0f0f0d] tracking-[-1.5px] leading-[1.1] whitespace-pre-line" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>{step.title}</h3>
-        <div className="flex-1 min-h-[100px]" />
+        {step.num === "02" && (
+          <div className="flex flex-col gap-3 mt-6">
+            <img src="/DBS_Bank_Logo_(alternative).svg.png" alt="DBS Bank" className="h-[36px] w-auto object-contain self-start" />
+            <img src="/Monetary-Authority-of-Singapore.png" alt="Monetary Authority of Singapore" className="h-[100px] w-auto object-contain self-start" />
+          </div>
+        )}
+        <div className="flex-1" />
         <p className="text-[14px] text-[#5c5c5c] leading-[1.6]">{step.body}</p>
         <p className="text-[13px] text-[#5c5c5c] font-medium mt-4 italic">{step.note}</p>
       </div>
