@@ -83,7 +83,7 @@ function BeforeAfterSlider() {
   );
 }
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 const STYLE_IMAGES: Record<string, string> = {
@@ -378,7 +378,43 @@ function StepBudget({
   );
 }
 
-// Step 5: Design Style
+// Step 5: Meeting Preference
+function StepMeetingPreference({
+  selected,
+  onSelect,
+}: {
+  selected: string;
+  onSelect: (v: string) => void;
+}) {
+  const options = ["Virtual", "Physical"];
+  return (
+    <div className="w-full max-w-[740px] mx-auto text-center">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+        How would you prefer to meet your designer?
+      </h1>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+        Let us know so we can arrange the right type of consultation.
+      </p>
+      <div className="grid grid-cols-2 gap-4 max-w-[400px] mx-auto">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onSelect(opt)}
+            className={`flex items-center justify-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${
+              selected === opt
+                ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
+            }`}
+          >
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">{opt}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Step 6: Design Style
 function StepDesignStyle({
   selected,
   onSelect,
@@ -669,6 +705,7 @@ function StepThankYou({
   propertyType: string;
   timeline: string;
   budget: string;
+  meetingPreference: string;
   roomType: string;
   quoteRequestId: string | null;
 }) {
@@ -715,6 +752,7 @@ function StepThankYou({
           formData.append("Property Type", propertyType);
           formData.append("Renovation Budget", budget);
           formData.append("Key Date", timeline);
+          formData.append("Meeting Preference", meetingPreference);
           formData.append("Lead Form", "AI 3D Render");
           formData.append("3D Render Image", supabaseImageUrl);
           await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
@@ -912,6 +950,7 @@ export function RenderToolForm() {
   const [propertyType, setPropertyType] = useState("");
   const [timeline, setTimeline] = useState("");
   const [budget, setBudget] = useState("");
+  const [meetingPreference, setMeetingPreference] = useState("");
   const [designStyle, setDesignStyle] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [roomType, setRoomType] = useState("");
@@ -1019,7 +1058,7 @@ export function RenderToolForm() {
         setQuoteRequestId(taskData.quoteRequestId);
       }
       // Zapier webhook fires after render completes (in StepThankYou)
-      setStep(8); // Go to thank you
+      setStep(9); // Go to thank you
     } catch (err) {
       console.error("Error submitting render request:", err);
       alert("Something went wrong. Please try again.");
@@ -1043,10 +1082,12 @@ export function RenderToolForm() {
       case 4:
         return budget !== "";
       case 5:
-        return designStyle !== "";
+        return meetingPreference !== "";
       case 6:
-        return uploadedFile !== null;
+        return designStyle !== "";
       case 7:
+        return uploadedFile !== null;
+      case 8:
         return roomType !== "";
       default:
         return true;
@@ -1121,29 +1162,32 @@ export function RenderToolForm() {
                 <StepBudget selected={budget} onSelect={setBudget} />
               )}
               {step === 5 && (
+                <StepMeetingPreference selected={meetingPreference} onSelect={setMeetingPreference} />
+              )}
+              {step === 6 && (
                 <StepDesignStyle
                   selected={designStyle}
                   onSelect={setDesignStyle}
                 />
               )}
-              {step === 6 && (
+              {step === 7 && (
                 <StepUpload file={uploadedFile} onFileChange={setUploadedFile} preview={preview} setPreview={setPreview} />
               )}
-              {step === 7 && (
+              {step === 8 && (
                 <StepRoomType
                   selected={roomType}
                   onSelect={setRoomType}
                   uploadPreview={preview}
                 />
               )}
-              {step === 8 && <StepThankYou taskId={taskId} resultUrl={resultUrl} uploadPreview={preview} designStyle={designStyle} roomType={roomType} quoteRequestId={quoteRequestId} contact={contact} propertyType={propertyType} timeline={timeline} budget={budget} />}
+              {step === 9 && <StepThankYou taskId={taskId} resultUrl={resultUrl} uploadPreview={preview} designStyle={designStyle} roomType={roomType} quoteRequestId={quoteRequestId} contact={contact} propertyType={propertyType} timeline={timeline} budget={budget} meetingPreference={meetingPreference} />}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
 
       {/* Bottom navigation */}
-      {step < 8 && (
+      {step < 9 && (
         <footer className="px-6 md:px-12 pb-8 md:pb-10">
           <div className="max-w-[1293px] mx-auto">
             {/* Progress bar */}
@@ -1166,15 +1210,15 @@ export function RenderToolForm() {
 
               {/* Next button */}
               <button
-                onClick={step === 7 ? handleSubmit : handleNext}
-                disabled={!canGoNext() || (step === 7 && submitting)}
+                onClick={step === 8 ? handleSubmit : handleNext}
+                disabled={!canGoNext() || (step === 8 && submitting)}
                 className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
-                  canGoNext() && !(step === 7 && submitting)
+                  canGoNext() && !(step === 8 && submitting)
                     ? "bg-[#0f0f0d] hover:bg-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.15)]"
                     : "bg-[#d4d4d8] cursor-not-allowed"
                 }`}
               >
-                {step === 7
+                {step === 8
                   ? submitting
                     ? "Generating..."
                     : "Generate Render"

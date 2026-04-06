@@ -3,7 +3,16 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { Heart, Search, X, Check, SlidersHorizontal, Palette, Building2, DollarSign } from "lucide-react";
-import { Navbar } from "./Navbar";
+import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+
+/* ═══ Design Tokens (from GUIDELINES.md) ═══ */
+const C = {
+  cream: "#f0ede6", creamDark: "#e8e4db", creamBorder: "#d8d3c8",
+  black: "#0f0f0d", gray: "#6b6860", grayLight: "#9a9790",
+  white: "#fafaf8", footerDark: "#0f0f0d",
+} as const;
+const serif = "'EB Garamond', Georgia, serif";
+const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -158,38 +167,60 @@ export function ExplorePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white font-['Inter',sans-serif]">
-      <Navbar />
+    <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans, color: C.black }}>
+      {/* ═══ NAVBAR ═══ */}
+      <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
+        <div className="max-w-[1800px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
+          <a href="/" className="cursor-pointer shrink-0 block" style={{
+            width: "110px", height: "23px", background: C.black,
+            maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
+            WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
+          }} />
+          <div className="hidden md:flex items-center gap-8">
+            <a href="/explore" className="text-[13px] font-medium cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Explore</a>
+            <a href="/designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Designers</a>
+            <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Floor Layout Planner</a>
+            <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
+          </div>
+          <a href="/" className="text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
+            style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>
+            Get matched
+          </a>
+        </div>
+        <div className="h-[1px]" style={{ background: C.creamBorder }} />
+      </nav>
 
-      {/* ── HEADER ── */}
-      <div className="max-w-[1800px] mx-auto px-5 pt-[120px] md:pt-[150px]">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5">
+      {/* HEADER */}
+      <div className="max-w-[1800px] mx-auto px-6 md:px-10 pt-[100px] md:pt-[120px]">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-[28px] md:text-[36px] font-bold text-[#101828] tracking-[-1.5px]">Explore</h1>
-            <p className="text-[15px] text-[#6A7282] mt-1">Discover interior design inspiration from verified designers</p>
+            <p className="mb-3" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Explore</p>
+            <h1 className="text-[28px] md:text-[36px] lg:text-[44px] font-normal leading-[1.1]" style={{ fontFamily: serif, color: C.black }}>Discover interior design inspiration</h1>
+            <p className="text-[14px] font-normal leading-[1.7] mt-2" style={{ color: C.gray, fontFamily: sans }}>from verified designers</p>
           </div>
           <div className="relative w-full md:w-[320px]">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6A7282] pointer-events-none" />
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.grayLight }} />
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search projects, designers..."
-              className="w-full h-[42px] pl-10 pr-10 bg-[#f9fafb] border border-[#e5e7eb] rounded-full text-[14px] text-[#101828] placeholder:text-[#99A1AF] outline-none focus:border-[#09090b] transition-colors" />
-            {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"><X size={14} className="text-[#6A7282]" /></button>}
+              className="w-full h-[48px] pl-11 pr-10 text-[14px] font-normal focus-visible:outline-none"
+              style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }} />
+            {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"><X size={14} style={{ color: C.grayLight }} /></button>}
           </div>
         </div>
 
-        {/* ── FILTERS ── */}
-        <div className="mb-5">
+        {/* FILTERS */}
+        <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <button onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-1.5 px-3.5 py-[7px] text-[13px] font-medium rounded-full cursor-pointer transition-all"
-              style={{ background: showFilters || hasFilters ? "#09090b" : "white", color: showFilters || hasFilters ? "white" : "#6A7282", border: showFilters || hasFilters ? "none" : "1px solid #e5e7eb" }}>
+              className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium cursor-pointer"
+              style={{ background: showFilters || hasFilters ? C.black : C.white, color: showFilters || hasFilters ? C.white : C.gray, border: `1px solid ${showFilters || hasFilters ? C.black : C.creamBorder}`, borderRadius: "10px", fontFamily: sans, transition: "all 0.15s" }}>
               <SlidersHorizontal size={14} /> Filters
               {hasFilters && <span className="ml-1 w-[18px] h-[18px] rounded-full bg-[#FFA929] text-white text-[10px] font-bold flex items-center justify-center">{activeStyles.size + activePropTypes.size + activeBudgets.size}</span>}
             </button>
-            {hasFilters && <button onClick={clearAll} className="text-[13px] text-[#6A7282] hover:text-[#101828] cursor-pointer transition-colors">Clear all</button>}
+            {hasFilters && <button onClick={clearAll} className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}>Clear all</button>}
           </div>
 
           {showFilters && (
-            <div className="bg-[#fafafa] border border-[#f3f4f6] rounded-[17px] p-4 md:p-5 space-y-4 mb-4">
+            <div className="p-5 md:p-6 space-y-4 mb-4" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px" }}>
               <FilterGroup icon={Palette} label="Design Style" items={STYLES} active={activeStyles} toggle={v => toggle(activeStyles, setActiveStyles, v)} />
               <FilterGroup icon={Building2} label="Property Type" items={PROPERTY_TYPES} active={activePropTypes} toggle={v => toggle(activePropTypes, setActivePropTypes, v)} />
               <FilterGroup icon={DollarSign} label="Budget Range" items={BUDGETS} active={activeBudgets} toggle={v => toggle(activeBudgets, setActiveBudgets, v)} />
@@ -198,18 +229,19 @@ export function ExplorePage() {
         </div>
       </div>
 
-      {/* ── MASONRY GRID ── */}
-      <div className="max-w-[1800px] mx-auto px-5 pb-16">
+      {/* MASONRY GRID */}
+      <div className="max-w-[1800px] mx-auto px-6 md:px-10 pb-16">
         {filtered.length === 0 ? (
           <div className="text-center py-20">
-            <Search size={40} className="mx-auto text-[#d1d5db] mb-3" />
-            <p className="text-[18px] font-semibold text-[#101828]">{hasFilters ? "No projects match your filters" : "No projects yet"}</p>
-            <p className="text-[14px] text-[#6A7282] mt-1 mb-5">{hasFilters ? "Try adjusting your filters" : "Projects will appear here"}</p>
-            {hasFilters && <button onClick={clearAll} className="px-5 py-2.5 text-[13px] font-semibold text-white bg-[#09090b] rounded-full cursor-pointer hover:opacity-90">Clear Filters</button>}
+            <Search size={40} className="mx-auto mb-3" style={{ color: C.creamBorder }} />
+            <p className="text-[20px] font-normal" style={{ fontFamily: serif, color: C.black }}>{hasFilters ? "No projects match your filters" : "No projects yet"}</p>
+            <p className="text-[14px] font-normal mt-2 mb-5" style={{ color: C.grayLight, fontFamily: sans }}>{hasFilters ? "Try adjusting your filters" : "Projects will appear here"}</p>
+            {hasFilters && <button onClick={clearAll} className="px-6 py-2.5 text-[14px] font-normal cursor-pointer hover:opacity-85"
+              style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>Clear Filters</button>}
           </div>
         ) : (
           <>
-            <p className="text-[13px] text-[#6A7282] mb-3">{filtered.length} project{filtered.length !== 1 ? "s" : ""}{hasFilters ? " found" : ""}</p>
+            <p className="text-[13px] font-normal mb-3" style={{ color: C.grayLight, fontFamily: sans }}>{filtered.length} project{filtered.length !== 1 ? "s" : ""}{hasFilters ? " found" : ""}</p>
             <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6 gap-4">
               {filtered.map(p => (
                 <Pin key={p.projectId} project={p} saved={savedIds.has(p.projectId)} onSave={() => toggleSave(p)} onOpen={() => openInModal(p)} />
@@ -219,51 +251,52 @@ export function ExplorePage() {
         )}
       </div>
 
-      {/* ── MODAL (portaled to body to escape transform stacking context) ── */}
+      {/* MODAL */}
       {modalProject && createPortal(
-        <div ref={modalRef} className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center overflow-hidden"
-          style={{ fontFamily: "Inter, sans-serif" }}
+        <div ref={modalRef} className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
+          style={{ background: "rgba(15,15,13,0.5)", backdropFilter: "blur(4px)", fontFamily: sans }}
           onClick={e => { if (e.target === e.currentTarget) setModalProject(null); }}>
-          <div className="bg-white w-[98%] max-w-[1700px] rounded-[32px] flex overflow-hidden relative max-[900px]:flex-col max-[900px]:w-full max-[900px]:rounded-none max-[900px]:max-h-[100vh] max-[900px]:overflow-y-auto"
-            style={{ boxShadow: "0 15px 50px rgba(0,0,0,0.3)", height: "92vh" }}>
+          <div className="w-[98%] max-w-[1700px] flex overflow-hidden relative max-[900px]:flex-col max-[900px]:w-full max-[900px]:max-h-[100vh] max-[900px]:overflow-y-auto"
+            style={{ background: C.white, borderRadius: "12px", border: `1px solid ${C.creamBorder}`, height: "92vh" }}>
 
             {/* Close */}
             <button onClick={() => setModalProject(null)}
-              className="absolute top-5 right-6 w-10 h-10 rounded-full bg-white/95 flex items-center justify-center cursor-pointer z-50 hover:bg-[#eee] active:scale-95 transition-all max-[900px]:w-8 max-[900px]:h-8 max-[900px]:top-4 max-[900px]:right-4"
-              style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.2)", border: "none" }}>
-              <X size={20} className="text-[#333] max-[900px]:w-4 max-[900px]:h-4" />
+              className="absolute top-5 right-6 w-10 h-10 rounded-full flex items-center justify-center cursor-pointer z-50 hover:opacity-60 active:scale-95 max-[900px]:w-8 max-[900px]:h-8 max-[900px]:top-4 max-[900px]:right-4"
+              style={{ background: C.white, border: `1px solid ${C.creamBorder}`, transition: "all 0.15s" }}>
+              <X size={20} style={{ color: C.gray }} className="max-[900px]:w-4 max-[900px]:h-4" />
             </button>
 
             {/* Left */}
             <div id="explore-modal-left" className="w-[65%] p-10 overflow-y-auto flex flex-col max-[900px]:w-full max-[900px]:p-5 max-[900px]:overflow-visible">
               <img src={modalProject.image} alt={modalProject.title}
-                className="w-full rounded-[24px] mb-6 object-contain bg-[#fafafa]"
-                style={{ maxHeight: "80vh", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }} />
-              <h2 className="text-[28px] font-bold text-[#111] mb-2 max-[900px]:text-[22px]">{modalProject.title}</h2>
-              <p className="text-[14px] text-[#6A7282] mb-5">{modalProject.meta}</p>
+                className="w-full mb-6 object-contain"
+                style={{ maxHeight: "80vh", borderRadius: "12px", background: C.cream }} />
+              <h2 className="text-[28px] font-normal leading-[1.2] mb-2 max-[900px]:text-[22px]" style={{ fontFamily: serif, color: C.black }}>{modalProject.title}</h2>
+              <p className="text-[14px] font-normal mb-5" style={{ color: C.grayLight, fontFamily: sans }}>{modalProject.meta}</p>
 
-              <div className="flex items-center gap-4 pt-4 border-t border-[#eee]">
-                <div className="w-[54px] h-[54px] rounded-full bg-[#09090b] flex items-center justify-center shrink-0 overflow-hidden">
+              <div className="flex items-center gap-4 pt-4" style={{ borderTop: `1px solid ${C.creamBorder}` }}>
+                <div className="w-[54px] h-[54px] rounded-full flex items-center justify-center shrink-0 overflow-hidden" style={{ background: C.black }}>
                   {modalProject.designerLogo
                     ? <img src={modalProject.designerLogo} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-white font-bold text-[20px]">{(modalProject.designerName || "D")[0].toUpperCase()}</span>}
+                    : <span className="text-[20px] font-semibold" style={{ color: C.white, fontFamily: sans }}>{(modalProject.designerName || "D")[0].toUpperCase()}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-[16px] text-[#111]">{modalProject.designerName}</span>
+                    <span className="text-[16px] font-semibold" style={{ color: C.black, fontFamily: sans }}>{modalProject.designerName}</span>
                     {modalProject.verified && <span className="w-4 h-4 rounded-full bg-[#2b7fff] inline-flex items-center justify-center"><Check size={9} className="text-white" strokeWidth={3} /></span>}
                   </div>
-                  <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => setModalProject(null)} className="text-[13px] text-[#6A7282] hover:underline">View profile →</Link>
+                  <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => setModalProject(null)} className="text-[13px] font-normal hover:opacity-60" style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}>View profile →</Link>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button onClick={() => toggleSave(modalProject)}
-                    className="px-4 py-2 text-[13px] font-semibold rounded-full cursor-pointer flex items-center gap-1.5 transition-all border-none"
-                    style={{ background: savedIds.has(modalProject.projectId) ? "#FFA929" : "#f3f4f6", color: savedIds.has(modalProject.projectId) ? "white" : "#101828" }}>
+                    className="px-4 py-2.5 text-[13px] font-medium cursor-pointer flex items-center gap-1.5"
+                    style={{ background: savedIds.has(modalProject.projectId) ? "#FFA929" : C.cream, color: savedIds.has(modalProject.projectId) ? "white" : C.black, borderRadius: "10px", border: savedIds.has(modalProject.projectId) ? "none" : `1px solid ${C.creamBorder}`, fontFamily: sans, transition: "all 0.15s" }}>
                     <Heart size={14} fill={savedIds.has(modalProject.projectId) ? "white" : "none"} />
                     {savedIds.has(modalProject.projectId) ? "Saved" : "Save"}
                   </button>
                   <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => setModalProject(null)}
-                    className="px-4 py-2 text-[13px] font-semibold rounded-full bg-[#09090b] text-white no-underline flex items-center gap-1.5">
+                    className="px-4 py-2.5 text-[13px] font-medium no-underline flex items-center gap-1.5"
+                    style={{ background: C.black, color: C.white, borderRadius: "10px", fontFamily: sans }}>
                     Enquire
                   </Link>
                 </div>
@@ -271,8 +304,9 @@ export function ExplorePage() {
             </div>
 
             {/* Right */}
-            <div className="w-[35%] p-8 bg-white border-l border-[#f0f0f0] overflow-y-auto max-[900px]:w-full max-[900px]:border-l-0 max-[900px]:border-t max-[900px]:border-[#eee] max-[900px]:bg-[#fafafa] max-[900px]:overflow-visible">
-              <p className="text-[18px] font-semibold text-[#111] mb-5">More to explore</p>
+            <div className="w-[35%] p-8 overflow-y-auto max-[900px]:w-full max-[900px]:border-l-0 max-[900px]:overflow-visible"
+              style={{ background: C.cream, borderLeft: `1px solid ${C.creamBorder}` }}>
+              <p className="text-[20px] font-normal mb-5" style={{ fontFamily: serif, color: C.black }}>More to explore</p>
               <div className="columns-2 gap-3">
                 {suggestions.map(p => (
                   <Pin key={`m-${p.projectId}`} project={p} saved={savedIds.has(p.projectId)} onSave={() => toggleSave(p)} onOpen={() => openInModal(p)} mini />
@@ -297,16 +331,17 @@ function Pin({ project, saved, onSave, onOpen, mini }: { project: any; saved: bo
 
   return (
     <div
-      className={`relative overflow-hidden cursor-zoom-in group transition-transform duration-200 hover:scale-[1.02] ${mini ? "mb-3 rounded-xl" : "mb-4 rounded-[16px]"}`}
-      style={{ paddingBottom: `${aspect}%`, height: 0, backgroundColor: "#e5e7eb" }}
+      className={`relative overflow-hidden cursor-zoom-in group transition-transform duration-200 hover:scale-[1.02] ${mini ? "mb-3" : "mb-4"}`}
+      style={{ paddingBottom: `${aspect}%`, height: 0, backgroundColor: C.creamDark, borderRadius: "12px" }}
       onClick={onOpen}
     >
       {/* Shimmer skeleton */}
       {!loaded && (
         <div className="absolute inset-0 z-0" style={{
-          background: "linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%)",
+          background: `linear-gradient(90deg, ${C.creamDark} 25%, ${C.creamBorder} 50%, ${C.creamDark} 75%)`,
           backgroundSize: "200% 100%",
           animation: "exploreShimmer 1.5s infinite",
+          borderRadius: "12px",
         }} />
       )}
 
@@ -314,28 +349,29 @@ function Pin({ project, saved, onSave, onOpen, mini }: { project: any; saved: bo
       <img
         src={project.image} alt={project.title} loading="lazy"
         className={`absolute inset-0 w-full h-full object-cover z-[1] transition-all duration-500 ${loaded ? "opacity-100" : "opacity-0"} group-hover:scale-105`}
-        style={{ borderRadius: mini ? 12 : 16 }}
+        style={{ borderRadius: "12px" }}
         onLoad={() => setLoaded(true)}
         onError={() => setErr(true)}
       />
 
       {/* Hover gradient */}
-      <div className={`absolute inset-0 z-[2] pointer-events-none transition-opacity duration-250 opacity-0 group-hover:opacity-100 ${mini ? "rounded-xl" : "rounded-[16px]"}`}
+      <div className="absolute inset-0 z-[2] pointer-events-none transition-opacity duration-250 opacity-0 group-hover:opacity-100"
         style={{ background: mini
           ? "linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 40%)"
-          : "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 55%, rgba(0,0,0,0.55) 100%)"
+          : "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, transparent 40%, transparent 55%, rgba(0,0,0,0.55) 100%)",
+          borderRadius: "12px",
         }} />
 
       {/* Designer hover (top-left) */}
       <div className="absolute top-3 left-3 z-[5] flex items-center gap-2 opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none"
         style={mini ? { top: 8, left: 8, gap: 6 } : undefined}>
-        <div className="rounded-full bg-[#09090b] flex items-center justify-center shrink-0 overflow-hidden border-2 border-white"
-          style={{ width: mini ? 24 : 32, height: mini ? 24 : 32, boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}>
+        <div className="rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white"
+          style={{ width: mini ? 24 : 32, height: mini ? 24 : 32, background: C.black }}>
           {project.designerLogo
             ? <img src={project.designerLogo} alt="" className="w-full h-full object-cover" />
-            : <span className="text-white font-bold" style={{ fontSize: mini ? 9 : 11 }}>{(project.designerName || "D")[0].toUpperCase()}</span>}
+            : <span className="text-white font-semibold" style={{ fontSize: mini ? 9 : 11, fontFamily: sans }}>{(project.designerName || "D")[0].toUpperCase()}</span>}
         </div>
-        <span className="text-white font-semibold drop-shadow-md" style={{ fontSize: mini ? 11 : 13 }}>{project.designerName}</span>
+        <span className="text-white font-semibold drop-shadow-md" style={{ fontSize: mini ? 11 : 13, fontFamily: sans }}>{project.designerName}</span>
         {project.verified && (
           <span className="rounded-full bg-[#2b7fff] inline-flex items-center justify-center" style={{ width: mini ? 12 : 14, height: mini ? 12 : 14 }}>
             <Check size={mini ? 7 : 8} className="text-white" strokeWidth={3} />
@@ -347,16 +383,16 @@ function Pin({ project, saved, onSave, onOpen, mini }: { project: any; saved: bo
       {!mini && (
         <button onClick={e => { e.stopPropagation(); onSave(); }}
           className="absolute top-3 right-3 z-[6] w-[34px] h-[34px] rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 border-none"
-          style={{ background: saved ? "#FFA929" : "rgba(255,255,255,0.85)", backdropFilter: saved ? "none" : "blur(8px)", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
-          <Heart size={16} className={saved ? "text-white fill-white" : "text-[#6A7282]"} />
+          style={{ background: saved ? "#FFA929" : "rgba(255,255,255,0.85)", backdropFilter: saved ? "none" : "blur(8px)" }}>
+          <Heart size={16} className={saved ? "text-white fill-white" : ""} style={saved ? {} : { color: C.gray }} />
         </button>
       )}
 
       {/* Bottom info (main only) */}
       {!mini && (
         <div className="absolute bottom-0 left-0 right-0 p-3.5 z-[5] opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none">
-          <p className="text-white font-semibold text-[14px] leading-tight">{project.title}</p>
-          <p className="text-white/70 text-[12px] mt-0.5">{project.meta}</p>
+          <p className="text-white font-semibold text-[14px] leading-tight" style={{ fontFamily: sans }}>{project.title}</p>
+          <p className="text-white/70 text-[12px] mt-0.5" style={{ fontFamily: sans }}>{project.meta}</p>
         </div>
       )}
     </div>
@@ -367,14 +403,14 @@ function Pin({ project, saved, onSave, onOpen, mini }: { project: any; saved: bo
 function FilterGroup({ icon: Icon, label, items, active, toggle }: { icon: any; label: string; items: string[]; active: Set<string>; toggle: (v: string) => void }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold text-[#6A7282] uppercase tracking-[0.5px] mb-2 flex items-center gap-1.5">
+      <p className="mb-2 flex items-center gap-1.5" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>
         <Icon size={12} /> {label}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {items.map(item => (
           <button key={item} onClick={() => toggle(item)}
-            className="px-3.5 py-[7px] text-[13px] font-medium rounded-full cursor-pointer shrink-0 whitespace-nowrap transition-all duration-200"
-            style={{ background: active.has(item) ? "#09090b" : "white", color: active.has(item) ? "white" : "#6A7282", border: active.has(item) ? "none" : "1px solid #e5e7eb" }}>
+            className="px-3.5 py-[7px] text-[13px] font-medium cursor-pointer shrink-0 whitespace-nowrap"
+            style={{ background: active.has(item) ? C.black : C.white, color: active.has(item) ? C.white : C.gray, border: `1px solid ${active.has(item) ? C.black : C.creamBorder}`, borderRadius: "10px", fontFamily: sans, transition: "all 0.15s" }}>
             {item}
           </button>
         ))}

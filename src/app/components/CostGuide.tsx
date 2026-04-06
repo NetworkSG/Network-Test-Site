@@ -923,6 +923,7 @@ export function CostGuide() {
   const [roomScopes, setRoomScopes] = useState<Partial<Record<RoomKey, RoomScope>>>({});
   const [fullHomeScope, setFullHomeScope] = useState<FullHomeScope>({ scope: "Moderate", carpentry: "Medium", layout: "No" });
   const [timeline, setTimeline] = useState("");
+  const [meetingPreference, setMeetingPreference] = useState("");
   const [contact, setContact] = useState({ name: "", whatsapp: "", email: "" });
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   const [quoteRequestId, setQuoteRequestId] = useState<string | null>(null);
@@ -968,6 +969,8 @@ export function CostGuide() {
       case 5:
         return timeline !== "";
       case 6:
+        return meetingPreference !== "";
+      case 7:
         return (
           contact.name.trim() !== "" &&
           contact.whatsapp.length === 8 &&
@@ -1006,7 +1009,7 @@ export function CostGuide() {
         console.log("Cost guide submitted:", data);
         if (data.qrId) setQuoteRequestId(data.qrId);
       }
-      setStep(7);
+      setStep(8);
 
       // Generate PDF then send to Zapier with PDF URL in background
       (async () => {
@@ -1035,6 +1038,7 @@ export function CostGuide() {
           formData.append("Craftpdf Link", pdfUrl || "");
           formData.append("First Name", contact.name);
           formData.append("Hook Id", data.qrId || "");
+          formData.append("Meeting Preference", meetingPreference);
           formData.append("Lead Form", "Cost Guide Lead Form");
           formData.append("Key Date", timeline);
           formData.append("Contact Phone", contact.whatsapp);
@@ -1048,7 +1052,7 @@ export function CostGuide() {
       })();
     } catch (err) {
       console.error("Error submitting cost guide:", err);
-      setStep(7);
+      setStep(8);
     } finally {
       setSubmitting(false);
     }
@@ -1243,6 +1247,24 @@ export function CostGuide() {
                 <StepTimeline selected={timeline} onSelect={setTimeline} />
               )}
               {step === 6 && (
+                <div className="w-full max-w-[520px] mx-auto text-center">
+                  <h1 className="font-semibold text-[28px] md:text-[36px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                    How would you prefer to meet your designer?
+                  </h1>
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[420px] mx-auto">
+                    Let us know so we can arrange the right type of consultation.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4 max-w-[400px] mx-auto">
+                    {["Virtual", "Physical"].map((opt) => (
+                      <button key={opt} onClick={() => setMeetingPreference(opt)}
+                        className={`flex items-center justify-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${meetingPreference === opt ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
+                        <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">{opt}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {step === 7 && (
                 <StepContact
                   data={contact}
                   onChange={(field, value) =>
@@ -1250,7 +1272,7 @@ export function CostGuide() {
                   }
                 />
               )}
-              {step === 7 && estimate && (
+              {step === 8 && (
                 <StepResults estimate={estimate} propertyType={propertyType} unitType={unitType} isResale={isResale} selectedRooms={selectedRooms} isFullHomePath={isFullHomePath} roomScopes={roomScopes} fullHomeScope={isFullHomePath ? fullHomeScope : null} timeline={timeline} quoteRequestId={quoteRequestId} />
               )}
             </motion.div>
@@ -1259,11 +1281,11 @@ export function CostGuide() {
       </main>
 
       {/* ── Footer nav ── */}
-      {step >= 1 && step <= 6 && (
+      {step >= 1 && step <= 7 && (
         <footer className="px-6 md:px-12 pb-8 md:pb-10">
           <div className="max-w-[1293px] mx-auto">
             <div className="mb-6">
-              <ProgressBar step={step} total={6} />
+              <ProgressBar step={step} total={7} />
             </div>
 
             <div className="flex items-center justify-between mt-4">
@@ -1284,19 +1306,19 @@ export function CostGuide() {
               )}
 
               <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] tracking-[0.5px] uppercase">
-                {step === 6 ? "Last step" : `Step ${step} of 6`}
+                {step === 7 ? "Last step" : `Step ${step} of 7`}
               </p>
 
               <button
-                onClick={step === 6 ? handleSubmit : handleNext}
-                disabled={!canNext() || (step === 6 && submitting)}
+                onClick={step === 7 ? handleSubmit : handleNext}
+                disabled={!canNext() || (step === 7 && submitting)}
                 className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
-                  canNext() && !(step === 6 && submitting)
+                  canNext() && !(step === 7 && submitting)
                     ? "bg-[#0f0f0d] hover:bg-[#0f0f0d]"
                     : "bg-[#d8d3c8] cursor-not-allowed"
                 }`}
               >
-                {step === 6
+                {step === 7
                   ? submitting
                     ? "Calculating..."
                     : "Get my cost guide"

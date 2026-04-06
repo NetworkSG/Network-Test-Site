@@ -10,26 +10,39 @@ import photo3 from "figma:asset/bc9ffe9973654a94a381c863292fc3780b81397b.png";
 import heroPhoto from "figma:asset/51afa0ea316295d8d1d824fcab3b3afbe1092843.png";
 
 /* ── Qualifying Flow ── */
-function QualifyingFlow({ onComplete }: { onComplete: () => void }) {
+function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, string>) => void }) {
   const [currentQ, setCurrentQ] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [showResponse, setShowResponse] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [consent, setConsent] = useState(true);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const question = QUALIFYING_QUESTIONS[currentQ];
-  const progress = ((currentQ + 1) / 6) * 100;
+  const progress = ((currentQ + 1) / 7) * 100;
+
+  const ANSWER_KEYS = ["situation", "timeline", "home_type", "design_level", "biggest_concern", "is_decision_maker", "meeting_preference"];
 
   const handleSelect = (idx: number) => {
-    if (showResponse) return;
     setSelectedOption(idx);
-    setShowResponse(true);
-    setTimeout(() => {
-      if (currentQ < 5) { setDirection(1); setShowResponse(false); setSelectedOption(null); setCurrentQ(q => q + 1); }
-      else { onComplete(); }
-    }, 1800);
+    const label = question.options[idx].label;
+    const reveal = question.options[idx].reveal || "";
+    const newAnswers = { ...answers, [ANSWER_KEYS[currentQ]]: label };
+    if (reveal) newAnswers.budget_range = reveal;
+    setAnswers(newAnswers);
   };
+
+  const handleNext = () => {
+    if (selectedOption === null) return;
+    if (currentQ < 6) {
+      setDirection(1);
+      setSelectedOption(null);
+      setCurrentQ(q => q + 1);
+    } else {
+      onComplete(answers);
+    }
+  };
+
   const handleBack = () => {
-    if (currentQ > 0) { setDirection(-1); setShowResponse(false); setSelectedOption(null); setCurrentQ(q => q - 1); }
+    if (currentQ > 0) { setDirection(-1); setSelectedOption(null); setCurrentQ(q => q - 1); }
   };
 
   return (
@@ -54,8 +67,8 @@ function QualifyingFlow({ onComplete }: { onComplete: () => void }) {
             {question.options.map((opt, idx) => {
               const sel = selectedOption === idx;
               return (
-                <button key={idx} onClick={() => handleSelect(idx)} disabled={showResponse} aria-pressed={sel}
-                  className="w-full text-left px-5 py-4 text-[14px] leading-[1.6] cursor-pointer disabled:cursor-default"
+                <button key={idx} onClick={() => handleSelect(idx)} aria-pressed={sel}
+                  className="w-full text-left px-5 py-4 text-[14px] leading-[1.6] cursor-pointer"
                   style={{
                     borderRadius: "10px",
                     border: sel ? `1px solid ${C.black}` : `1px solid ${C.creamBorder}`,
@@ -66,8 +79,9 @@ function QualifyingFlow({ onComplete }: { onComplete: () => void }) {
               );
             })}
           </div>
+          {/* Show response/reveal when selected */}
           <AnimatePresence>
-            {showResponse && selectedOption !== null && (
+            {selectedOption !== null && question.options[selectedOption].response && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                 <div className="mt-4 p-5" style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, borderRadius: "10px" }}>
                   <p className="text-[13px] leading-[1.8] italic" style={{ color: C.gray, fontFamily: sans }}>{question.options[selectedOption].response}</p>
@@ -80,7 +94,7 @@ function QualifyingFlow({ onComplete }: { onComplete: () => void }) {
               </motion.div>
             )}
           </AnimatePresence>
-          {currentQ === 5 && (
+          {currentQ === 6 && (
             <label className="flex items-start gap-3 mt-6 cursor-pointer">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#0f0f0d] shrink-0" />
               <span className="text-[11px] leading-[1.8]" style={{ color: C.grayLight, fontFamily: sans }}>
@@ -88,6 +102,15 @@ function QualifyingFlow({ onComplete }: { onComplete: () => void }) {
               </span>
             </label>
           )}
+          {/* Next / Submit button */}
+          <button
+            onClick={handleNext}
+            disabled={selectedOption === null}
+            className="w-full h-[52px] mt-6 text-[15px] font-medium hover:opacity-85 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
+          >
+            {currentQ === 6 ? "Submit" : "Next"}
+          </button>
         </motion.div>
       </AnimatePresence>
     </div>
@@ -271,7 +294,40 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
             {formState === "qualifying" && (
               <motion.div key="qualifying" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.3 }} className="flex items-center justify-center min-h-[70vh] py-8">
-                <QualifyingFlow onComplete={() => { setFormState("complete"); heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
+                <QualifyingFlow onComplete={(answers) => {
+                  setFormState("complete");
+                  heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  // Save lead to Supabase homepage_leads table
+                  const SUPABASE_URL = "https://hycxkpassywjvdqduzrx.supabase.co";
+                  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5Y3hrcGFzc3l3anZkcWR1enJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NzI3NTIsImV4cCI6MjA4OTA0ODc1Mn0.A3Ab9q9bSdTsIOHrpDjilfTGeUAm39HsgtLxSrQ138g";
+                  fetch(`${SUPABASE_URL}/rest/v1/homepage_leads`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON, "Authorization": `Bearer ${SUPABASE_ANON}` },
+                    body: JSON.stringify({
+                      name: form.name,
+                      phone: form.phone,
+                      email: form.email || null,
+                      ...answers,
+                    }),
+                  }).then(r => { if (!r.ok) console.error("Lead save failed:", r.status); else console.log("Lead saved to homepage_leads"); })
+                    .catch(err => console.error("Lead save error:", err));
+                  // Send to Zapier
+                  const zapForm = new FormData();
+                  zapForm.append("First Name", form.name);
+                  zapForm.append("Contact Phone", form.phone);
+                  zapForm.append("Email Address", form.email || "");
+                  zapForm.append("Situation", answers.situation || "");
+                  zapForm.append("Key Date", answers.timeline || "");
+                  zapForm.append("Property Type", answers.home_type || "");
+                  zapForm.append("Design Level", answers.design_level || "");
+                  zapForm.append("Renovation Budget", answers.budget_range || "");
+                  zapForm.append("Biggest Concern", answers.biggest_concern || "");
+                  zapForm.append("Decision Maker", answers.is_decision_maker || "");
+                  zapForm.append("Meeting Preference", answers.meeting_preference || "");
+                  zapForm.append("Lead Form", "Homepage Lead Form");
+                  fetch("https://hooks.zapier.com/hooks/catch/20249199/2c5b7ea/", { method: "POST", body: zapForm })
+                    .catch(err => console.error("Zapier error:", err));
+                }} />
               </motion.div>
             )}
 
@@ -288,8 +344,6 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <a href={COMPLETION.cta1.href} className="h-[60px] px-7 text-[16px] font-normal flex items-center justify-center gap-2 hover:opacity-80"
                       style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>{COMPLETION.cta1.label}</a>
-                    <a href={COMPLETION.cta2.href} className="h-[60px] px-7 text-[16px] font-normal flex items-center justify-center hover:opacity-60"
-                      style={{ border: `1px solid ${C.creamBorder}`, borderRadius: "12px", color: C.black, fontFamily: sans, transition: "all 0.15s" }}>{COMPLETION.cta2.label}</a>
                   </div>
                 </div>
               </motion.div>

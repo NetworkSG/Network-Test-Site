@@ -80,13 +80,13 @@ function HandshakeLogo() {
 }
 
 function HandshakeNavbar() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   return (
-    <nav className="fixed top-6 md:top-12 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-32px)] max-w-[1200px]">
-      <div className="backdrop-blur-[16.75px] bg-[rgba(255,255,255,0.76)] rounded-[100px] shadow-[0px_11px_34.4px_-5px_rgba(0,0,0,0.1)] flex items-center justify-center md:justify-between pl-5 md:pl-10 pr-[7px] h-[73px]">
+    <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: "#f0ede6" }}>
+      <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
         {/* Logo: NETWORK × handshake */}
-        <div className="flex items-center gap-3">
-          <div
-            className="w-[95px] h-[20px] bg-[#0f0f0d] shrink-0"
+        <div className="flex items-center gap-2.5">
+          <a href="/" className="cursor-pointer shrink-0 block w-[95px] h-[20px] bg-[#0f0f0d]"
             style={{
               maskImage: `url('${imgNetworkLogo}')`,
               maskSize: "95px 20px",
@@ -97,30 +97,67 @@ function HandshakeNavbar() {
               WebkitMaskRepeat: "no-repeat",
               WebkitMaskPosition: "0px 0px",
             }}
-          />
-          <span className="text-[14px] text-[#0f0f0d] font-light select-none">&times;</span>
-          <img src={imgHandshakeLogo} alt="Handshake" className="h-[26px] w-auto shrink-0" />
+          ></a>
+          <span className="text-[12px] text-[#9a9790] font-light select-none">&times;</span>
+          <img src={imgHandshakeLogo} alt="Handshake" className="h-[22px] w-auto shrink-0" />
         </div>
 
-        {/* Nav Links */}
-        <div className="hidden md:flex items-center gap-7">
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-8">
           <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>3D Render</a>
           <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Floor Layout Planner</a>
           <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Cost Guide</a>
+          <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Handshake</a>
         </div>
 
-        {/* CTA Button */}
-        <div className="bg-[#e8e4db] border border-white rounded-[100px] p-[7px] hidden md:block">
-          <a
-            href="#get-started"
-            className="bg-[#0f0f0d] text-white rounded-[100px] px-6 md:px-8 py-2.5 font-['DM_Sans',sans-serif] font-medium text-[13px] md:text-[14px] tracking-[-0.7px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center gap-2 hover:bg-[#1e1e1e] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200"
-          >
-            <span className="hidden sm:inline">Protect My Renovation Payments</span>
-            <span className="sm:hidden">Get Protected</span>
-            <ArrowRight size={15} />
-          </a>
-        </div>
+        {/* Desktop CTA */}
+        <a href="#get-started"
+          className="hidden md:block text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
+          style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>
+          Protect My Payments
+        </a>
+
+        {/* Mobile hamburger */}
+        <button
+          className="md:hidden w-10 h-10 flex items-center justify-center cursor-pointer"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="1.5" strokeLinecap="round">
+            {mobileMenuOpen ? (
+              <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+            ) : (
+              <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>
+            )}
+          </svg>
+        </button>
       </div>
+      <div className="h-[1px]" style={{ background: "#d8d3c8" }} />
+      {/* Mobile menu dropdown */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="md:hidden overflow-hidden"
+            style={{ background: "#f0ede6", borderBottom: "1px solid #d8d3c8" }}
+          >
+            <div className="px-6 py-4 flex flex-col gap-1">
+              <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>3D Render</a>
+              <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Floor Layout Planner</a>
+              <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Cost Guide</a>
+              <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Handshake</a>
+              <a href="#get-started" onClick={() => setMobileMenuOpen(false)}
+                className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer flex items-center justify-center hover:opacity-85 active:scale-[0.98]"
+                style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>
+                Protect My Payments
+              </a>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }
@@ -927,7 +964,7 @@ function LeadCaptureForm() {
                 <img src={imgHandshakeLogo} alt="Handshake" className="h-[28px] w-auto brightness-0 invert" />
               </div>
               <p className="text-[13px] text-white/30 leading-[1.6]">
-                Handshake is regulated by the Monetary Authority of Singapore (MAS). All funds are held in segregated DBS custodian accounts.
+                All payment flows on Handshake are regulated by the Monetary Authority of Singapore (MAS)
               </p>
             </div>
 

@@ -31,7 +31,7 @@ export const HERO = {
 export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   {
     questionNumber: 1,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "What best describes your situation?",
     options: [
       {
@@ -53,7 +53,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   },
   {
     questionNumber: 2,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "When are you looking to start renovation?",
     options: [
       {
@@ -80,7 +80,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   },
   {
     questionNumber: 3,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "What type of home are you renovating?",
     options: [
       {
@@ -97,7 +97,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   },
   {
     questionNumber: 4,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "What best describes the home you want to create?",
     note: "Select an option to see typical cost ranges.",
     options: [
@@ -133,7 +133,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   },
   {
     questionNumber: 5,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "What is your biggest concern about renovating?",
     options: [
       {
@@ -160,7 +160,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
   },
   {
     questionNumber: 6,
-    totalQuestions: 6,
+    totalQuestions: 7,
     question: "Are you the main decision maker for this renovation?",
     options: [
       {
@@ -172,6 +172,23 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
         label: "No, I am helping someone else",
         response:
           "No problem. Let us know who we should be speaking to when our team reaches out and we'll make sure the right person is in the loop.",
+      },
+    ],
+  },
+  {
+    questionNumber: 7,
+    totalQuestions: 7,
+    question: "How would you prefer to meet your matched designers?",
+    options: [
+      {
+        label: "Virtual",
+        response:
+          "Got it. We'll let your matched designers know you prefer a virtual meeting. They'll schedule a video call at a time that works for you.",
+      },
+      {
+        label: "Physical",
+        response:
+          "Noted. We'll let your matched designers know you'd like to meet in person. They'll arrange a face-to-face consultation at their studio or a convenient location.",
       },
     ],
   },
