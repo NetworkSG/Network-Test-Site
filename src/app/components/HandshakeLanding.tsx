@@ -43,7 +43,7 @@ function SlideIn({ children, className = "", delay = 0, from = "left" }: { child
 function SectionLabel({ text, dark, icon: Icon, color = "#22C55E" }: { text: string; dark?: boolean; icon?: React.ComponentType<any>; color?: string }) {
   return (
     <div className={`inline-flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-medium tracking-[-0.2px] border rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${
-      dark ? "text-white/70 border-white/10 bg-white/[0.06]" : "text-[#3F3F46] border-[#E5E7EB] bg-white"
+      dark ? "text-white/70 border-white/10 bg-white/[0.06]" : "text-[#6b6860] border-[#d8d3c8] bg-[#fafaf8]"
     }`}>
       {Icon ? <Icon size={14} style={{ color }} fill={color} strokeWidth={0} /> : <span className="w-[8px] h-[8px] rounded-full" style={{ backgroundColor: color }} />}
       {text}
@@ -55,7 +55,7 @@ function SectionLabel({ text, dark, icon: Icon, color = "#22C55E" }: { text: str
 export function HandshakeLanding() {
   return (
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
-      <div className="bg-[#fcfcfc] min-h-screen font-['Inter',sans-serif] relative overflow-x-clip">
+      <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] relative overflow-x-clip">
         <Toaster position="top-center" richColors />
         <HandshakeNavbar />
         <HeroSection />
@@ -86,7 +86,7 @@ function HandshakeNavbar() {
         {/* Logo: NETWORK × handshake */}
         <div className="flex items-center gap-3">
           <div
-            className="w-[95px] h-[20px] bg-[#2b2b2b] shrink-0"
+            className="w-[95px] h-[20px] bg-[#0f0f0d] shrink-0"
             style={{
               maskImage: `url('${imgNetworkLogo}')`,
               maskSize: "95px 20px",
@@ -98,15 +98,22 @@ function HandshakeNavbar() {
               WebkitMaskPosition: "0px 0px",
             }}
           />
-          <span className="text-[14px] text-[#09090B] font-light select-none">&times;</span>
+          <span className="text-[14px] text-[#0f0f0d] font-light select-none">&times;</span>
           <img src={imgHandshakeLogo} alt="Handshake" className="h-[26px] w-auto shrink-0" />
         </div>
 
+        {/* Nav Links */}
+        <div className="hidden md:flex items-center gap-7">
+          <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>3D Render</a>
+          <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Floor Layout Planner</a>
+          <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Cost Guide</a>
+        </div>
+
         {/* CTA Button */}
-        <div className="bg-[#f6f6f6] border border-white rounded-[100px] p-[7px] hidden md:block">
+        <div className="bg-[#e8e4db] border border-white rounded-[100px] p-[7px] hidden md:block">
           <a
             href="#get-started"
-            className="bg-[#09090b] text-white rounded-[100px] px-6 md:px-8 py-2.5 font-['Inter',sans-serif] font-medium text-[13px] md:text-[14px] tracking-[-0.7px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center gap-2 hover:bg-[#1e1e1e] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200"
+            className="bg-[#0f0f0d] text-white rounded-[100px] px-6 md:px-8 py-2.5 font-['DM_Sans',sans-serif] font-medium text-[13px] md:text-[14px] tracking-[-0.7px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] flex items-center gap-2 hover:bg-[#1e1e1e] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200"
           >
             <span className="hidden sm:inline">Protect My Renovation Payments</span>
             <span className="sm:hidden">Get Protected</span>
@@ -129,22 +136,22 @@ function HeroSection() {
 
   return (
     <section ref={ref} className="relative flex flex-col pt-[140px] md:pt-[200px] pb-[60px] md:pb-[80px] overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-[#fcfcfc] via-[#f7f7f7] to-[#fcfcfc]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#f0ede6] via-[#f0ede6] to-[#f0ede6]" />
       {/* Subtle dot grid pattern */}
       <div className="absolute inset-0 opacity-[0.6]" style={{
-        backgroundImage: 'radial-gradient(circle, #a1a1aa 1.2px, transparent 1.2px)',
+        backgroundImage: 'radial-gradient(circle, #9a9790 1.2px, transparent 1.2px)',
         backgroundSize: '28px 28px',
       }} />
       {/* Radial fade so dots fade at edges */}
       <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse 80% 70% at 50% 40%, transparent 0%, #f7f7f7 60%, #fcfcfc 100%)',
+        background: 'radial-gradient(ellipse 80% 70% at 50% 40%, transparent 0%, #f0ede6 60%, #f0ede6 100%)',
       }} />
 
       <div className="relative max-w-[1200px] mx-auto px-4 md:px-8 w-full">
         {/* Badge */}
         <FadeIn>
           <div className="flex justify-center mb-8">
-            <div className="inline-flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2.5 px-5 py-2.5 bg-white border border-[#E5E7EB] text-[13px] font-medium text-[#3F3F46] tracking-[-0.2px] rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-center">
+            <div className="inline-flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2.5 px-5 py-2.5 bg-[#fafaf8] border border-[#d8d3c8] text-[13px] font-medium text-[#6b6860] tracking-[-0.2px] rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.04)] text-center">
               <Shield size={14} className="text-[#22C55E] shrink-0" fill="#22C55E" />
               In collaboration with Handshake — MAS-Regulated Escrow
             </div>
@@ -154,8 +161,8 @@ function HeroSection() {
         {/* Headline — Auten large centered */}
         <FadeIn delay={0.1}>
           <div className="text-center max-w-[840px] mx-auto">
-            <h1 className="text-[40px] md:text-[62px] lg:text-[70px] font-medium text-[#71717A] leading-[1.0] tracking-[-3px] md:tracking-[-4.8px]" style={{ textWrap: "balance" as any }}>
-              <span className="font-semibold text-[#09090B]">Your funds.</span><br />
+            <h1 className="text-[40px] md:text-[62px] lg:text-[70px] font-medium text-[#6b6860] leading-[1.0] tracking-[-3px] md:tracking-[-4.8px]" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <span className="font-semibold text-[#0f0f0d]">Your funds.</span><br />
               Protected until you say so.
             </h1>
             <p className="text-[16px] md:text-[18px] text-[#5c5c5c] leading-[1.6] mt-6 max-w-[560px] mx-auto opacity-70">
@@ -168,14 +175,14 @@ function HeroSection() {
         <FadeIn delay={0.2}>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-10 w-full max-w-[480px] sm:max-w-none mx-auto">
             <a href="#get-started"
-              className="group w-full sm:w-auto px-8 py-4 bg-[#09090B] text-white text-[15px] font-medium tracking-[-0.7px] hover:bg-[#1e1e1e] hover:scale-[1.03] active:scale-[0.97] transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 text-center"
+              className="group w-full sm:w-auto px-8 py-4 bg-[#0f0f0d] text-white text-[15px] font-medium tracking-[-0.7px] hover:bg-[#1e1e1e] hover:scale-[1.03] active:scale-[0.97] transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 text-center"
               style={{ borderRadius: 100, boxShadow: "0 17px 33.4px rgba(0,0,0,0.17)" }}
             >
               Protect My Renovation Payments
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </a>
             <a href="#how-it-works"
-              className="w-full sm:w-auto px-8 py-4 bg-transparent border border-[#E5E7EB] text-[#09090B] text-[15px] font-medium tracking-[-0.7px] hover:bg-[#f0f0f0] hover:scale-[1.03] active:scale-[0.97] transition-all duration-200 cursor-pointer text-center block"
+              className="w-full sm:w-auto px-8 py-4 bg-transparent border border-[#d8d3c8] text-[#0f0f0d] text-[15px] font-medium tracking-[-0.7px] hover:bg-[#e8e4db] hover:scale-[1.03] active:scale-[0.97] transition-all duration-200 cursor-pointer text-center block"
               style={{ borderRadius: 100 }}
             >
               See How It Works
@@ -219,14 +226,14 @@ function TrustBar() {
   return (
     <div className="pt-14 pb-8">
       <div className="max-w-[1200px] mx-auto relative overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-[80px] bg-gradient-to-r from-[#f7f7f7] to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-[80px] bg-gradient-to-l from-[#f7f7f7] to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-[80px] bg-gradient-to-r from-[#f0ede6] to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-[80px] bg-gradient-to-l from-[#f0ede6] to-transparent z-10 pointer-events-none" />
         <div className="flex animate-[trustScroll_20s_linear_infinite] whitespace-nowrap">
           {[...items, ...items, ...items].map((item, i) => (
-            <span key={i} className="inline-flex items-center gap-2.5 px-5 py-3 mx-2 bg-[#f5f5f5] text-[15px] font-medium text-[#09090B] shrink-0 tracking-[-0.3px]"
+            <span key={i} className="inline-flex items-center gap-2.5 px-5 py-3 mx-2 bg-[#e8e4db] text-[15px] font-medium text-[#0f0f0d] shrink-0 tracking-[-0.3px]"
               style={{ borderRadius: 100 }}
             >
-              <item.icon size={18} className="text-[#71717A]" />
+              <item.icon size={18} className="text-[#6b6860]" />
               {item.label}
             </span>
           ))}
@@ -266,15 +273,15 @@ function ProblemSolutionSection() {
   ];
 
   return (
-    <section className="py-[72px] md:py-[100px] bg-[#f5f5f5]">
+    <section className="py-[72px] md:py-[100px] bg-[#e8e4db]">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         {/* Header — centered above grid */}
         <FadeIn>
           <div className="text-center mb-12 max-w-[900px] mx-auto">
             <SectionLabel text="The Problem" icon={AlertTriangle} color="#EF4444" />
-            <h2 className="text-[36px] md:text-[50px] font-semibold text-[#09090B] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any }}>
+            <h2 className="text-[36px] md:text-[50px] font-semibold text-[#0f0f0d] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
               Renovations require large upfront payments.<br />
-              <span className="text-[#71717A]">There are almost no safeguards.</span>
+              <span className="text-[#6b6860]">There are almost no safeguards.</span>
             </h2>
             <p className="text-[16px] text-[#5c5c5c] leading-[1.6] mt-5">
               In Singapore, most renovations require 30–50% of the total cost upfront. The industry is largely unregulated. Once money is transferred, homeowners lose most of their leverage.
@@ -289,11 +296,11 @@ function ProblemSolutionSection() {
         <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_1fr] md:grid-rows-2 gap-4">
           {/* Left column — card 1 */}
           <FadeIn delay={0}>
-            <div className="bg-white border border-[#e5e7eb] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
-              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#f5f5f5]">
-                {(() => { const Icon = cards[0].icon; return <Icon size={20} className="text-[#71717A]" />; })()}
+            <div className="bg-[#fafaf8] border border-[#d8d3c8] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
+              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#e8e4db]">
+                {(() => { const Icon = cards[0].icon; return <Icon size={20} className="text-[#6b6860]" />; })()}
               </div>
-              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#09090B] mt-auto pt-8">{cards[0].title}</h3>
+              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#0f0f0d] mt-auto pt-8">{cards[0].title}</h3>
               <p className="text-[14px] leading-[1.6] text-[#5c5c5c]">{cards[0].desc}</p>
             </div>
           </FadeIn>
@@ -311,33 +318,33 @@ function ProblemSolutionSection() {
 
           {/* Right column — card 3 */}
           <FadeIn delay={0.16}>
-            <div className="bg-white border border-[#e5e7eb] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
-              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#f5f5f5]">
-                {(() => { const Icon = cards[2].icon; return <Icon size={20} className="text-[#71717A]" />; })()}
+            <div className="bg-[#fafaf8] border border-[#d8d3c8] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
+              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#e8e4db]">
+                {(() => { const Icon = cards[2].icon; return <Icon size={20} className="text-[#6b6860]" />; })()}
               </div>
-              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#09090B] mt-auto pt-8">{cards[2].title}</h3>
+              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#0f0f0d] mt-auto pt-8">{cards[2].title}</h3>
               <p className="text-[14px] leading-[1.6] text-[#5c5c5c]">{cards[2].desc}</p>
             </div>
           </FadeIn>
 
           {/* Left column — card 2 */}
           <FadeIn delay={0.08}>
-            <div className="bg-white border border-[#e5e7eb] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
-              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#f5f5f5]">
-                {(() => { const Icon = cards[1].icon; return <Icon size={20} className="text-[#71717A]" />; })()}
+            <div className="bg-[#fafaf8] border border-[#d8d3c8] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
+              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#e8e4db]">
+                {(() => { const Icon = cards[1].icon; return <Icon size={20} className="text-[#6b6860]" />; })()}
               </div>
-              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#09090B] mt-auto pt-8">{cards[1].title}</h3>
+              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#0f0f0d] mt-auto pt-8">{cards[1].title}</h3>
               <p className="text-[14px] leading-[1.6] text-[#5c5c5c]">{cards[1].desc}</p>
             </div>
           </FadeIn>
 
           {/* Right column — card 4 */}
           <FadeIn delay={0.24}>
-            <div className="bg-white border border-[#e5e7eb] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
-              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#f5f5f5]">
-                {(() => { const Icon = cards[3].icon; return <Icon size={20} className="text-[#71717A]" />; })()}
+            <div className="bg-[#fafaf8] border border-[#d8d3c8] p-7 h-full flex flex-col" style={{ borderRadius: 18 }}>
+              <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center bg-[#e8e4db]">
+                {(() => { const Icon = cards[3].icon; return <Icon size={20} className="text-[#6b6860]" />; })()}
               </div>
-              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#09090B] mt-auto pt-8">{cards[3].title}</h3>
+              <h3 className="text-[18px] font-bold tracking-[-0.5px] mb-2 text-[#0f0f0d] mt-auto pt-8">{cards[3].title}</h3>
               <p className="text-[14px] leading-[1.6] text-[#5c5c5c]">{cards[3].desc}</p>
             </div>
           </FadeIn>
@@ -368,7 +375,7 @@ function WhyEscrowSection() {
         <FadeIn>
           <div className="text-center mb-14">
             <SectionLabel text="Why escrow matters now" dark icon={Shield} color="#FFA929" />
-            <h2 className="text-[36px] md:text-[56px] font-semibold text-white tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any }}>
+            <h2 className="text-[36px] md:text-[56px] font-semibold text-white tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
               Get your money, safety,<br className="hidden md:block" />
               and peace of mind back
             </h2>
@@ -381,7 +388,7 @@ function WhyEscrowSection() {
               <div className="bg-white/[0.04] border border-white/[0.06] p-7 text-center group hover:bg-white/[0.06] transition-colors h-full flex flex-col items-center"
                 style={{ borderRadius: 16 }}
               >
-                <div className="w-[56px] h-[56px] bg-white/[0.06] border border-white/[0.08] rounded-[14px] flex items-center justify-center mb-5 group-hover:bg-white/[0.1] transition-colors">
+                <div className="w-[56px] h-[56px] bg-white/[0.06] border border-white/[0.08] rounded-[12px] flex items-center justify-center mb-5 group-hover:bg-white/[0.1] transition-colors">
                   <f.icon size={24} className="text-white/70" />
                 </div>
                 <h3 className="text-[18px] font-bold text-white tracking-[-0.5px]">{f.title}</h3>
@@ -442,9 +449,9 @@ function HowItWorksCard({ step, index }: { step: { num: string; title: string; b
           transition={{ duration: 0.5, delay: 0.7 }}
         />
       )}
-      <div className="bg-[#f5f5f5] p-8 md:p-10 flex flex-col md:min-h-[480px]" style={{ borderRadius: 20 }}>
-        <span className="text-[13px] font-medium text-[#71717A] tracking-[1px] mb-4">{step.num}</span>
-        <h3 className="text-[28px] md:text-[32px] font-bold text-[#09090B] tracking-[-1.5px] leading-[1.1] whitespace-pre-line">{step.title}</h3>
+      <div className="bg-[#e8e4db] p-8 md:p-10 flex flex-col md:min-h-[480px]" style={{ borderRadius: 12 }}>
+        <span className="text-[13px] font-medium text-[#6b6860] tracking-[1px] mb-4">{step.num}</span>
+        <h3 className="text-[28px] md:text-[32px] font-bold text-[#0f0f0d] tracking-[-1.5px] leading-[1.1] whitespace-pre-line" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>{step.title}</h3>
         <div className="flex-1 min-h-[100px]" />
         <p className="text-[14px] text-[#5c5c5c] leading-[1.6]">{step.body}</p>
         <p className="text-[13px] text-[#5c5c5c] font-medium mt-4 italic">{step.note}</p>
@@ -473,12 +480,12 @@ function HowItWorksSection() {
   ];
 
   return (
-    <section id="how-it-works" className="py-[72px] md:py-[100px] bg-[#fcfcfc] overflow-hidden">
+    <section id="how-it-works" className="py-[72px] md:py-[100px] bg-[#f0ede6] overflow-hidden">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         <FadeIn>
           <div className="text-center mb-6">
             <SectionLabel text="How it works" icon={Zap} color="#3B82F6" />
-            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#09090B] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any }}>
+            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#0f0f0d] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
               Simple. Transparent. Secure.
             </h2>
           </div>
@@ -500,12 +507,12 @@ function HowItWorksSection() {
 // ═══════════════════════════════════════════════════════════════════
 function BenefitsSection() {
   return (
-    <section className="py-[72px] md:py-[100px] bg-[#fcfcfc]">
+    <section className="py-[72px] md:py-[100px] bg-[#f0ede6]">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         <FadeIn>
           <div className="text-center mb-14">
             <SectionLabel text="Why homeowners love this" icon={Shield} color="#22C55E" />
-            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#09090B] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any }}>
+            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#0f0f0d] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
               Built for your peace of mind.
             </h2>
           </div>
@@ -513,14 +520,14 @@ function BenefitsSection() {
 
         {/* Feature 1 — Large card spanning full width */}
         <FadeIn delay={0.1}>
-          <div className="bg-[#09090B] p-8 md:p-12 mb-5 relative overflow-hidden" style={{ borderRadius: 20 }}>
+          <div className="bg-[#0f0f0d] p-8 md:p-12 mb-5 relative overflow-hidden" style={{ borderRadius: 12 }}>
             <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[#22C55E] opacity-[0.04] blur-[150px] pointer-events-none" />
             <div className="relative max-w-[700px]">
               <div className="flex items-center gap-2 mb-6">
                 <Shield size={20} className="text-[#22C55E]" fill="#22C55E" strokeWidth={0} />
                 <span className="text-[13px] font-medium text-white/50 uppercase tracking-[1.5px]">Regulated & Protected</span>
               </div>
-              <h3 className="text-[28px] md:text-[36px] font-bold text-white tracking-[-1.5px] leading-[1.1]">
+              <h3 className="text-[28px] md:text-[36px] font-bold text-white tracking-[-1.5px] leading-[1.1]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
                 MAS-Regulated. DBS-Backed.
               </h3>
               <p className="text-[15px] text-white/50 leading-[1.7] mt-5">
@@ -540,19 +547,19 @@ function BenefitsSection() {
         {/* Features 2 & 3 — Two cards side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
           <FadeIn delay={0.15}>
-            <div className="bg-[#f5f5f5] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 20 }}>
+            <div className="bg-[#e8e4db] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 12 }}>
               {/* Credit card illustration */}
-              <div className="bg-white border border-[#e5e7eb] p-5 mb-6 flex items-center justify-between" style={{ borderRadius: 14 }}>
+              <div className="bg-[#fafaf8] border border-[#d8d3c8] p-5 mb-6 flex items-center justify-between" style={{ borderRadius: 14 }}>
                 <div className="flex items-center gap-3">
-                  <CreditCard size={24} className="text-[#09090B]" />
+                  <CreditCard size={24} className="text-[#0f0f0d]" />
                   <div>
-                    <p className="text-[13px] font-semibold text-[#09090B]">Pay by credit card</p>
-                    <p className="text-[12px] text-[#71717A]">Earn miles on every payment</p>
+                    <p className="text-[13px] font-semibold text-[#0f0f0d]">Pay by credit card</p>
+                    <p className="text-[12px] text-[#6b6860]">Earn miles on every payment</p>
                   </div>
                 </div>
-                <span className="text-[28px] font-bold text-[#09090B] tracking-[-1px]">2%</span>
+                <span className="text-[28px] font-bold text-[#0f0f0d] tracking-[-1px]">2%</span>
               </div>
-              <h3 className="text-[22px] font-bold text-[#09090B] tracking-[-0.5px]">Earn miles while renovating</h3>
+              <h3 className="text-[22px] font-bold text-[#0f0f0d] tracking-[-0.5px]">Earn miles while renovating</h3>
               <p className="text-[14px] text-[#5c5c5c] leading-[1.6] mt-2">
                 You can pay by credit card at 2% — the lowest processing fee in the industry. Earn miles for your next holiday while your home gets renovated.
               </p>
@@ -560,19 +567,19 @@ function BenefitsSection() {
           </FadeIn>
 
           <FadeIn delay={0.2}>
-            <div className="bg-[#f5f5f5] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 20 }}>
+            <div className="bg-[#e8e4db] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 12 }}>
               {/* $0 illustration */}
-              <div className="bg-white border border-[#e5e7eb] p-5 mb-6 flex items-center justify-between" style={{ borderRadius: 14 }}>
+              <div className="bg-[#fafaf8] border border-[#d8d3c8] p-5 mb-6 flex items-center justify-between" style={{ borderRadius: 14 }}>
                 <div className="flex items-center gap-3">
                   <DollarSign size={24} className="text-[#22C55E]" />
                   <div>
-                    <p className="text-[13px] font-semibold text-[#09090B]">Homeowner cost</p>
-                    <p className="text-[12px] text-[#71717A]">No signup or platform fees</p>
+                    <p className="text-[13px] font-semibold text-[#0f0f0d]">Homeowner cost</p>
+                    <p className="text-[12px] text-[#6b6860]">No signup or platform fees</p>
                   </div>
                 </div>
                 <span className="text-[28px] font-bold text-[#22C55E] tracking-[-1px]">$0</span>
               </div>
-              <h3 className="text-[22px] font-bold text-[#09090B] tracking-[-0.5px]">Free for homeowners</h3>
+              <h3 className="text-[22px] font-bold text-[#0f0f0d] tracking-[-0.5px]">Free for homeowners</h3>
               <p className="text-[14px] text-[#5c5c5c] leading-[1.6] mt-2">
                 There is no cost for homeowners to use Handshake. A small processing fee applies only if you choose to pay by credit card.
               </p>
@@ -583,23 +590,23 @@ function BenefitsSection() {
         {/* Features 4 & 5 — Two cards side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <FadeIn delay={0.25}>
-            <div className="bg-[#f5f5f5] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 20 }}>
+            <div className="bg-[#e8e4db] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 12 }}>
               {/* Dashboard mockup */}
-              <div className="bg-white border border-[#e5e7eb] p-5 mb-6 space-y-3" style={{ borderRadius: 14 }}>
+              <div className="bg-[#fafaf8] border border-[#d8d3c8] p-5 mb-6 space-y-3" style={{ borderRadius: 14 }}>
                 {[
                   { icon: CheckCircle2, text: "Milestone 1 approved", color: "text-[#22C55E]" },
                   { icon: Clock, text: "Milestone 2 in progress", color: "text-[#FFA929]" },
-                  { icon: Lock, text: "Milestone 3 funds secured", color: "text-[#71717A]" },
+                  { icon: Lock, text: "Milestone 3 funds secured", color: "text-[#6b6860]" },
                 ].map((item, j) => (
                   <div key={j} className="flex items-center gap-3 px-3 py-2">
                     <item.icon size={16} className={item.color} />
-                    <span className="text-[13px] text-[#09090B]">{item.text}</span>
+                    <span className="text-[13px] text-[#0f0f0d]">{item.text}</span>
                   </div>
                 ))}
               </div>
               <div className="flex items-center gap-3 mb-3">
-                <h3 className="text-[22px] font-bold text-[#09090B] tracking-[-0.5px]">Full visibility & control</h3>
-                <span className="text-[12px] font-medium text-[#71717A] bg-white border border-[#e5e7eb] px-3 py-1 rounded-full">24/7</span>
+                <h3 className="text-[22px] font-bold text-[#0f0f0d] tracking-[-0.5px]">Full visibility & control</h3>
+                <span className="text-[12px] font-medium text-[#6b6860] bg-[#fafaf8] border border-[#d8d3c8] px-3 py-1 rounded-full">24/7</span>
               </div>
               <p className="text-[14px] text-[#5c5c5c] leading-[1.6]">
                 Track progress, approve milestones, and manage your payments from your phone. Everything is in one place — no more chasing updates on WhatsApp.
@@ -608,24 +615,24 @@ function BenefitsSection() {
           </FadeIn>
 
           <FadeIn delay={0.3}>
-            <div className="bg-[#f5f5f5] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 20 }}>
+            <div className="bg-[#e8e4db] p-8 md:p-10 h-full flex flex-col" style={{ borderRadius: 12 }}>
               {/* WhatsApp support mockup */}
-              <div className="bg-white border border-[#e5e7eb] p-5 mb-6" style={{ borderRadius: 14 }}>
+              <div className="bg-[#fafaf8] border border-[#d8d3c8] p-5 mb-6" style={{ borderRadius: 14 }}>
                 <div className="flex items-start gap-3 mb-3">
                   <div className="w-[32px] h-[32px] bg-[#25D366] rounded-full flex items-center justify-center shrink-0">
                     <MessageCircle size={16} className="text-white" />
                   </div>
-                  <div className="bg-[#f5f5f5] px-4 py-2.5 text-[13px] text-[#5c5c5c]" style={{ borderRadius: "2px 12px 12px 12px" }}>
+                  <div className="bg-[#e8e4db] px-4 py-2.5 text-[13px] text-[#5c5c5c]" style={{ borderRadius: "2px 12px 12px 12px" }}>
                     Hi! I'm new to escrow. How does it work for my renovation?
                   </div>
                 </div>
                 <div className="flex items-start gap-3 justify-end">
-                  <div className="bg-[#09090B] px-4 py-2.5 text-[13px] text-white" style={{ borderRadius: "12px 2px 12px 12px" }}>
+                  <div className="bg-[#0f0f0d] px-4 py-2.5 text-[13px] text-white" style={{ borderRadius: "12px 2px 12px 12px" }}>
                     Happy to walk you through it! Let's start with your project details.
                   </div>
                 </div>
               </div>
-              <h3 className="text-[22px] font-bold text-[#09090B] tracking-[-0.5px]">Handshake support team</h3>
+              <h3 className="text-[22px] font-bold text-[#0f0f0d] tracking-[-0.5px]">Handshake support team</h3>
               <p className="text-[14px] text-[#5c5c5c] leading-[1.6] mt-2">
                 Not sure how it works? The Handshake team is always available to walk you through the process. Reach them anytime on WhatsApp.
               </p>
@@ -661,14 +668,14 @@ function CaseStudiesSection() {
   ];
 
   return (
-    <section className="py-[72px] md:py-[100px] bg-[#f7f7f7]">
+    <section className="py-[72px] md:py-[100px] bg-[#f0ede6]">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         <FadeIn>
           <div className="text-center mb-14">
             <SectionLabel text="Case studies" icon={Award} color="#A855F7" />
-            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#09090B] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any }}>
+            <h2 className="text-[36px] md:text-[56px] font-semibold text-[#0f0f0d] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as any, fontFamily: "'EB Garamond', Georgia, serif" }}>
               Examples of renovations<br className="hidden md:block" />
-              <span className="text-[#71717A] font-medium">protected with escrow</span>
+              <span className="text-[#6b6860] font-medium">protected with escrow</span>
             </h2>
           </div>
         </FadeIn>
@@ -676,29 +683,29 @@ function CaseStudiesSection() {
         <div className="space-y-6">
           {cases.map((c, i) => (
             <FadeIn key={i} delay={i * 0.12}>
-              <div className="bg-white border border-[#f0f0f0] p-6 md:p-10 flex flex-col md:flex-row gap-8 md:gap-12 items-center"
+              <div className="bg-[#fafaf8] border border-[#d8d3c8] p-6 md:p-10 flex flex-col md:flex-row gap-8 md:gap-12 items-center"
                 style={{ borderRadius: 24, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
               >
                 {/* Left — text */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5 mb-5">
-                    <div className="w-[32px] h-[32px] bg-[#09090B] rounded-[8px] flex items-center justify-center">
+                    <div className="w-[32px] h-[32px] bg-[#0f0f0d] rounded-[8px] flex items-center justify-center">
                       <span className="text-white text-[12px] font-bold">{c.logo}</span>
                     </div>
                     <span className="text-[14px] font-medium text-[#5c5c5c]">{c.firm}</span>
                   </div>
 
-                  <h3 className="text-[24px] md:text-[28px] font-bold text-[#09090B] tracking-[-1.2px] leading-[1.15]">{c.title}</h3>
+                  <h3 className="text-[24px] md:text-[28px] font-bold text-[#0f0f0d] tracking-[-1.2px] leading-[1.15]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>{c.title}</h3>
                   <p className="text-[15px] text-[#5c5c5c] leading-[1.6] mt-3 opacity-70">{c.desc}</p>
 
                   <div className="flex items-center gap-8 mt-7">
                     {c.stats.map((s, j) => (
                       <div key={j}>
-                        <p className="text-[32px] font-bold text-[#09090B] tracking-[-2px] leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>{s.value}</p>
+                        <p className="text-[32px] font-bold text-[#0f0f0d] tracking-[-2px] leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>{s.value}</p>
                         <p className="text-[13px] text-[#5c5c5c] mt-1 opacity-50">{s.label}</p>
                       </div>
                     ))}
-                    <a href="#get-started" className="ml-auto px-5 py-2.5 bg-[#09090B] text-white text-[13px] font-medium hover:bg-[#1e1e1e] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200 cursor-pointer flex items-center gap-1.5" style={{ borderRadius: 100 }}>
+                    <a href="#get-started" className="ml-auto px-5 py-2.5 bg-[#0f0f0d] text-white text-[13px] font-medium hover:bg-[#1e1e1e] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200 cursor-pointer flex items-center gap-1.5" style={{ borderRadius: 100 }}>
                       Read more
                     </a>
                   </div>
@@ -732,24 +739,24 @@ function FAQSection() {
   ];
 
   return (
-    <section className="py-[72px] md:py-[100px] bg-[#fcfcfc]">
+    <section className="py-[72px] md:py-[100px] bg-[#f0ede6]">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-start">
           {/* Left side — heading + CTA */}
           <FadeIn>
             <div className="lg:sticky lg:top-[140px]">
               <SectionLabel text="FAQs" icon={MessageSquare} color="#F59E0B" />
-              <h2 className="text-[36px] md:text-[50px] font-semibold text-[#09090B] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as never }}>
+              <h2 className="text-[36px] md:text-[50px] font-semibold text-[#0f0f0d] tracking-[-2.4px] leading-[1.05] mt-6" style={{ textWrap: "balance" as never, fontFamily: "'EB Garamond', Georgia, serif" }}>
                 Before You Start, Here's What Most Homeowners Ask
               </h2>
               <p className="text-[16px] text-[#5c5c5c] leading-[1.6] mt-5 max-w-[420px]">
                 Still have questions? Reach the Handshake team anytime on WhatsApp.
               </p>
               <div className="flex items-center gap-3 mt-8">
-                <a href="#get-started" className="inline-flex items-center gap-2.5 bg-[#09090B] text-white px-6 py-3 text-[14px] font-medium hover:bg-[#09090B]/90 hover:scale-[1.05] active:scale-[0.95] transition-all duration-200" style={{ borderRadius: 100 }}>
+                <a href="#get-started" className="inline-flex items-center gap-2.5 bg-[#0f0f0d] text-white px-6 py-3 text-[14px] font-medium hover:bg-[#0f0f0d]/90 hover:scale-[1.05] active:scale-[0.95] transition-all duration-200" style={{ borderRadius: 100 }}>
                   Get started
                 </a>
-                <a href="https://wa.me/6580778295" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 bg-white border border-[#e5e7eb] text-[#09090B] px-6 py-3 text-[14px] font-medium hover:bg-[#fafafa] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200" style={{ borderRadius: 100 }}>
+                <a href="https://wa.me/6580778295" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 bg-[#fafaf8] border border-[#d8d3c8] text-[#0f0f0d] px-6 py-3 text-[14px] font-medium hover:bg-[#fafaf8] hover:scale-[1.05] active:scale-[0.95] transition-all duration-200" style={{ borderRadius: 100 }}>
                   <MessageSquare size={14} />
                   WhatsApp us
                 </a>
@@ -758,7 +765,7 @@ function FAQSection() {
           </FadeIn>
 
           {/* Right side — accordion */}
-          <div className="space-y-0 divide-y divide-[#e5e7eb]">
+          <div className="space-y-0 divide-y divide-[#d8d3c8]">
             {faqs.map((faq, i) => (
               <FadeIn key={i} delay={i * 0.05}>
                 <div className="overflow-hidden">
@@ -767,7 +774,7 @@ function FAQSection() {
                     className="w-full text-left py-5 md:py-6 cursor-pointer group hover:opacity-80 transition-opacity"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-[16px] md:text-[18px] font-semibold text-[#09090B] tracking-[-0.3px]">{faq.q}</span>
+                      <span className="text-[16px] md:text-[18px] font-semibold text-[#0f0f0d] tracking-[-0.3px]">{faq.q}</span>
                       <motion.div animate={{ rotate: open === i ? 45 : 0 }} transition={{ duration: 0.2 }}>
                         <Plus size={20} className="text-[#5c5c5c] shrink-0" />
                       </motion.div>
@@ -842,7 +849,7 @@ function LeadCaptureForm() {
                 <div className="w-[64px] h-[64px] bg-[#22C55E] rounded-full flex items-center justify-center mx-auto mb-6">
                   <Check size={32} className="text-white" />
                 </div>
-                <h2 className="text-[32px] md:text-[40px] font-semibold text-white tracking-[-2px]">You're all set.</h2>
+                <h2 className="text-[32px] md:text-[40px] font-semibold text-white tracking-[-2px]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>You're all set.</h2>
                 <p className="text-[16px] text-white/50 leading-[1.7] mt-4 max-w-[440px] mx-auto">
                   Our team will reach out to walk you through how Handshake protects your renovation payments.
                 </p>
@@ -855,7 +862,7 @@ function LeadCaptureForm() {
                 {/* Left — heading + benefits */}
                 <div>
                   <SectionLabel text="Get started" dark icon={ArrowRight} color="#22C55E" />
-                  <h2 className="text-[32px] md:text-[40px] font-semibold text-white tracking-[-2px] leading-[1.1] mt-6" style={{ textWrap: "balance" as never }}>
+                  <h2 className="text-[32px] md:text-[40px] font-semibold text-white tracking-[-2px] leading-[1.1] mt-6" style={{ textWrap: "balance" as never, fontFamily: "'EB Garamond', Georgia, serif" }}>
                     Protect your renovation payments today.
                   </h2>
                   <p className="text-[16px] text-white/40 leading-[1.7] mt-5 max-w-[400px]">
@@ -893,7 +900,7 @@ function LeadCaptureForm() {
                       options={["Yes", "No", "Still looking"]} />
 
                     <button type="submit" disabled={loading}
-                      className="w-full py-4 bg-white text-[#09090B] text-[15px] font-semibold hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer mt-2"
+                      className="w-full py-4 bg-white text-[#0f0f0d] text-[15px] font-semibold hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer mt-2"
                       style={{ borderRadius: 12 }}
                     >
                       {loading ? <Loader2 size={17} className="animate-spin" /> : <>Protect My Renovation Payments <ArrowRight size={16} /></>}
@@ -1026,16 +1033,16 @@ function SocialProofMetrics() {
   ];
 
   return (
-    <section className="py-[40px] md:py-[56px] bg-[#fcfcfc]">
+    <section className="py-[40px] md:py-[56px] bg-[#f0ede6]">
       <div className="max-w-[1200px] mx-auto px-4 md:px-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           {metrics.map((m, i) => (
             <FadeIn key={i} delay={i * 0.1}>
-              <div className="bg-[#f5f5f5] rounded-2xl px-6 py-6 h-full">
-                <p className="text-[28px] md:text-[32px] font-bold text-[#09090B] tracking-[-1.5px] leading-none">
-                  {m.value ? <span className="inline-flex items-center gap-1" style={{ fontVariantNumeric: "tabular-nums" }}>{m.value}{m.star && <Star size={24} className="text-[#09090B] inline" fill="#09090B" strokeWidth={0} />}</span> : <AnimatedCounter target={m.target!} suffix={m.suffix} prefix={m.prefix} />}
+              <div className="bg-[#e8e4db] rounded-2xl px-6 py-6 h-full">
+                <p className="text-[28px] md:text-[32px] font-bold text-[#0f0f0d] tracking-[-1.5px] leading-none">
+                  {m.value ? <span className="inline-flex items-center gap-1" style={{ fontVariantNumeric: "tabular-nums" }}>{m.value}{m.star && <Star size={24} className="text-[#0f0f0d] inline" fill="#0f0f0d" strokeWidth={0} />}</span> : <AnimatedCounter target={m.target!} suffix={m.suffix} prefix={m.prefix} />}
                 </p>
-                <p className="text-[14px] text-[#71717A] mt-3">{m.label}</p>
+                <p className="text-[14px] text-[#6b6860] mt-3">{m.label}</p>
               </div>
             </FadeIn>
           ))}

@@ -149,7 +149,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                       <span className="block font-normal" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.8vw, 52px)", letterSpacing: "-0.025em" }}>
                         {HERO.headline}
                       </span>
-                      <span className="font-normal italic" style={{ fontFamily: serif, color: C.grayLight, fontSize: "clamp(32px, 3.5vw, 52px)" }}>
+                      <span className="block font-normal italic" style={{ fontFamily: serif, color: C.grayLight, fontSize: "clamp(32px, 3.5vw, 52px)" }}>
                         {HERO.headlineItalic}
                       </span>
                     </motion.h1>

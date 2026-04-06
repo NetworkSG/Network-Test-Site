@@ -1008,7 +1008,7 @@ export function CostGuide() {
       }
       setStep(7);
 
-      // Generate PDF and send to Zapier with pdfUrl in background
+      // Generate PDF then send to Zapier with PDF URL in background
       (async () => {
         try {
           const pdfRes = await fetch(`${API_BASE}/cost-guide-pdf`, {
@@ -1025,10 +1025,22 @@ export function CostGuide() {
           const pdfUrl = pdfData.pdfUrl || null;
           console.log("PDF generated:", pdfUrl);
 
-          // Send to Zapier with PDF URL included
+          // Send to Zapier with all data + PDF URL
+          const fmtK = (n: number) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`;
+          const budgetRange = est.isFloor ? "$30K - $35K" : `${fmtK(est.estMin)} - ${fmtK(est.estMax)}`;
+          const formData = new FormData();
+          formData.append("Email Address", contact.email);
+          formData.append("Property Type", propertyType);
+          formData.append("Renovation Budget", budgetRange);
+          formData.append("Craftpdf Link", pdfUrl || "");
+          formData.append("First Name", contact.name);
+          formData.append("Hook Id", data.qrId || "");
+          formData.append("Lead Form", "Cost Guide Lead Form");
+          formData.append("Key Date", timeline);
+          formData.append("Contact Phone", contact.whatsapp);
           await fetch("https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/", {
             method: "POST",
-            body: JSON.stringify({ propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact, estimate: est, pdfUrl }),
+            body: formData,
           });
         } catch (bgErr) {
           console.error("Background PDF/Zapier error:", bgErr);

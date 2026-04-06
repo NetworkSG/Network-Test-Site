@@ -1282,10 +1282,10 @@ app.post("/make-server-4808de5e/render-save-result", async (c) => {
         if (uploadErr) {
           console.log("Storage upload error for rendered image:", uploadErr);
         } else {
-          // Create a signed URL (valid for 7 days)
+          // Create a signed URL (valid for 10 days)
           const { data: signedData, error: signErr } = await supabase.storage
             .from(BUCKET_NAME)
-            .createSignedUrl(filePath, 7 * 24 * 3600);
+            .createSignedUrl(filePath, 10 * 24 * 3600);
 
           if (signErr || !signedData?.signedUrl) {
             console.log("Signed URL error for rendered image:", signErr);
@@ -1334,15 +1334,32 @@ app.post("/make-server-4808de5e/render-save-result", async (c) => {
       resultSavedAt: new Date().toISOString(),
     });
 
+    // Generate short URL for the image
+    let shortImageUrl = imageStorageUrl;
+    if (imageStorageUrl) {
+      const shortId = crypto.randomUUID().slice(0, 8);
+      await kv.set(`img:${shortId}`, imageStorageUrl);
+      const fnBase = Deno.env.get("SUPABASE_URL") + "/functions/v1/make-server-4808de5e";
+      shortImageUrl = `${fnBase}/i/${shortId}`;
+    }
+
     return c.json({
       success: true,
-      imageStorageUrl,
+      imageStorageUrl: shortImageUrl,
       quoteRequestUpdated: !!(resolvedQrId && imageStorageUrl),
     });
   } catch (err) {
     console.log("Unexpected error in /render-save-result:", err);
     return c.json({ error: "Internal server error" }, 500);
   }
+});
+
+// Short image redirect — /i/:id → full signed URL
+app.get("/make-server-4808de5e/i/:id", async (c) => {
+  const id = c.req.param("id");
+  const url = await kv.get(`img:${id}`);
+  if (!url) return c.json({ error: "Image not found or expired" }, 404);
+  return c.redirect(url as string, 302);
 });
 
 // Debug endpoint to inspect stored KV data for a render task
@@ -3062,7 +3079,15 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
       console.log("Skipping Quote Request update — quoteRequestId:", quoteRequestId, "storageSignedUrl:", !!storageSignedUrl);
     }
 
-    return c.json({ success: true, pdfUrl: storageSignedUrl || pdfUrl });
+    // Generate short URL for the PDF
+    let finalPdfUrl = storageSignedUrl || pdfUrl;
+    if (finalPdfUrl) {
+      const shortId = crypto.randomUUID().slice(0, 8);
+      await kv.set(`img:${shortId}`, finalPdfUrl);
+      const fnBase = Deno.env.get("SUPABASE_URL") + "/functions/v1/make-server-4808de5e";
+      finalPdfUrl = `${fnBase}/i/${shortId}`;
+    }
+    return c.json({ success: true, pdfUrl: finalPdfUrl });
   } catch (err) {
     console.log("Error in cost-guide-pdf generation:", err);
     return c.json({ error: "Failed to generate PDF: " + err }, 500);

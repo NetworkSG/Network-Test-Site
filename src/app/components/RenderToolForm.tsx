@@ -87,18 +87,12 @@ const TOTAL_STEPS = 8;
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 const STYLE_IMAGES: Record<string, string> = {
-  Modern:
-    "https://images.unsplash.com/photo-1705321963943-de94bb3f0dd3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBpbnRlcmlvciUyMGRlc2lnbiUyMGxpdmluZyUyMHJvb218ZW58MXx8fHwxNzczMTQwNTE5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-  Japandi:
-    "https://images.unsplash.com/photo-1772797583328-f83bc3f94f80?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxqYXBhbmRpJTIwaW50ZXJpb3IlMjBkZXNpZ24lMjByb29tfGVufDF8fHx8MTc3MzI0MjM5OXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-  Scandinavian:
-    "https://images.unsplash.com/photo-1757262798620-c2cc40cfb440?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzY2FuZGluYXZpYW4lMjBpbnRlcmlvciUyMGRlc2lnbiUyMGJyaWdodxlbnwxfHx8fDE3NzMyNDIzOTl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-  "Wabi-sabi":
-    "https://images.unsplash.com/photo-1762541088571-34a2949af8a0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3YWJpJTIwc2FiaSUyMGludGVyaW9yJTIwbmF0dXJhbCUyMHRleHR1cmV8ZW58MXx8fHwxNzczMjQyNDAwfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-  Minimalist:
-    "https://images.unsplash.com/photo-1546938576-6e6a64f317cc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwaW50ZXJpb3IlMjB3aGl0ZSUyMGNsZWFufGVufDF8fHx8MTc3MzI0MjQwMHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-  Industrial:
-    "https://images.unsplash.com/photo-1773069459487-3d2d7bb4532e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwaW50ZXJpb3IlMjBsb2Z0JTIwZXhwb3NlZCUyMGJyaWNrfGVufDF8fHx8MTc3MzI0MjQwMXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+  Modern: "/r1.jpeg",
+  Japandi: "/r2.jpeg",
+  Scandinavian: "/r3.jpeg",
+  "Wabi-sabi": "/r4.jpeg",
+  Minimalist: "/r5.jpeg",
+  Industrial: "/r6.jpeg",
 };
 
 // Step 1: Contact Details
@@ -662,28 +656,36 @@ function StepThankYou({
   designStyle,
   roomType,
   quoteRequestId,
+  contact,
+  propertyType,
+  timeline,
+  budget,
 }: {
   taskId: string | null;
   resultUrl: string | null;
   uploadPreview: string | null;
   designStyle: string;
+  contact: { name: string; whatsapp: string; email: string };
+  propertyType: string;
+  timeline: string;
+  budget: string;
   roomType: string;
   quoteRequestId: string | null;
 }) {
   const [status, setStatus] = useState<string>(resultUrl ? "completed" : "processing");
   const [renderResult, setRenderResult] = useState<string | null>(resultUrl);
-  const [showComparison, setShowComparison] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [resultSaved, setResultSaved] = useState(false);
+  const [showThankYou, setShowThankYou] = useState(false);
 
-  // When render completes, save the result image to Supabase storage and update Quote Request
+  // When render completes, save to Supabase, send to Zapier, THEN show thank you
   useEffect(() => {
     if (!renderResult || !taskId || resultSaved) return;
     setResultSaved(true);
 
-    const saveResult = async () => {
+    const saveAndNotify = async () => {
       try {
-        console.log("Saving render result to Supabase storage and Quote Request...");
+        console.log("Saving render result to Supabase storage...");
         const res = await fetch(`${API_BASE}/render-save-result`, {
           method: "POST",
           headers: {
@@ -702,12 +704,34 @@ function StepThankYou({
         } else {
           console.log("Render result saved:", data);
         }
+
+        // Send to Zapier with Supabase URL (10-day signed URL)
+        const supabaseImageUrl = data.imageStorageUrl || renderResult;
+        try {
+          const formData = new FormData();
+          formData.append("First Name", contact.name);
+          formData.append("Contact Phone", contact.whatsapp);
+          formData.append("Email Address", contact.email);
+          formData.append("Property Type", propertyType);
+          formData.append("Renovation Budget", budget);
+          formData.append("Key Date", timeline);
+          formData.append("Lead Form", "AI 3D Render");
+          formData.append("3D Render Image", supabaseImageUrl);
+          await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
+            method: "POST",
+            body: formData,
+          });
+          console.log("Zapier notified with Supabase image URL");
+        } catch (_) {}
       } catch (err) {
         console.error("Error saving render result:", err);
       }
+
+      // Everything done — show thank you page
+      setShowThankYou(true);
     };
 
-    saveResult();
+    saveAndNotify();
   }, [renderResult, taskId, quoteRequestId, resultSaved]);
 
   // Poll for result
@@ -738,13 +762,7 @@ function StepThankYou({
         if (data.resultUrl) {
           setStatus("completed");
           setRenderResult(data.resultUrl);
-          // Send rendered image URL to Zapier
-          try {
-            fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
-              method: "POST",
-              body: JSON.stringify({ taskId, renderResultUrl: data.resultUrl, status: "completed" }),
-            });
-          } catch (_) {}
+          // Zapier is called after Supabase save completes (in the save effect above)
         } else if (data.status === "failed" || data.status === "FAILED") {
           setStatus("failed");
         }
@@ -778,161 +796,92 @@ function StepThankYou({
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
+  const navigate = useNavigate();
+
   return (
     <div className="w-full max-w-[520px] mx-auto flex flex-col items-center justify-center py-10 md:py-20">
-      {/* Processing state — loading card only */}
-      {status === "processing" && (
-        <motion.div
-          className="w-full"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        >
-          <div className="w-full px-8 py-12 flex flex-col items-center justify-center gap-6">
-            {/* Blocks Shuffle Loader */}
-            <div className="w-[48px] h-[48px]">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="48" height="48">
-                <rect x="10" y="10" width="35" height="35" rx="4" fill="#0f0f0d">
-                  <animate attributeName="x" values="10;55;55;10;10" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="y" values="10;10;55;55;10" dur="2s" repeatCount="indefinite" />
-                </rect>
-                <rect x="55" y="10" width="35" height="35" rx="4" fill="#6b6860">
-                  <animate attributeName="x" values="55;55;10;10;55" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="y" values="10;55;55;10;10" dur="2s" repeatCount="indefinite" />
-                </rect>
-                <rect x="55" y="55" width="35" height="35" rx="4" fill="#B0B0B0">
-                  <animate attributeName="x" values="55;10;10;55;55" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="y" values="55;55;10;10;55" dur="2s" repeatCount="indefinite" />
-                </rect>
-                <rect x="10" y="55" width="35" height="35" rx="4" fill="#E5E7EB">
-                  <animate attributeName="x" values="10;10;55;55;10" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="y" values="55;10;10;55;55" dur="2s" repeatCount="indefinite" />
-                </rect>
-              </svg>
+      <AnimatePresence mode="wait">
+        {!showThankYou ? (
+          /* Brief rendering animation — 3 seconds */
+          <motion.div
+            key="rendering"
+            className="w-full"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          >
+            <div className="w-full px-8 py-12 flex flex-col items-center justify-center gap-6">
+              <div className="w-10 h-10 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" />
+              <div className="text-center">
+                <p className="font-semibold text-[20px] text-[#0f0f0d] tracking-[-0.8px] leading-[1.2]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                  Generating your AI design...
+                </p>
+                <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#6b6860] mt-3 leading-[1.5]">
+                  This typically takes 1 to 3 minutes. Please don't close this page.
+                </p>
+                <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#9a9790] mt-2 tabular-nums leading-[1.5]">
+                  Elapsed: {formatTime(elapsedSeconds)}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          /* Thank you page */
+          <motion.div
+            key="thankyou"
+            className="w-full"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            {/* Check icon */}
+            <div className="w-14 h-14 rounded-full bg-[#0f0f0d] flex items-center justify-center mx-auto mb-7">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>
 
-            {/* Text */}
-            <div className="text-center">
-              <p className="font-semibold text-[20px] text-[#0f0f0d] tracking-[-0.8px] leading-[1.2]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                AI is generating your 3D render...
-              </p>
-              <p className="font-['DM_Sans',sans-serif] font-normal text-[16px] text-[#6b6860] mt-3 leading-[1.5]">
-                This typically takes 1–3 minutes
-              </p>
-              <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#9a9790] mt-2 tabular-nums leading-[1.5]">
-                Elapsed: {formatTime(elapsedSeconds)}
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Completed state — render result */}
-      {status === "completed" && renderResult && (
-        <motion.div
-          className="w-full"
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        >
-          <div className="relative group">
-            <div className="w-full rounded-[17px] overflow-hidden shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)] border border-[#e8e4db]">
-              <img
-                src={renderResult}
-                alt={`AI 3D render — ${designStyle} ${roomType}`}
-                className="w-full h-auto object-cover"
-              />
-            </div>
-            <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md text-white px-4 py-1.5 rounded-[100px]">
-              <span className="font-['DM_Sans',sans-serif] font-medium text-[12px] tracking-[-0.3px]">
-                {designStyle} · {roomType}
+            <h1 className="text-center leading-[1.15] mb-3" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(28px, 3.5vw, 44px)", letterSpacing: "-0.025em" }}>
+                Your AI Design is on Its Way.
               </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-center gap-3 mt-6">
-            <a
-              href={renderResult}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center bg-[#e8e4db] border border-white rounded-[100px] p-[6px]"
-            >
-              <span className="inline-flex items-center gap-2 bg-[#0f0f0d] text-white font-['DM_Sans',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 shadow-[0px_4px_4px_rgba(0,0,0,0.25)]">
-                Download Render
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
+              <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(22px, 2.5vw, 32px)" }}>
+                Our team will contact you shortly.
               </span>
-            </a>
-            {uploadPreview && (
-              <button
-                onClick={() => setShowComparison(!showComparison)}
-                className="inline-flex items-center gap-2 border border-[#d8d3c8] bg-[#fafaf8] text-[#0f0f0d] font-['DM_Sans',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 hover:bg-[#e8e4db] transition-colors"
-              >
-                {showComparison ? "Hide" : "Compare"} Before & After
-              </button>
-            )}
-          </div>
+            </h1>
 
-          <AnimatePresence>
-            {showComparison && uploadPreview && (
-              <motion.div
-                className="mt-6"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9790] uppercase tracking-[1.5px] mb-2">
-                      Before — Floorplan
-                    </p>
-                    <div className="w-full rounded-[17px] overflow-hidden border border-[#e8e4db]">
-                      <img src={uploadPreview} alt="Original floorplan" className="w-full h-[200px] object-contain bg-[#fafaf8]" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9790] uppercase tracking-[1.5px] mb-2">
-                      After — 3D Render
-                    </p>
-                    <div className="w-full rounded-[17px] overflow-hidden border border-[#e8e4db]">
-                      <img src={renderResult} alt="AI 3D render" className="w-full h-[200px] object-cover" />
-                    </div>
-                  </div>
+            <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#6b6860] leading-[1.75] mb-10 text-center max-w-[420px] mx-auto">
+              A member of our team will share your AI design with you via WhatsApp along with next steps for your renovation.
+            </p>
+
+            {/* What's next card */}
+            <div className="bg-[#fafaf8] rounded-[12px] border border-[#d8d3c8] p-7 mb-10">
+              <p className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] mb-4">What happens next</p>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Your 3D render is being generated now</p>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      )}
-
-      {/* Failed state */}
-      {status === "failed" && (
-        <motion.div
-          className="w-full"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <div className="w-full py-10 rounded-[17px] border border-[#e8e4db] bg-[#e8e4db] flex flex-col items-center justify-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" />
-                <line x1="9" y1="9" x2="15" y2="15" />
-              </svg>
+                <div className="flex items-start gap-3">
+                  <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Our team will share it with you via WhatsApp</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Get matched to verified designers who fit your budget</p>
+                </div>
+              </div>
             </div>
-            <p className="font-['DM_Sans',sans-serif] font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.5px]">
-              Something went wrong
-            </p>
-            <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#6b6860]">
-              We'll still send your render via WhatsApp once it's ready.
-            </p>
-          </div>
-        </motion.div>
-      )}
+
+            <div className="text-center">
+              <button onClick={() => navigate("/")}
+                className="h-[52px] px-8 text-[14px] font-medium hover:opacity-85 active:scale-[0.98] cursor-pointer"
+                style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>
+                Back to home
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1069,20 +1018,7 @@ export function RenderToolForm() {
       if (taskData.quoteRequestId) {
         setQuoteRequestId(taskData.quoteRequestId);
       }
-      // Send to Zapier webhook
-      try {
-        await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
-          method: "POST",
-          body: JSON.stringify({
-            imageUrl: uploadData.url,
-            designStyle, roomType, propertyType, timeline, budget,
-            contact: { name: contact.name, whatsapp: contact.whatsapp, email: contact.email },
-            taskId: taskData.taskId,
-          }),
-        });
-      } catch (zapErr) {
-        console.error("Zapier webhook error:", zapErr);
-      }
+      // Zapier webhook fires after render completes (in StepThankYou)
       setStep(8); // Go to thank you
     } catch (err) {
       console.error("Error submitting render request:", err);
@@ -1200,7 +1136,7 @@ export function RenderToolForm() {
                   uploadPreview={preview}
                 />
               )}
-              {step === 8 && <StepThankYou taskId={taskId} resultUrl={resultUrl} uploadPreview={preview} designStyle={designStyle} roomType={roomType} quoteRequestId={quoteRequestId} />}
+              {step === 8 && <StepThankYou taskId={taskId} resultUrl={resultUrl} uploadPreview={preview} designStyle={designStyle} roomType={roomType} quoteRequestId={quoteRequestId} contact={contact} propertyType={propertyType} timeline={timeline} budget={budget} />}
             </motion.div>
           </AnimatePresence>
         </div>
