@@ -2,6 +2,7 @@ import { createBrowserRouter, Outlet, useLocation } from "react-router";
 import { lazy, Suspense, createElement, useEffect, useRef, useState } from "react";
 import { useVisitorHeartbeat } from "./hooks/useVisitorHeartbeat";
 import { HomePage } from "./components/HomePage";
+import { HomepageV8 } from "./components/homepage/v8/HomepageV8";
 import { GetMatchedForm } from "./components/GetMatchedForm";
 import { RenderToolForm } from "./components/RenderToolForm";
 import { DesignerProfile } from "./components/DesignerProfile";
@@ -77,7 +78,8 @@ function RootLayout() {
 
 export const router = createBrowserRouter([
   { Component: RootLayout, children: [
-  { path: "/", Component: HomePage },
+  { path: "/", Component: HomepageV8 },
+  { path: "/old-homepage", Component: HomePage },
   { path: "/get-matched", Component: GetMatchedForm },
   { path: "/render-tool", Component: RenderToolForm },
   { path: "/cost-guide", Component: CostGuide },
