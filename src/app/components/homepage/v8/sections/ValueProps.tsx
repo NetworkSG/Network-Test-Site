@@ -1,10 +1,11 @@
 import { C, serif, sans, FadeIn, TagLabel, SectionCTA } from "../primitives";
 import { VALUE_PROPS } from "../../content";
-import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.png";
-import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.png";
-import photo3 from "figma:asset/bc9ffe9973654a94a381c863292fc3780b81397b.png";
-
-const photos = [photo1, photo2, photo3];
+const SUPABASE_WEB = "https://ttalzucoummnkomjvcfr.supabase.co/storage/v1/object/public/ons-website/value-props";
+const photos = [
+  `${SUPABASE_WEB}/material-samples.png`,   // Verified quality — material moodboard
+  `${SUPABASE_WEB}/fabric-consultation.png`, // Matched in 1 day — designer consultation
+  `${SUPABASE_WEB}/design-review.png`,       // Zero risk — collaborative design review
+];
 
 export function ValueProps({ scrollToForm }: { scrollToForm: () => void }) {
   return (

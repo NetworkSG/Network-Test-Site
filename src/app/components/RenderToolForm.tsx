@@ -46,7 +46,7 @@ function BeforeAfterSlider() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[4/3] rounded-[20px] overflow-hidden cursor-col-resize select-none shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)]"
+      className="relative w-full aspect-[4/3] rounded-[12px] overflow-hidden cursor-col-resize select-none shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)]"
       onMouseDown={(e) => { isDragging.current = true; updatePosition(e.clientX); }}
       onTouchStart={(e) => { isDragging.current = true; updatePosition(e.touches[0].clientX); }}
     >
@@ -66,7 +66,7 @@ function BeforeAfterSlider() {
         className="absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 w-[44px] h-[44px] bg-white rounded-full shadow-[0px_4px_12px_rgba(0,0,0,0.25)] flex items-center justify-center pointer-events-none"
         style={{ left: `${sliderPos}%` }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 18l6-6-6-6" />
           <path d="M9 6l-6 6 6 6" />
         </svg>
@@ -74,10 +74,10 @@ function BeforeAfterSlider() {
 
       {/* Labels */}
       <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm text-white px-3 py-1 rounded-full pointer-events-none z-10">
-        <span className="font-['Inter',sans-serif] font-medium text-[11px]">After</span>
+        <span className="font-['DM_Sans',sans-serif] font-medium text-[11px]">After</span>
       </div>
-      <div className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm text-[#09090b] px-3 py-1 rounded-full pointer-events-none z-10">
-        <span className="font-['Inter',sans-serif] font-medium text-[11px]">Before</span>
+      <div className="absolute bottom-4 right-4 bg-white/80 backdrop-blur-sm text-[#0f0f0d] px-3 py-1 rounded-full pointer-events-none z-10">
+        <span className="font-['DM_Sans',sans-serif] font-medium text-[11px]">Before</span>
       </div>
     </div>
   );
@@ -124,10 +124,15 @@ function StepContact({
     <div className="flex flex-col lg:flex-row items-center gap-10 lg:gap-16 w-full">
       {/* Left side */}
       <div className="flex-1 w-full lg:max-w-[420px]">
-        <h1 className="font-['Inter',sans-serif] font-bold text-[28px] md:text-[36px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
-          Before we start, let's get to know you a little.
+        <h1 className="leading-[1.1] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+          <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(28px, 3.8vw, 44px)", letterSpacing: "-0.025em" }}>
+            See Your Home in 3D Before You Renovate.
+          </span>
+          <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(22px, 2.5vw, 34px)" }}>
+            Upload a photo, pick a style, get a free render.
+          </span>
         </h1>
-        <p className="font-['Inter',sans-serif] text-[13px] md:text-[14px] text-[#71717a] leading-[1.6] mb-8">
+        <p className="font-['DM_Sans',sans-serif] text-[13px] md:text-[14px] text-[#6b6860] leading-[1.6] mb-8">
           We'll use your details to send your free 3D render and connect you
           with matched renovation teams when you're ready.
         </p>
@@ -138,7 +143,7 @@ function StepContact({
             placeholder="Full Name"
             value={data.name}
             onChange={(e) => onChange("name", e.target.value)}
-            className="w-full border border-[#e4e4e7] rounded-[10px] px-5 py-4 font-['Inter',sans-serif] text-[14px] text-[#09090b] placeholder-[#09090b] outline-none focus:border-[#09090b] transition-colors bg-white"
+            className="w-full border border-[#d8d3c8] rounded-[10px] px-5 py-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#0f0f0d] outline-none focus:border-[#0f0f0d] transition-colors bg-[#fafaf8]"
           />
           <div>
             <input
@@ -153,14 +158,14 @@ function StepContact({
               }}
               onFocus={() => setTouched((t) => ({ ...t, whatsapp: false }))}
               onBlur={() => setTouched((t) => ({ ...t, whatsapp: true }))}
-              className={`w-full border rounded-[10px] px-5 py-4 font-['Inter',sans-serif] text-[14px] text-[#09090b] placeholder-[#09090b] outline-none transition-colors bg-white ${
+              className={`w-full border rounded-[10px] px-5 py-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#0f0f0d] outline-none transition-colors bg-[#fafaf8] ${
                 whatsappHasError
                   ? "border-red-400"
-                  : "border-[#e4e4e7] focus:border-[#09090b]"
+                  : "border-[#d8d3c8] focus:border-[#0f0f0d]"
               }`}
             />
             {whatsappHasError && (
-              <p className="mt-1.5 ml-1 font-['Inter',sans-serif] text-[12px] text-red-500">
+              <p className="mt-1.5 ml-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
                 Please enter a valid 8-digit number
               </p>
             )}
@@ -173,15 +178,15 @@ function StepContact({
               onChange={(e) => onChange("email", e.target.value)}
               onFocus={() => setTouched((t) => ({ ...t, email: false }))}
               onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-              className={`w-full border rounded-[10px] px-5 py-4 font-['Inter',sans-serif] text-[14px] text-[#09090b] placeholder-[#09090b] outline-none transition-colors bg-white ${
+              className={`w-full border rounded-[10px] px-5 py-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#0f0f0d] outline-none transition-colors bg-[#fafaf8] ${
                 emailHasError
                   ? "border-red-400"
-                  : "border-[#e4e4e7] focus:border-[#09090b]"
+                  : "border-[#d8d3c8] focus:border-[#0f0f0d]"
               }`}
             />
             
             {emailHasError && (
-              <p className="mt-1.5 ml-1 font-['Inter',sans-serif] text-[12px] text-red-500">
+              <p className="mt-1.5 ml-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
                 {!data.email.includes("@")
                   ? "Please include an '@' in the email address"
                   : !data.email.split("@")[1]?.includes(".")
@@ -215,7 +220,7 @@ function StepPropertyType({
     {
       label: "HDB",
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 21h18" />
           <path d="M5 21V7l7-4 7 4v14" />
           <path d="M9 21v-6h6v6" />
@@ -227,7 +232,7 @@ function StepPropertyType({
     {
       label: "Condo",
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="4" y="2" width="16" height="20" rx="2" />
           <path d="M9 22v-4h6v4" />
           <path d="M8 6h.01" />
@@ -245,7 +250,7 @@ function StepPropertyType({
     {
       label: "Landed",
       icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 21h18" />
           <path d="M5 21V10l7-7 7 7v11" />
           <path d="M9 21v-6h6v6" />
@@ -257,10 +262,10 @@ function StepPropertyType({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         What type of property are you renovating?
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         This helps us create a more accurate 3D render — every property has
         different layouts, rules, and renovation possibilities.
       </p>
@@ -270,13 +275,13 @@ function StepPropertyType({
           <button
             key={opt.label}
             onClick={() => onSelect(opt.label)}
-            className={`flex items-center justify-between px-6 py-5 rounded-[14px] border transition-all duration-200 bg-white ${
+            className={`flex items-center justify-between px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${
               selected === opt.label
-                ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {opt.label}
             </span>
             <span className="opacity-60">{opt.icon}</span>
@@ -304,10 +309,10 @@ function StepTimeline({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         When are you planning to start your renovation?
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         This helps us create a render that matches your timeline
       </p>
 
@@ -316,13 +321,13 @@ function StepTimeline({
           <button
             key={opt}
             onClick={() => onSelect(opt)}
-            className={`flex items-center px-6 py-5 rounded-[14px] border transition-all duration-200 bg-white text-left ${
+            className={`flex items-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               selected === opt
-                ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {opt}
             </span>
           </button>
@@ -351,10 +356,10 @@ function StepBudget({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         What's your estimated renovation budget?
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         This helps our AI create a more realistic render for your space.
       </p>
 
@@ -363,13 +368,13 @@ function StepBudget({
           <button
             key={opt}
             onClick={() => onSelect(opt)}
-            className={`flex items-center px-6 py-5 rounded-[14px] border transition-all duration-200 bg-white text-left ${
+            className={`flex items-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               selected === opt
-                ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {opt}
             </span>
           </button>
@@ -391,10 +396,10 @@ function StepDesignStyle({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         What design style do you want?
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         Pick the vibe that feels closest to what you want. This helps our AI
         create a render that actually matches your taste.
       </p>
@@ -407,15 +412,15 @@ function StepDesignStyle({
               key={style}
               onClick={() => onSelect(style)}
               layout
-              className={`flex flex-col rounded-[14px] border transition-colors duration-200 bg-white overflow-hidden text-left ${
+              className={`flex flex-col rounded-[12px] border transition-colors duration-200 bg-[#fafaf8] overflow-hidden text-left ${
                 isSelected
-                  ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-                  : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                  ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                  : "border-[#d8d3c8] hover:border-[#9a9790]"
               }`}
               transition={{ layout: { duration: 0.3, ease: "easeInOut" } }}
             >
-              <div className={`px-6 py-5 ${isSelected ? "bg-[#f4f4f5]" : ""}`}>
-                <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+              <div className={`px-6 py-5 ${isSelected ? "bg-[#e8e4db]" : ""}`}>
+                <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
                   {style}
                 </span>
               </div>
@@ -476,10 +481,10 @@ function StepUpload({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         Let's see your space.
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         Upload a photo of your room so our AI can create a 3D render that
         matches your actual space.
       </p>
@@ -500,12 +505,12 @@ function StepUpload({
           }}
           className={`rounded-[16px] border-2 border-dashed transition-colors duration-200 flex flex-col items-center justify-center min-h-[280px] mb-5 ${
             dragOver
-              ? "border-[#09090b] bg-[#fafafa]"
-              : "border-[#e4e4e7] bg-white"
+              ? "border-[#0f0f0d] bg-[#fafaf8]"
+              : "border-[#d8d3c8] bg-[#fafaf8]"
           }`}
         >
           {preview ? (
-            <div className="relative w-full h-[280px] rounded-[14px] overflow-hidden">
+            <div className="relative w-full h-[280px] rounded-[12px] overflow-hidden">
               <img
                 src={preview}
                 alt="Uploaded preview"
@@ -524,7 +529,7 @@ function StepUpload({
                   height="16"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#09090b"
+                  stroke="#0f0f0d"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -536,13 +541,13 @@ function StepUpload({
             </div>
           ) : (
             <>
-              <p className="font-['Inter',sans-serif] font-semibold text-[16px] text-[#09090b] mb-1">
+              <p className="font-['DM_Sans',sans-serif] font-semibold text-[16px] text-[#0f0f0d] mb-1">
                 No Image Selected
               </p>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#71717a] mb-0.5">
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] mb-0.5">
                 Upload floorplan here.
               </p>
-              <p className="font-['Inter',sans-serif] text-[12px] text-[#a1a1aa]">
+              <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790]">
                 JPG, PNG · Max 10MB
               </p>
             </>
@@ -562,7 +567,7 @@ function StepUpload({
 
         <button
           onClick={() => fileRef.current?.click()}
-          className="w-full bg-[#09090b] text-white font-['Inter',sans-serif] font-medium text-[15px] rounded-[14px] px-8 py-4 hover:bg-[#27272a] transition-colors"
+          className="w-full bg-[#0f0f0d] text-white font-['DM_Sans',sans-serif] font-medium text-[15px] rounded-[12px] px-8 py-4 hover:bg-[#0f0f0d] transition-colors"
         >
           + Upload image
         </button>
@@ -585,17 +590,17 @@ function StepRoomType({
 
   return (
     <div className="w-full max-w-[740px] mx-auto text-center">
-      <h1 className="font-['Inter',sans-serif] font-semibold text-[28px] md:text-[40px] text-[#09090b] tracking-[-1.5px] leading-[1.2] mb-4">
+      <h1 className="font-semibold text-[28px] md:text-[40px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         Which room should we render?
       </h1>
-      <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#71717a] leading-[1.6] mb-10 max-w-[520px] mx-auto">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[520px] mx-auto">
         Our AI will create a 3D visualization based on your space, budget, and
         style.
       </p>
 
       {/* Preview of uploaded image */}
       <div className="max-w-[560px] mx-auto mb-10">
-        <div className="w-full h-[220px] rounded-[16px] overflow-hidden bg-[#f4f4f5]">
+        <div className="w-full h-[220px] rounded-[16px] overflow-hidden bg-[#e8e4db]">
           {uploadPreview ? (
             <img
               src={uploadPreview}
@@ -604,7 +609,7 @@ function StepRoomType({
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <span className="font-['Inter',sans-serif] text-[13px] text-[#a1a1aa]">
+              <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790]">
                 Your uploaded image
               </span>
             </div>
@@ -618,13 +623,13 @@ function StepRoomType({
           <button
             key={room}
             onClick={() => onSelect(room)}
-            className={`flex items-center px-6 py-5 rounded-[14px] border transition-all duration-200 bg-white text-left ${
+            className={`flex items-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               selected === room
-                ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {room}
             </span>
           </button>
@@ -634,13 +639,13 @@ function StepRoomType({
       <div className="flex justify-center mt-4 max-w-[520px] mx-auto">
         <button
           onClick={() => onSelect(rooms[4])}
-          className={`flex items-center px-6 py-5 rounded-[14px] border transition-all duration-200 bg-white text-left w-[calc(50%-8px)] ${
+          className={`flex items-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left w-[calc(50%-8px)] ${
             selected === rooms[4]
-              ? "border-[#09090b] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
-              : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+              ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]"
+              : "border-[#d8d3c8] hover:border-[#9a9790]"
           }`}
         >
-          <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#09090b]">
+          <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
             {rooms[4]}
           </span>
         </button>
@@ -733,6 +738,13 @@ function StepThankYou({
         if (data.resultUrl) {
           setStatus("completed");
           setRenderResult(data.resultUrl);
+          // Send rendered image URL to Zapier
+          try {
+            fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
+              method: "POST",
+              body: JSON.stringify({ taskId, renderResultUrl: data.resultUrl, status: "completed" }),
+            });
+          } catch (_) {}
         } else if (data.status === "failed" || data.status === "FAILED") {
           setStatus("failed");
         }
@@ -780,11 +792,11 @@ function StepThankYou({
             {/* Blocks Shuffle Loader */}
             <div className="w-[48px] h-[48px]">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="48" height="48">
-                <rect x="10" y="10" width="35" height="35" rx="4" fill="#09090B">
+                <rect x="10" y="10" width="35" height="35" rx="4" fill="#0f0f0d">
                   <animate attributeName="x" values="10;55;55;10;10" dur="2s" repeatCount="indefinite" />
                   <animate attributeName="y" values="10;10;55;55;10" dur="2s" repeatCount="indefinite" />
                 </rect>
-                <rect x="55" y="10" width="35" height="35" rx="4" fill="#71717A">
+                <rect x="55" y="10" width="35" height="35" rx="4" fill="#6b6860">
                   <animate attributeName="x" values="55;55;10;10;55" dur="2s" repeatCount="indefinite" />
                   <animate attributeName="y" values="10;55;55;10;10" dur="2s" repeatCount="indefinite" />
                 </rect>
@@ -801,13 +813,13 @@ function StepThankYou({
 
             {/* Text */}
             <div className="text-center">
-              <p className="font-['Inter',sans-serif] font-semibold text-[20px] text-[#09090B] tracking-[-0.8px] leading-[1.2]">
+              <p className="font-semibold text-[20px] text-[#0f0f0d] tracking-[-0.8px] leading-[1.2]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
                 AI is generating your 3D render...
               </p>
-              <p className="font-['Inter',sans-serif] font-normal text-[16px] text-[#71717A] mt-3 leading-[1.5]">
+              <p className="font-['DM_Sans',sans-serif] font-normal text-[16px] text-[#6b6860] mt-3 leading-[1.5]">
                 This typically takes 1–3 minutes
               </p>
-              <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#ABABAB] mt-2 tabular-nums leading-[1.5]">
+              <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#9a9790] mt-2 tabular-nums leading-[1.5]">
                 Elapsed: {formatTime(elapsedSeconds)}
               </p>
             </div>
@@ -824,7 +836,7 @@ function StepThankYou({
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <div className="relative group">
-            <div className="w-full rounded-[17px] overflow-hidden shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)] border border-[#F3F4F6]">
+            <div className="w-full rounded-[17px] overflow-hidden shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)] border border-[#e8e4db]">
               <img
                 src={renderResult}
                 alt={`AI 3D render — ${designStyle} ${roomType}`}
@@ -832,7 +844,7 @@ function StepThankYou({
               />
             </div>
             <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md text-white px-4 py-1.5 rounded-[100px]">
-              <span className="font-['Inter',sans-serif] font-medium text-[12px] tracking-[-0.3px]">
+              <span className="font-['DM_Sans',sans-serif] font-medium text-[12px] tracking-[-0.3px]">
                 {designStyle} · {roomType}
               </span>
             </div>
@@ -843,9 +855,9 @@ function StepThankYou({
               href={renderResult}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center bg-[#F6F6F6] border border-white rounded-[100px] p-[6px]"
+              className="inline-flex items-center bg-[#e8e4db] border border-white rounded-[100px] p-[6px]"
             >
-              <span className="inline-flex items-center gap-2 bg-[#09090B] text-white font-['Inter',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 shadow-[0px_4px_4px_rgba(0,0,0,0.25)]">
+              <span className="inline-flex items-center gap-2 bg-[#0f0f0d] text-white font-['DM_Sans',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 shadow-[0px_4px_4px_rgba(0,0,0,0.25)]">
                 Download Render
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -857,7 +869,7 @@ function StepThankYou({
             {uploadPreview && (
               <button
                 onClick={() => setShowComparison(!showComparison)}
-                className="inline-flex items-center gap-2 border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 hover:bg-[#F6F6F6] transition-colors"
+                className="inline-flex items-center gap-2 border border-[#d8d3c8] bg-[#fafaf8] text-[#0f0f0d] font-['DM_Sans',sans-serif] font-medium text-[14px] tracking-[-0.7px] rounded-[100px] px-6 py-3 hover:bg-[#e8e4db] transition-colors"
               >
                 {showComparison ? "Hide" : "Compare"} Before & After
               </button>
@@ -875,18 +887,18 @@ function StepThankYou({
               >
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="font-['Inter',sans-serif] font-normal text-[12px] text-[#ABABAB] uppercase tracking-[1.5px] mb-2">
+                    <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9790] uppercase tracking-[1.5px] mb-2">
                       Before — Floorplan
                     </p>
-                    <div className="w-full rounded-[17px] overflow-hidden border border-[#F3F4F6]">
-                      <img src={uploadPreview} alt="Original floorplan" className="w-full h-[200px] object-contain bg-[#F9FAFB]" />
+                    <div className="w-full rounded-[17px] overflow-hidden border border-[#e8e4db]">
+                      <img src={uploadPreview} alt="Original floorplan" className="w-full h-[200px] object-contain bg-[#fafaf8]" />
                     </div>
                   </div>
                   <div>
-                    <p className="font-['Inter',sans-serif] font-normal text-[12px] text-[#ABABAB] uppercase tracking-[1.5px] mb-2">
+                    <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9790] uppercase tracking-[1.5px] mb-2">
                       After — 3D Render
                     </p>
-                    <div className="w-full rounded-[17px] overflow-hidden border border-[#F3F4F6]">
+                    <div className="w-full rounded-[17px] overflow-hidden border border-[#e8e4db]">
                       <img src={renderResult} alt="AI 3D render" className="w-full h-[200px] object-cover" />
                     </div>
                   </div>
@@ -904,7 +916,7 @@ function StepThankYou({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="w-full py-10 rounded-[17px] border border-[#F3F4F6] bg-[#F6F6F6] flex flex-col items-center justify-center gap-3">
+          <div className="w-full py-10 rounded-[17px] border border-[#e8e4db] bg-[#e8e4db] flex flex-col items-center justify-center gap-3">
             <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -912,10 +924,10 @@ function StepThankYou({
                 <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
             </div>
-            <p className="font-['Inter',sans-serif] font-semibold text-[16px] text-[#09090B] tracking-[-0.5px]">
+            <p className="font-['DM_Sans',sans-serif] font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.5px]">
               Something went wrong
             </p>
-            <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#71717A]">
+            <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#6b6860]">
               We'll still send your render via WhatsApp once it's ready.
             </p>
           </div>
@@ -929,9 +941,9 @@ function StepThankYou({
 function ProgressBar({ step }: { step: number }) {
   const progress = (step / (TOTAL_STEPS - 1)) * 100; // exclude thank you from progress
   return (
-    <div className="w-full h-[3px] bg-[#e4e4e7] rounded-full overflow-hidden">
+    <div className="w-full h-[3px] bg-[#d8d3c8] rounded-full overflow-hidden">
       <motion.div
-        className="h-full bg-[#09090b] rounded-full"
+        className="h-full bg-[#0f0f0d] rounded-full"
         initial={{ width: 0 }}
         animate={{ width: `${progress}%` }}
         transition={{ duration: 0.4, ease: "easeInOut" }}
@@ -1057,6 +1069,20 @@ export function RenderToolForm() {
       if (taskData.quoteRequestId) {
         setQuoteRequestId(taskData.quoteRequestId);
       }
+      // Send to Zapier webhook
+      try {
+        await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
+          method: "POST",
+          body: JSON.stringify({
+            imageUrl: uploadData.url,
+            designStyle, roomType, propertyType, timeline, budget,
+            contact: { name: contact.name, whatsapp: contact.whatsapp, email: contact.email },
+            taskId: taskData.taskId,
+          }),
+        });
+      } catch (zapErr) {
+        console.error("Zapier webhook error:", zapErr);
+      }
       setStep(8); // Go to thank you
     } catch (err) {
       console.error("Error submitting render request:", err);
@@ -1106,7 +1132,7 @@ export function RenderToolForm() {
   };
 
   return (
-    <div className="bg-white min-h-screen font-['Inter',sans-serif] flex flex-col overflow-x-hidden">
+    <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
       {/* Header with logo */}
       <header className="px-6 md:px-12 pt-8 md:pt-10 pb-4">
         <div className="max-w-[1293px] mx-auto">
@@ -1194,7 +1220,7 @@ export function RenderToolForm() {
               {step > 1 ? (
                 <button
                   onClick={handleBack}
-                  className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] bg-white border border-[#e4e4e7] rounded-[10px] px-8 py-3 hover:bg-[#f4f4f5] transition-colors shadow-[0px_1px_3px_rgba(0,0,0,0.06)]"
+                  className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-8 py-3 hover:bg-[#e8e4db] transition-colors shadow-[0px_1px_3px_rgba(0,0,0,0.06)]"
                 >
                   Back
                 </button>
@@ -1206,9 +1232,9 @@ export function RenderToolForm() {
               <button
                 onClick={step === 7 ? handleSubmit : handleNext}
                 disabled={!canGoNext() || (step === 7 && submitting)}
-                className={`font-['Inter',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
+                className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
                   canGoNext() && !(step === 7 && submitting)
-                    ? "bg-[#09090b] hover:bg-[#27272a] shadow-[0px_4px_12px_rgba(0,0,0,0.15)]"
+                    ? "bg-[#0f0f0d] hover:bg-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.15)]"
                     : "bg-[#d4d4d8] cursor-not-allowed"
                 }`}
               >

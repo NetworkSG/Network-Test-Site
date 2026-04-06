@@ -266,10 +266,10 @@ function StepProperty({
 
   return (
     <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         What's your property type?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         Different property types have different cost structures.
       </p>
 
@@ -278,22 +278,22 @@ function StepProperty({
           <button
             key={opt.label}
             onClick={() => onSelect(opt.label)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-white text-left ${
+            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               selected === opt.label
-                ? "border-[#09090b] shadow-[0_0_0_1px_#09090b]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
             <div>
-              <span className="font-['Inter'] font-medium text-[15px] text-[#09090b] block">
+              <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">
                 {opt.label}
               </span>
-              <span className="font-['Inter'] text-[13px] text-[#a1a1aa] block mt-0.5">
+              <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] block mt-0.5">
                 {opt.sub}
               </span>
             </div>
             {selected === opt.label && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#09090b] flex items-center justify-center shrink-0">
+              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -326,10 +326,10 @@ function StepUnit({
 
   return (
     <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         Which unit type?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         Choose the closest match to your home.
       </p>
 
@@ -338,17 +338,17 @@ function StepUnit({
           <button
             key={unit}
             onClick={() => onUnitChange(unit)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-white text-left ${
+            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               unitType === unit
-                ? "border-[#09090b] shadow-[0_0_0_1px_#09090b]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter'] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {unit}
             </span>
             {unitType === unit && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#09090b] flex items-center justify-center shrink-0">
+              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -359,19 +359,19 @@ function StepUnit({
       </div>
 
       {/* Resale toggle */}
-      <div className="flex items-center justify-between px-5 py-4 rounded-[12px] border border-[#e4e4e7] bg-[#fafafa]">
+      <div className="flex items-center justify-between px-5 py-4 rounded-[12px] border border-[#d8d3c8] bg-[#fafaf8]">
         <div>
-          <span className="font-['Inter'] font-medium text-[14px] text-[#09090b] block">
+          <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] block">
             Resale property
           </span>
-          <span className="font-['Inter'] text-[12px] text-[#a1a1aa] block mt-0.5">
+          <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] block mt-0.5">
             Resale homes typically cost more to renovate
           </span>
         </div>
         <button
           onClick={() => onResaleChange(!isResale)}
           className={`relative w-[44px] h-[24px] rounded-full transition-colors duration-200 shrink-0 ml-4 ${
-            isResale ? "bg-[#09090b]" : "bg-[#d4d4d8]"
+            isResale ? "bg-[#0f0f0d]" : "bg-[#d8d3c8]"
           }`}
         >
           <span
@@ -397,10 +397,10 @@ function StepRooms({
 }) {
   return (
     <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         Which rooms are you renovating?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         Select all that apply.
       </p>
 
@@ -446,18 +446,18 @@ function StepRooms({
             <button
               key={room}
               onClick={() => onToggle(room)}
-              className={`flex flex-col items-start p-4 rounded-[12px] border transition-all duration-200 bg-white text-left relative ${
+              className={`flex flex-col items-start p-4 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left relative ${
                 isSelected
-                  ? "border-[#09090b] shadow-[0_0_0_1px_#09090b]"
-                  : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                  ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
+                  : "border-[#d8d3c8] hover:border-[#9a9790]"
               }${room === "Others" ? " col-span-2" : ""}`}
             >
               {/* Checkbox top-right */}
               <div
                 className={`absolute top-3.5 right-3.5 w-[20px] h-[20px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${
                   isSelected
-                    ? "bg-[#09090b] border-[#09090b]"
-                    : "bg-white border-[#d4d4d8]"
+                    ? "bg-[#0f0f0d] border-[#0f0f0d]"
+                    : "bg-[#fafaf8] border-[#d8d3c8]"
                 }`}
               >
                 {isSelected && (
@@ -467,11 +467,11 @@ function StepRooms({
                 )}
               </div>
               {/* Icon */}
-              <div className={`w-[40px] h-[40px] rounded-[10px] flex items-center justify-center mb-3 transition-colors duration-200 ${isSelected ? "bg-[#09090b] text-white" : "bg-[#f4f4f5] text-[#71717a]"}`}>
+              <div className={`w-[40px] h-[40px] rounded-[10px] flex items-center justify-center mb-3 transition-colors duration-200 ${isSelected ? "bg-[#0f0f0d] text-white" : "bg-[#e8e4db] text-[#6b6860]"}`}>
                 {iconMap[room]}
               </div>
               {/* Label */}
-              <span className="font-['Inter'] font-medium text-[14px] text-[#09090b] leading-[1.3]">
+              <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] leading-[1.3]">
                 {room === "Others" ? "Others (Study, Balcony, etc.)" : room}
               </span>
             </button>
@@ -505,17 +505,17 @@ function StepFullHomeScope({ data, onChange }: { data: FullHomeScope; onChange: 
   function renderSection<T extends string>(title: string, subtitle: string, options: { level: T; sub: string }[], current: T, onSelect: (v: T) => void) {
     return (
       <div className="mb-10">
-        <h3 className="font-['Inter'] font-semibold text-[18px] text-[#09090b] tracking-[-0.4px] mb-1">{title}</h3>
-        <p className="font-['Inter'] text-[13px] text-[#a1a1aa] leading-[1.5] mb-4">{subtitle}</p>
+        <h3 className="font-['DM_Sans',sans-serif] font-semibold text-[18px] text-[#0f0f0d] tracking-[-0.4px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>{title}</h3>
+        <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">{subtitle}</p>
         <div className="flex flex-col gap-3">
           {options.map((opt) => (
-            <button key={opt.level} onClick={() => onSelect(opt.level)} className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-white text-left ${current === opt.level ? "border-[#09090b] shadow-[0_0_0_1px_#09090b]" : "border-[#e4e4e7] hover:border-[#a1a1aa]"}`}>
+            <button key={opt.level} onClick={() => onSelect(opt.level)} className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${current === opt.level ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
               <div>
-                <span className="font-['Inter'] font-medium text-[15px] text-[#09090b] block">{opt.level}</span>
-                <span className="font-['Inter'] text-[13px] text-[#a1a1aa] block mt-0.5">{opt.sub}</span>
+                <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">{opt.level}</span>
+                <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] block mt-0.5">{opt.sub}</span>
               </div>
               {current === opt.level && (
-                <div className="w-[22px] h-[22px] rounded-full bg-[#09090b] flex items-center justify-center shrink-0">
+                <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                 </div>
               )}
@@ -528,8 +528,8 @@ function StepFullHomeScope({ data, onChange }: { data: FullHomeScope; onChange: 
 
   return (
     <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">Full home renovation scope</h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-10">Since you're renovating every room, tell us about the overall scope.</p>
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Full home renovation scope</h1>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-10">Since you're renovating every room, tell us about the overall scope.</p>
       {renderSection("How big is the upgrade?", "Overall renovation intensity", scopes, data.scope, (v) => onChange({ scope: v }))}
       {renderSection("How much custom carpentry?", "Built-in furniture and cabinetry", carpentry, data.carpentry, (v) => onChange({ carpentry: v }))}
       {renderSection("Any major layout changes?", "Wall hacking, room reconfigurations", layout, data.layout, (v) => onChange({ layout: v }))}
@@ -553,10 +553,10 @@ function StepScope({
 
   return (
     <div className="w-full max-w-[580px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         How extensive is each room?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-10">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-10">
         Pick a scope level for each room. Your designer will refine the details later.
       </p>
 
@@ -570,7 +570,7 @@ function StepScope({
             <div key={room}>
               {/* Room header */}
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-['Inter'] font-semibold text-[18px] text-[#09090b] tracking-[-0.4px]">
+                <h3 className="font-['DM_Sans',sans-serif] font-semibold text-[18px] text-[#0f0f0d] tracking-[-0.4px]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
                   {room === "Others" ? "Others (Study, Balcony, etc.)" : room}
                 </h3>
                 {hasCount && (
@@ -579,10 +579,10 @@ function StepScope({
                       <button
                         key={n}
                         onClick={() => onUpdate(room, { count: n })}
-                        className={`w-[36px] h-[36px] rounded-[8px] font-['Inter'] font-medium text-[13px] transition-all duration-150 ${
+                        className={`w-[36px] h-[36px] rounded-[8px] font-['DM_Sans',sans-serif] font-medium text-[13px] transition-all duration-150 ${
                           scope.count === n
-                            ? "bg-[#09090b] text-white"
-                            : "bg-[#f4f4f5] text-[#71717a] hover:bg-[#e4e4e7]"
+                            ? "bg-[#0f0f0d] text-white"
+                            : "bg-[#e8e4db] text-[#6b6860] hover:bg-[#d8d3c8]"
                         }`}
                       >
                         {n}
@@ -601,15 +601,15 @@ function StepScope({
                     <button
                       key={level}
                       onClick={() => onUpdate(room, { level })}
-                      className={`text-left p-5 rounded-[14px] border transition-all duration-200 ${
+                      className={`text-left p-5 rounded-[12px] border transition-all duration-200 ${
                         active
-                          ? "border-[#09090b] bg-[#09090b]"
-                          : "border-[#e4e4e7] bg-white hover:border-[#a1a1aa]"
+                          ? "border-[#0f0f0d] bg-[#0f0f0d]"
+                          : "border-[#d8d3c8] bg-[#fafaf8] hover:border-[#9a9790]"
                       }`}
                     >
                       <p
-                        className={`font-['Inter'] font-semibold text-[15px] tracking-[-0.3px] mb-2.5 ${
-                          active ? "text-white" : "text-[#09090b]"
+                        className={`font-['DM_Sans',sans-serif] font-semibold text-[15px] tracking-[-0.3px] mb-2.5 ${
+                          active ? "text-white" : "text-[#0f0f0d]"
                         }`}
                       >
                         {level}
@@ -618,8 +618,8 @@ function StepScope({
                         {items.map((item, i) => (
                           <li
                             key={i}
-                            className={`font-['Inter'] text-[13px] leading-[1.5] ${
-                              active ? "text-white/60" : "text-[#a1a1aa]"
+                            className={`font-['DM_Sans',sans-serif] text-[13px] leading-[1.5] ${
+                              active ? "text-white/60" : "text-[#9a9790]"
                             }`}
                           >
                             {item}
@@ -632,7 +632,7 @@ function StepScope({
               </div>
 
               {roomIdx < rooms.length - 1 && (
-                <div className="h-px bg-[#f4f4f5] mt-10" />
+                <div className="h-px bg-[#e8e4db] mt-10" />
               )}
             </div>
           );
@@ -654,10 +654,10 @@ function StepTimeline({
 }) {
   return (
     <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         When do you plan to start?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         This helps us connect you with available designers.
       </p>
 
@@ -666,17 +666,17 @@ function StepTimeline({
           <button
             key={opt}
             onClick={() => onSelect(opt)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-white text-left ${
+            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
               selected === opt
-                ? "border-[#09090b] shadow-[0_0_0_1px_#09090b]"
-                : "border-[#e4e4e7] hover:border-[#a1a1aa]"
+                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
             }`}
           >
-            <span className="font-['Inter'] font-medium text-[15px] text-[#09090b]">
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
               {opt}
             </span>
             {selected === opt && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#09090b] flex items-center justify-center shrink-0">
+              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -712,10 +712,10 @@ function StepContact({
 
   return (
     <div className="w-full max-w-[420px] mx-auto">
-      <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
         Where should we send your cost guide?
       </h1>
-      <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8">
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         We'll also connect you with renovation specialists who match your
         project.
       </p>
@@ -723,7 +723,7 @@ function StepContact({
       <div className="flex flex-col gap-4">
         {/* Name */}
         <div>
-          <label className="font-['Inter'] font-medium text-[13px] text-[#09090b] mb-1.5 block">
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
             Full name
           </label>
           <input
@@ -731,13 +731,13 @@ function StepContact({
             placeholder="Your name"
             value={data.name}
             onChange={(e) => onChange("name", e.target.value)}
-            className="w-full border border-[#e4e4e7] rounded-[10px] h-[46px] px-4 font-['Inter'] text-[14px] text-[#09090b] placeholder-[#a1a1aa] outline-none focus:border-[#09090b] transition-colors bg-white"
+            className="w-full border border-[#d8d3c8] rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none focus:border-[#0f0f0d] transition-colors bg-[#fafaf8]"
           />
         </div>
 
         {/* WhatsApp */}
         <div>
-          <label className="font-['Inter'] font-medium text-[13px] text-[#09090b] mb-1.5 block">
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
             WhatsApp number
           </label>
           <input
@@ -752,12 +752,12 @@ function StepContact({
             }}
             onFocus={() => setTouched((t) => ({ ...t, whatsapp: false }))}
             onBlur={() => setTouched((t) => ({ ...t, whatsapp: true }))}
-            className={`w-full border rounded-[10px] h-[46px] px-4 font-['Inter'] text-[14px] text-[#09090b] placeholder-[#a1a1aa] outline-none transition-colors bg-white ${
-              whatsappErr ? "border-red-400" : "border-[#e4e4e7] focus:border-[#09090b]"
+            className={`w-full border rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
+              whatsappErr ? "border-red-400" : "border-[#d8d3c8] focus:border-[#0f0f0d]"
             }`}
           />
           {whatsappErr && (
-            <p className="mt-1 font-['Inter'] text-[12px] text-red-500">
+            <p className="mt-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
               Please enter a valid 8-digit number
             </p>
           )}
@@ -765,7 +765,7 @@ function StepContact({
 
         {/* Email */}
         <div>
-          <label className="font-['Inter'] font-medium text-[13px] text-[#09090b] mb-1.5 block">
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
             Email address
           </label>
           <input
@@ -775,19 +775,19 @@ function StepContact({
             onChange={(e) => onChange("email", e.target.value)}
             onFocus={() => setTouched((t) => ({ ...t, email: false }))}
             onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-            className={`w-full border rounded-[10px] h-[46px] px-4 font-['Inter'] text-[14px] text-[#09090b] placeholder-[#a1a1aa] outline-none transition-colors bg-white ${
-              emailErr ? "border-red-400" : "border-[#e4e4e7] focus:border-[#09090b]"
+            className={`w-full border rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
+              emailErr ? "border-red-400" : "border-[#d8d3c8] focus:border-[#0f0f0d]"
             }`}
           />
           {emailErr && (
-            <p className="mt-1 font-['Inter'] text-[12px] text-red-500">
+            <p className="mt-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
               Please enter a valid email address
             </p>
           )}
         </div>
       </div>
 
-      <p className="font-['Inter'] text-[12px] text-[#a1a1aa] leading-[1.6] mt-6">
+      <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] leading-[1.6] mt-6">
         By submitting, you agree to be contacted by our renovation partners.
       </p>
     </div>
@@ -841,56 +841,48 @@ function StepResults({ estimate, propertyType, unitType, isResale, selectedRooms
   return (
     <div className="w-full max-w-[520px] mx-auto py-10 md:py-16">
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }}>
-        <div className="w-[52px] h-[52px] rounded-full bg-[#FFCB2B] flex items-center justify-center mx-auto mb-6">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+        {/* Check icon */}
+        <div className="w-14 h-14 rounded-full bg-[#0f0f0d] flex items-center justify-center mx-auto mb-7">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
         </div>
-        <h1 className="font-['Inter'] font-semibold text-[26px] md:text-[32px] text-[#09090b] tracking-[-1.2px] leading-[1.15] mb-2 text-center">Your estimated range</h1>
-        <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6] mb-8 text-center">Based on your selections, here's what similar renovations in Singapore typically cost.</p>
-        <div className="bg-[#09090b] rounded-[17px] p-8 md:p-10 text-center mb-6">
-          <motion.p className="font-['Inter'] font-bold text-[36px] md:text-[48px] text-white tracking-[-2px] leading-[1.1]" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}>{displayRange}</motion.p>
-          <p className="font-['Inter'] text-[14px] text-[#B0B0B0] mt-3">Estimated renovation budget range</p>
-        </div>
-        {estimate.isFloor && (
-          <div className="bg-[#FFF6DC] border border-[#FFEAB1] rounded-[12px] p-5 mb-6">
-            <p className="font-['Inter'] text-[13px] text-[#09090b] leading-[1.6]">While it's possible to spend less, most homeowners in Singapore invest at least $30K+ for a renovation that lasts, improves resale value, and truly feels like home.</p>
-          </div>
-        )}
-        <div className="bg-[#fafafa] rounded-[14px] border border-[#f3f4f6] p-6 mb-8">
-          <h3 className="font-['Inter'] font-semibold text-[15px] text-[#09090b] tracking-[-0.3px] mb-4">Your renovation summary</h3>
+
+        <h1 className="text-center leading-[1.15] mb-3" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+          <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(28px, 3.5vw, 44px)", letterSpacing: "-0.025em" }}>
+            Thank You for Using Our Cost Guide.
+          </span>
+          <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(22px, 2.5vw, 32px)" }}>
+            Our team will reach out to you shortly.
+          </span>
+        </h1>
+
+        <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#6b6860] leading-[1.75] mb-10 text-center max-w-[420px] mx-auto">
+          We've received your renovation details. A member of our team will contact you via WhatsApp to share your personalized cost breakdown and help you plan your next steps.
+        </p>
+
+        {/* What's next card */}
+        <div className="bg-[#fafaf8] rounded-[12px] border border-[#d8d3c8] p-7 mb-10">
+          <p className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] mb-4">What happens next</p>
           <div className="space-y-3">
-            <div className="flex justify-between items-start"><span className="font-['Inter'] text-[13px] text-[#a1a1aa]">Property</span><span className="font-['Inter'] font-medium text-[13px] text-[#09090b] text-right max-w-[280px]">{propertyType} — {unitType}{isResale ? " (Resale)" : ""}</span></div>
-            <div className="flex justify-between items-start"><span className="font-['Inter'] text-[13px] text-[#a1a1aa]">Rooms</span><span className="font-['Inter'] font-medium text-[13px] text-[#09090b] text-right max-w-[280px]">{isFullHomePath ? "Full home" : selectedRooms.join(", ")}</span></div>
+            <div className="flex items-start gap-3">
+              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Our team will reach out within 1 business day</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">You'll receive your personalized cost breakdown via WhatsApp</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Get matched to verified designers who fit your budget</p>
+            </div>
           </div>
         </div>
 
-        {/* Download PDF Report */}
-        <div className="mb-6">
-          <button
-            onClick={pdfUrl ? () => window.open(pdfUrl, "_blank") : handleDownloadPdf}
-            disabled={pdfLoading}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-[#e5e7eb] rounded-[14px] px-6 py-4 hover:bg-[#fafafa] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {pdfLoading ? (
-              <>
-                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="#09090b" strokeWidth="3" /><path className="opacity-75" fill="#09090b" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                <span className="font-['Inter'] font-medium text-[14px] text-[#09090b] tracking-[-0.3px]">Generating your report...</span>
-              </>
-            ) : (
-              <>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                <span className="font-['Inter'] font-medium text-[14px] text-[#09090b] tracking-[-0.3px]">{pdfUrl ? "Open PDF Report" : "Download Cost Breakdown (PDF)"}</span>
-              </>
-            )}
-          </button>
-          {pdfError && (
-            <p className="font-['Inter'] text-[12px] text-red-500 text-center mt-2">{pdfError}</p>
-          )}
-        </div>
-
-        <div className="text-center space-y-4">
-          <p className="font-['Inter'] text-[14px] text-[#71717a] leading-[1.6]">Your personalized cost guide is on its way to your email and WhatsApp. A renovation specialist will also reach out to help you compare quotes.</p>
-          <button onClick={() => navigate("/")} className="inline-flex items-center gap-2 bg-[#f6f6f6] border border-white rounded-[100px] p-[5px]">
-            <span className="inline-flex items-center gap-2 bg-[#09090b] text-white rounded-[100px] px-7 py-3.5 font-['Inter'] font-medium text-[15px] tracking-[-0.7px] shadow-[0_4px_4px_rgba(0,0,0,0.25)]">Back to home <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></span>
+        <div className="text-center">
+          <button onClick={() => navigate("/")}
+            className="h-[52px] px-8 text-[14px] font-medium hover:opacity-85 active:scale-[0.98] cursor-pointer"
+            style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>
+            Back to home
           </button>
         </div>
       </motion.div>
@@ -904,9 +896,9 @@ function StepResults({ estimate, propertyType, unitType, isResale, selectedRooms
 function ProgressBar({ step, total }: { step: number; total: number }) {
   const pct = (step / total) * 100;
   return (
-    <div className="w-full h-[3px] bg-[#e4e4e7] rounded-full overflow-hidden">
+    <div className="w-full h-[3px] bg-[#d8d3c8] rounded-full overflow-hidden">
       <motion.div
-        className="h-full bg-[#09090b] rounded-full"
+        className="h-full bg-[#0f0f0d] rounded-full"
         initial={{ width: 0 }}
         animate={{ width: `${pct}%` }}
         transition={{ duration: 0.35, ease: "easeInOut" }}
@@ -1015,6 +1007,33 @@ export function CostGuide() {
         if (data.qrId) setQuoteRequestId(data.qrId);
       }
       setStep(7);
+
+      // Generate PDF and send to Zapier with pdfUrl in background
+      (async () => {
+        try {
+          const pdfRes = await fetch(`${API_BASE}/cost-guide-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+            body: JSON.stringify({
+              propertyType, isResale, unitType, selectedRooms, timeline,
+              roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null,
+              estimate: est, templateId: CRAFTMYPDF_TEMPLATE_ID,
+              quoteRequestId: data.qrId || null,
+            }),
+          });
+          const pdfData = await pdfRes.json();
+          const pdfUrl = pdfData.pdfUrl || null;
+          console.log("PDF generated:", pdfUrl);
+
+          // Send to Zapier with PDF URL included
+          await fetch("https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/", {
+            method: "POST",
+            body: JSON.stringify({ propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact, estimate: est, pdfUrl }),
+          });
+        } catch (bgErr) {
+          console.error("Background PDF/Zapier error:", bgErr);
+        }
+      })();
     } catch (err) {
       console.error("Error submitting cost guide:", err);
       setStep(7);
@@ -1026,7 +1045,7 @@ export function CostGuide() {
   // Landing page (step 0)
   if (step === 0) {
     return (
-      <div className="bg-white min-h-screen font-['Inter',sans-serif] flex flex-col overflow-x-hidden">
+      <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
         {/* Header */}
         <header className="px-6 md:px-12 pt-8 md:pt-10 pb-4">
           <div className="max-w-[1293px] mx-auto">
@@ -1055,12 +1074,16 @@ export function CostGuide() {
               <div className="flex-1 max-w-[540px]">
                 
 
-                <h1 className="font-['Inter'] font-semibold text-[40px] md:text-[56px] text-[#09090b] tracking-[-2.4px] leading-[1.05] mb-4">
-                  Renovation{" "}
-                  <span className="font-medium text-[#71717a]">Cost Guide</span>
+                <h1 className="leading-[1.1] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                  <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(32px, 3.8vw, 52px)", letterSpacing: "-0.025em" }}>
+                    Know Your Renovation Cost Before You Commit.
+                  </span>
+                  <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(24px, 2.8vw, 38px)" }}>
+                    Personalized estimates in under 2 minutes.
+                  </span>
                 </h1>
 
-                <p className="font-['Inter'] text-[16px] md:text-[18px] text-[#71717a] leading-[1.6] mb-8 max-w-[440px]">
+                <p className="font-['DM_Sans',sans-serif] text-[16px] md:text-[18px] text-[#6b6860] leading-[1.6] mb-8 max-w-[440px]">
                   Get a personalized renovation cost estimate based on your
                   property type, rooms, and scope of work. Takes under 2 minutes.
                 </p>
@@ -1087,7 +1110,7 @@ export function CostGuide() {
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       </div>
-                      <span className="font-['Inter'] text-[15px] text-[#09090b] leading-[1.5]">
+                      <span className="font-['DM_Sans',sans-serif] text-[15px] text-[#0f0f0d] leading-[1.5]">
                         {item}
                       </span>
                     </div>
@@ -1098,9 +1121,9 @@ export function CostGuide() {
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => setStep(1)}
-                    className="inline-flex items-center gap-2 bg-[#f6f6f6] border border-white rounded-[100px] p-[5px] pl-[5px]"
+                    className="inline-flex items-center gap-2 bg-[#e8e4db] border border-white rounded-[100px] p-[5px] pl-[5px]"
                   >
-                    <span className="inline-flex items-center gap-2 bg-[#09090b] text-white rounded-[100px] px-7 py-3.5 font-['Inter'] font-medium text-[15px] tracking-[-0.7px] shadow-[0_4px_4px_rgba(0,0,0,0.25)]">
+                    <span className="inline-flex items-center gap-2 bg-[#0f0f0d] text-white rounded-[100px] px-7 py-3.5 font-['DM_Sans',sans-serif] font-medium text-[15px] tracking-[-0.7px] shadow-[0_4px_4px_rgba(0,0,0,0.25)]">
                       Get your estimate
                       <svg
                         width="16"
@@ -1117,7 +1140,7 @@ export function CostGuide() {
                       </svg>
                     </span>
                   </button>
-                  <span className="font-['Inter'] text-[13px] text-[#a1a1aa]">
+                  <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790]">
                     Takes ~2 min
                   </span>
                 </div>
@@ -1125,21 +1148,13 @@ export function CostGuide() {
 
               {/* Right — image */}
               <div className="flex-1 max-w-[560px] w-full">
-                <div className="relative rounded-[17px] overflow-hidden shadow-[0_25px_35.9px_rgba(0,0,0,0.07)]">
+                <div className="relative rounded-[12px] overflow-hidden shadow-[0_25px_35.9px_rgba(0,0,0,0.07)]">
                   <ImageWithFallback
                     src={HERO_IMAGE}
                     alt="Modern renovated interior"
                     className="w-full h-[340px] md:h-[460px] object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-                  {/* Floating badge */}
-                  <div className="absolute bottom-5 left-5 right-5">
-                    <div className="inline-flex items-center gap-2 bg-[#FFF6DC] border border-[#FFEAB1] rounded-[100px] px-4 py-2.5 shadow-[0_8px_33.4px_rgba(0,0,0,0.18)]">
-                      <span className="font-['Inter'] font-medium text-[14px] text-[#09090b] tracking-[-0.5px]">
-                        <strong>3,214</strong> homeowners used this guide
-                      </span>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1153,7 +1168,7 @@ export function CostGuide() {
   }
 
   return (
-    <div className="bg-white min-h-screen font-['Inter',sans-serif] flex flex-col overflow-x-hidden">
+    <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
       {/* ── Header ── */}
       <header className="px-6 md:px-12 pt-8 md:pt-10 pb-4">
         <div className="max-w-[1293px] mx-auto">
@@ -1243,30 +1258,30 @@ export function CostGuide() {
               {step > 1 ? (
                 <button
                   onClick={handleBack}
-                  className="font-['Inter'] font-medium text-[14px] text-[#09090b] bg-white border border-[#e4e4e7] rounded-[10px] px-8 py-3 hover:bg-[#f4f4f5] transition-colors"
+                  className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-8 py-3 hover:bg-[#e8e4db] transition-colors"
                 >
                   Back
                 </button>
               ) : (
                 <button
                   onClick={() => setStep(0)}
-                  className="font-['Inter'] font-medium text-[14px] text-[#09090b] bg-white border border-[#e4e4e7] rounded-[10px] px-8 py-3 hover:bg-[#f4f4f5] transition-colors"
+                  className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-8 py-3 hover:bg-[#e8e4db] transition-colors"
                 >
                   Back
                 </button>
               )}
 
-              <p className="font-['Inter'] text-[13px] text-[#a1a1aa] tracking-[0.5px] uppercase">
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] tracking-[0.5px] uppercase">
                 {step === 6 ? "Last step" : `Step ${step} of 6`}
               </p>
 
               <button
                 onClick={step === 6 ? handleSubmit : handleNext}
                 disabled={!canNext() || (step === 6 && submitting)}
-                className={`font-['Inter'] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
+                className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
                   canNext() && !(step === 6 && submitting)
-                    ? "bg-[#09090b] hover:bg-[#27272a]"
-                    : "bg-[#d4d4d8] cursor-not-allowed"
+                    ? "bg-[#0f0f0d] hover:bg-[#0f0f0d]"
+                    : "bg-[#d8d3c8] cursor-not-allowed"
                 }`}
               >
                 {step === 6

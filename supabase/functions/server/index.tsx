@@ -3011,10 +3011,10 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
         if (uploadErr) {
           console.log("Storage upload error for PDF:", uploadErr);
         } else {
-          // Create a signed URL (valid for 30 days)
+          // Create a signed URL (valid for 10 days)
           const { data: signedData, error: signErr } = await supabaseStorage.storage
             .from(pdfBucketName)
-            .createSignedUrl(filePath, 30 * 24 * 3600);
+            .createSignedUrl(filePath, 10 * 24 * 3600);
 
           if (signErr || !signedData?.signedUrl) {
             console.log("Signed URL error for PDF:", signErr);
@@ -3066,6 +3066,132 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
   } catch (err) {
     console.log("Error in cost-guide-pdf generation:", err);
     return c.json({ error: "Failed to generate PDF: " + err }, 500);
+  }
+});
+
+// =============================================
+// COST GUIDE — SEND EMAIL WITH PDF VIA RESEND
+// =============================================
+app.post("/make-server-4808de5e/cost-guide-email", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests. Please try again later.", retryAfterMs: rl.retryAfterMs }, 429);
+    }
+
+    const body = await c.req.json();
+    const { email, name, pdfUrl } = body;
+
+    if (!email || !isValidEmail(email)) {
+      return c.json({ error: "Valid email is required" }, 400);
+    }
+
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendKey) {
+      console.log("RESEND_API_KEY not configured");
+      return c.json({ error: "Email service not configured" }, 500);
+    }
+
+    const cleanName = sanitizeString(name || "Homeowner", 100);
+    const downloadUrl = pdfUrl || "#";
+
+    // Branded HTML email matching homepage design system
+    const htmlEmail = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background-color:#f0ede6;font-family:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0ede6;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background-color:#fafaf8;border-radius:12px;border:1px solid #d8d3c8;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px 24px;border-bottom:1px solid #d8d3c8;">
+              <p style="margin:0;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0f0f0d;">NETWORK</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h1 style="margin:0 0 8px;font-family:'EB Garamond',Georgia,serif;font-size:28px;font-weight:400;color:#0f0f0d;line-height:1.2;">Your Cost Guide is Ready.</h1>
+              <p style="margin:0 0 24px;font-family:'EB Garamond',Georgia,serif;font-size:20px;font-weight:400;font-style:italic;color:#9a9790;line-height:1.3;">Download your personalized renovation estimate.</p>
+
+              <p style="margin:0 0 8px;font-family:'DM Sans',sans-serif;font-size:15px;color:#6b6860;line-height:1.75;">Hello ${cleanName},</p>
+              <p style="margin:0 0 24px;font-family:'DM Sans',sans-serif;font-size:15px;color:#6b6860;line-height:1.75;">We've put together a personalized renovation cost breakdown based on your selections. Download it below to see detailed estimates for each room.</p>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:0 auto 32px;">
+                <tr>
+                  <td align="center" style="background-color:#0f0f0d;border-radius:12px;">
+                    <a href="${downloadUrl}" target="_blank" style="display:inline-block;padding:16px 32px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#fafaf8;text-decoration:none;">Download Your Cost Breakdown</a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- What's next -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0ede6;border-radius:10px;border:1px solid #d8d3c8;">
+                <tr>
+                  <td style="padding:24px;">
+                    <p style="margin:0 0 12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:#0f0f0d;">What happens next</p>
+                    <p style="margin:0 0 8px;font-family:'DM Sans',sans-serif;font-size:13px;color:#6b6860;line-height:1.6;">✓ Review your room-by-room cost estimates</p>
+                    <p style="margin:0 0 8px;font-family:'DM Sans',sans-serif;font-size:13px;color:#6b6860;line-height:1.6;">✓ A renovation specialist will reach out to help</p>
+                    <p style="margin:0;font-family:'DM Sans',sans-serif;font-size:13px;color:#6b6860;line-height:1.6;">✓ Get matched to verified designers who fit your budget</p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-family:'DM Sans',sans-serif;font-size:14px;color:#6b6860;line-height:1.75;">Cheers to your renovation journey,<br><strong style="color:#0f0f0d;">Network Team</strong></p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;border-top:1px solid #d8d3c8;">
+              <p style="margin:0;font-family:'DM Sans',sans-serif;font-size:11px;color:#9a9790;line-height:1.6;">Singapore's trusted platform for homeowner-designer matching.<br>© 2026 Network. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    // Send via Resend
+    const resendRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${resendKey}`,
+      },
+      body: JSON.stringify({
+        from: "Network <onboarding@resend.dev>",
+        to: [email],
+        subject: "Your Renovation Cost Guide is Ready",
+        html: htmlEmail,
+      }),
+    });
+
+    const resendResult = await resendRes.json();
+    console.log("Resend response:", JSON.stringify(resendResult));
+
+    if (!resendRes.ok) {
+      console.log("Resend API error:", JSON.stringify(resendResult));
+      return c.json({ error: "Failed to send email: " + (resendResult.message || "Unknown error") }, 500);
+    }
+
+    return c.json({ success: true, emailId: resendResult.id });
+  } catch (err) {
+    console.log("Error in cost-guide-email:", err);
+    return c.json({ error: "Failed to send email: " + err }, 500);
   }
 });
 

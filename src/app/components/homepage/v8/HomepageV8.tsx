@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { ReactLenis } from "lenis/react";
-import { useInView } from "motion/react";
+import { useInView, motion, AnimatePresence } from "motion/react";
 import { C, sans, Divider } from "./primitives";
 import { NAVBAR, FOOTER } from "../content";
 import type { FormState, LeadFormData } from "../types";
@@ -30,6 +30,7 @@ export function HomepageV8() {
   const [formState, setFormState] = useState<FormState>("idle");
   const [form, setForm] = useState<LeadFormData>({ name: "", phone: "", email: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const heroRef = useRef<HTMLElement>(null);
   const heroInView = useInView(heroRef, { margin: "-100px" });
 
@@ -56,18 +57,57 @@ export function HomepageV8() {
               maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
               WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
             }} />
+            {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-8">
-              <a href="/explore" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Explore</a>
-              <a href="/designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Designers</a>
+              <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>3D Render</a>
               <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Floor Layout Planner</a>
               <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
             </div>
+            {/* Desktop CTA */}
             <button onClick={scrollToForm}
-              className="text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
+              className="hidden md:block text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
               style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
             >{NAVBAR.cta.label}</button>
+            {/* Mobile hamburger */}
+            <button
+              className="md:hidden w-10 h-10 flex items-center justify-center cursor-pointer"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.5" strokeLinecap="round">
+                {mobileMenuOpen ? (
+                  <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+                ) : (
+                  <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>
+                )}
+              </svg>
+            </button>
           </div>
           <div className="h-[1px]" style={{ background: C.creamBorder }} />
+          {/* Mobile menu dropdown */}
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="md:hidden overflow-hidden"
+                style={{ background: C.cream, borderBottom: `1px solid ${C.creamBorder}` }}
+              >
+                <div className="px-6 py-4 flex flex-col gap-1">
+                  <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>3D Render</a>
+                  <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Floor Layout Planner</a>
+                  <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); scrollToForm(); }}
+                    className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
+                    style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
+                  >Get matched</button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </nav>
 
         {/* ═══ SECTIONS ═══ */}
@@ -77,6 +117,8 @@ export function HomepageV8() {
           isSubmitting={isSubmitting} handleSubmit={handleSubmit}
           heroRef={heroRef}
         />
+        {/* Hide all sections below hero on mobile when qualifying/complete */}
+        <div className={formState !== "idle" ? "hidden md:block" : ""}>
         <SocialProof1 scrollToForm={scrollToForm} />
         <SocialProof3 />
         <Divider />
@@ -115,6 +157,7 @@ export function HomepageV8() {
             </div>
           </div>
         </footer>
+        </div>
 
         {/* ═══ MOBILE STICKY CTA ═══ */}
         {!heroInView && formState === "idle" && (

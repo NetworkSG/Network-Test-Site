@@ -119,7 +119,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
   const avatars = TESTIMONIALS.items.slice(0, 3).map(t => t.avatar);
 
   return (
-    <section ref={heroRef} id="lead-form" className="relative pt-[64px] min-h-screen flex flex-col">
+    <section ref={heroRef} id="lead-form" className="relative pt-[100px] md:pt-[100px] min-h-screen flex flex-col">
       {/* Ghost photo grid background */}
       <div className="absolute inset-0 pt-[64px] overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-0 w-[60%] h-full grid grid-cols-2 gap-3 p-6 opacity-[0.06]">
@@ -146,7 +146,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
 
                     <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
                       className="leading-[1.1] mb-8">
-                      <span className="block font-normal" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(44px, 5.5vw, 72px)", letterSpacing: "-0.025em" }}>
+                      <span className="block font-normal" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.8vw, 52px)", letterSpacing: "-0.025em" }}>
                         {HERO.headline}
                       </span>
                       <span className="font-normal italic" style={{ fontFamily: serif, color: C.grayLight, fontSize: "clamp(32px, 3.5vw, 52px)" }}>
@@ -161,7 +161,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
 
                   {/* Right — Form card */}
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-                    <div className="p-8 md:p-10" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px", borderTop: `2px solid ${C.black}` }}>
+                    <div className="p-8 md:p-10" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px", borderTop: "none" }}>
                       <h2 className="text-[22px] md:text-[28px] font-normal leading-[1.2] mb-2" style={{ fontFamily: serif, color: C.black }}>
                         {HERO.formTitle}
                       </h2>
@@ -205,7 +205,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                             <span className="inline-flex items-center justify-center h-[48px] px-3.5 text-[14px] font-normal shrink-0"
                               style={{ background: C.creamDark, borderTop: `1px solid ${C.creamBorder}`, borderBottom: `1px solid ${C.creamBorder}`, borderLeft: `1px solid ${C.creamBorder}`, borderRadius: "10px 0 0 10px", color: C.grayLight, fontFamily: sans }}>+65</span>
                             <div className="relative flex-1">
-                              <input type="tel" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                              <input type="tel" required maxLength={8} value={form.phone} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 8); setForm({ ...form, phone: v }); }}
                                 onBlur={() => setTouched(t => ({ ...t, phone: true }))}
                                 placeholder="9123 4567" autoComplete="tel"
                                 className="w-full h-[48px] px-4 pr-10 text-[14px] font-normal focus-visible:outline-none transition-all"
