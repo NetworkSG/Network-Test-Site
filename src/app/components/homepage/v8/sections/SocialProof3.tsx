@@ -9,7 +9,6 @@ const selectedImages = [
   { src: "/social-proof-selected/img-000.jpg", caption: "Homeowner impressed by designer's professionalism" },
   { src: "/social-proof-selected/img-009.jpg", caption: "Homeowner happy with designer match quality" },
   { src: "/social-proof-selected/img-010.jpg", caption: "Positive feedback on renovation experience" },
-  { src: "/social-proof-selected/img-013.jpg", caption: "Homeowner confirms engaging a matched firm" },
   { src: "/social-proof-selected/img-018.jpg", caption: "Great experience with matched designer" },
   { src: "/social-proof-selected/img-029.jpg", caption: "Designer follow-up and project update" },
   { src: "/social-proof-selected/img-033.jpg", caption: "Successful consultation with matched firm" },
@@ -110,13 +109,6 @@ export function SocialProof3() {
 
         {hasMore && (
           <>
-            {expanded && (
-              <FadeIn delay={0.05}>
-                <p className="text-center text-[20px] md:text-[24px] font-medium mt-10 mb-4" style={{ color: C.black, fontFamily: "'EB Garamond', Georgia, serif", letterSpacing: "-0.5px" }}>
-                  +573 more verified conversations
-                </p>
-              </FadeIn>
-            )}
             <FadeIn delay={0.15}>
               <div className="flex flex-col items-center gap-3 mt-4">
                 <button

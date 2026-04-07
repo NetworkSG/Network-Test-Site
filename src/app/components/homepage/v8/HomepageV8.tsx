@@ -19,6 +19,7 @@ import { SocialProof3 } from "./sections/SocialProof3";
 import { FAQ } from "./sections/FAQ";
 import { FinalRecap } from "./sections/FinalRecap";
 import { FreeTools } from "./sections/FreeTools";
+import { GoogleReviews } from "./sections/GoogleReviews";
 
 /**
  * Homepage — Network SOP Design
@@ -124,6 +125,7 @@ export function HomepageV8() {
         <div className={formState !== "idle" ? "hidden md:block" : ""}>
         <SocialProof1 scrollToForm={scrollToForm} />
         <SocialProof3 />
+        <GoogleReviews />
         <Divider />
         <PainPoint scrollToForm={scrollToForm} />
         <ValueProps scrollToForm={scrollToForm} />
