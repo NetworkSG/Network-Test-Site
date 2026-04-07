@@ -11,7 +11,6 @@ const selectedImages = [
   { src: "/social-proof-selected/img-010.jpg", caption: "Positive feedback on renovation experience" },
   { src: "/social-proof-selected/img-013.jpg", caption: "Homeowner confirms engaging a matched firm" },
   { src: "/social-proof-selected/img-018.jpg", caption: "Great experience with matched designer" },
-  { src: "/social-proof-selected/img-019.jpg", caption: "Homeowner satisfied with renovation progress" },
   { src: "/social-proof-selected/img-029.jpg", caption: "Designer follow-up and project update" },
   { src: "/social-proof-selected/img-033.jpg", caption: "Successful consultation with matched firm" },
   { src: "/social-proof-selected/img-056.jpg", caption: "Homeowner recommends Network to friends" },
@@ -74,7 +73,7 @@ export function SocialProof3() {
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-4">
           <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            What Homeowners Are Saying About Network
+            What Homeowners Are Saying <span style={{ color: C.gray }}>About Network</span>
           </h2>
         </FadeIn>
         <FadeIn delay={0.08} className="text-center mb-16">
@@ -83,9 +82,9 @@ export function SocialProof3() {
           </p>
         </FadeIn>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="flex flex-wrap justify-center gap-3">
           {visibleImages.map((item, i) => (
-            <FadeIn key={item.src} delay={i * 0.03}>
+            <FadeIn key={item.src} delay={i * 0.03} className="w-[calc(50%-6px)] sm:w-[calc(50%-6px)] lg:w-[calc(25%-9px)]">
               <div
                 className="overflow-hidden cursor-pointer group"
                 style={{ borderRadius: "8px", border: `1px solid ${C.creamBorder}`, background: C.white }}
@@ -110,27 +109,36 @@ export function SocialProof3() {
         </div>
 
         {hasMore && (
-          <FadeIn delay={0.15}>
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-2 px-6 py-3 text-[14px] font-medium cursor-pointer hover:opacity-70 transition-all duration-200"
-                style={{
-                  color: C.black,
-                  background: C.white,
-                  border: `1px solid ${C.creamBorder}`,
-                  borderRadius: 100,
-                  fontFamily: sans,
-                }}
-              >
-                {expanded ? (
-                  <>Show less <ChevronUp size={16} /></>
-                ) : (
-                  <>View {selectedImages.length - initialCount} more <ChevronDown size={16} /></>
-                )}
-              </button>
-            </div>
-          </FadeIn>
+          <>
+            {expanded && (
+              <FadeIn delay={0.05}>
+                <p className="text-center text-[20px] md:text-[24px] font-medium mt-10 mb-4" style={{ color: C.black, fontFamily: "'EB Garamond', Georgia, serif", letterSpacing: "-0.5px" }}>
+                  +573 more verified conversations
+                </p>
+              </FadeIn>
+            )}
+            <FadeIn delay={0.15}>
+              <div className="flex flex-col items-center gap-3 mt-4">
+                <button
+                  onClick={() => setExpanded(!expanded)}
+                  className="flex items-center gap-2 px-6 py-3 text-[14px] font-medium cursor-pointer hover:opacity-70 transition-all duration-200"
+                  style={{
+                    color: C.black,
+                    background: C.white,
+                    border: `1px solid ${C.creamBorder}`,
+                    borderRadius: 100,
+                    fontFamily: sans,
+                  }}
+                >
+                  {expanded ? (
+                    <>Show less <ChevronUp size={16} /></>
+                  ) : (
+                    <>View More <ChevronDown size={16} /></>
+                  )}
+                </button>
+              </div>
+            </FadeIn>
+          </>
         )}
       </div>
 

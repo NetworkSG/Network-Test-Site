@@ -25,7 +25,7 @@ export function HowItWorks({ scrollToForm }: { scrollToForm: () => void }) {
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-14">
           <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            {HOW_IT_WORKS_V2.headline}
+            From first click <span style={{ color: C.gray }}>to designer shortlist in 3 steps</span>
           </h2>
         </FadeIn>
 

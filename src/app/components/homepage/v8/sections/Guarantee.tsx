@@ -39,7 +39,7 @@ export function Guarantee({ scrollToForm }: { scrollToForm: () => void }) {
 
         <FadeIn delay={0.05} className="text-center mb-12">
           <h2 className="font-normal leading-[1.15]" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            {GUARANTEE.headline}
+            Nothing to lose. <span style={{ color: C.gray }}>Everything to gain.</span>
           </h2>
         </FadeIn>
 

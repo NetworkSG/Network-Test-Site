@@ -17,7 +17,7 @@ export function FinalRecap({ scrollToForm }: { scrollToForm: () => void }) {
           <div className="px-8 py-16 md:px-16 md:py-20 text-center" style={{ background: C.footerDark, borderRadius: "12px" }}>
             <TagLabel><span style={{ color: "rgba(255,255,255,0.4)" }}>Get started</span></TagLabel>
             <h2 className="font-normal leading-[1.15] mt-6 mb-5" style={{ fontFamily: serif, color: "#ffffff", fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-              {FINAL_RECAP.headline}
+              Ready to find <span style={{ color: "rgba(255,255,255,0.5)" }}>a designer you can trust?</span>
             </h2>
             <p className="text-[15px] font-normal leading-[1.75] max-w-[480px] mx-auto mb-10" style={{ color: "rgba(255,255,255,0.55)", fontFamily: sans }}>
               {FINAL_RECAP.subheadline}

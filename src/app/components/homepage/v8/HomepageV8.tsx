@@ -18,6 +18,7 @@ import { Guarantee } from "./sections/Guarantee";
 import { SocialProof3 } from "./sections/SocialProof3";
 import { FAQ } from "./sections/FAQ";
 import { FinalRecap } from "./sections/FinalRecap";
+import { FreeTools } from "./sections/FreeTools";
 
 /**
  * Homepage — Network SOP Design
@@ -128,6 +129,8 @@ export function HomepageV8() {
         <ValueProps scrollToForm={scrollToForm} />
         <Divider />
         <Differentiators scrollToForm={scrollToForm} />
+        <Divider />
+        <FreeTools />
         <Divider />
         <HowItWorks scrollToForm={scrollToForm} />
         <Guarantee scrollToForm={scrollToForm} />

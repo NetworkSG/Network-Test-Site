@@ -42,7 +42,7 @@ export function PainPoint({ scrollToForm }: { scrollToForm: () => void }) {
 
         <FadeIn delay={0.05} className="text-center mb-14">
           <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            Choosing the wrong designer costs you months and thousands. Here's how to avoid it.
+            Choosing the wrong designer costs you months and thousands. <span style={{ color: C.gray }}>Here's how to avoid it.</span>
           </h2>
         </FadeIn>
 
@@ -94,7 +94,7 @@ export function PainPoint({ scrollToForm }: { scrollToForm: () => void }) {
               <p className="text-[16px] font-medium" style={{ fontFamily: sans, color: C.black }}>Here's what you actually need</p>
             </div>
             <p className="text-[15px] leading-[1.75]" style={{ fontFamily: sans, color: C.gray }}>
-              A shortlist of 3 verified designers who already match your style, budget, and timeline. Our concierge team reviews your brief and handpicks them from 120+ verified designers. Free. In 1 business day. No obligations.
+              A shortlist of 3 verified designers who already match your style, budget, and timeline. Our concierge team reviews your brief and handpicks them from 120+ verified designers. Free. In just 30 minutes. No obligations.
             </p>
           </div>
         </FadeIn>

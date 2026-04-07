@@ -1,10 +1,9 @@
 import { C, serif, sans, FadeIn, TagLabel, SectionCTA } from "../primitives";
 import { VALUE_PROPS } from "../../content";
-const SUPABASE_WEB = "https://ttalzucoummnkomjvcfr.supabase.co/storage/v1/object/public/ons-website/value-props";
 const photos = [
-  `${SUPABASE_WEB}/material-samples.png`,   // Verified quality — material moodboard
-  `${SUPABASE_WEB}/fabric-consultation.png`, // Matched in 1 day — designer consultation
-  `${SUPABASE_WEB}/design-review.png`,       // Zero risk — collaborative design review
+  "/r2.jpeg",  // Verified quality — dining/living interior
+  "/r5.jpeg",  // Matched in 30 minutes — modern kitchen
+  "/r3.jpeg",  // Zero risk — green kitchen with dining
 ];
 
 export function ValueProps({ scrollToForm }: { scrollToForm: () => void }) {
@@ -16,7 +15,7 @@ export function ValueProps({ scrollToForm }: { scrollToForm: () => void }) {
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-16">
           <h2 className="font-normal leading-[1.15] max-w-[800px] mx-auto" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            What you get when you sign up
+            What you get <span style={{ color: C.gray }}>when you sign up</span>
           </h2>
         </FadeIn>
 

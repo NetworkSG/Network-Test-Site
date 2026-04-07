@@ -36,7 +36,7 @@ export function SocialProof1({ scrollToForm }: { scrollToForm: () => void }) {
           </FadeIn>
           <FadeIn delay={0.05} className="mb-14">
             <h2 className="font-normal leading-[1.15] max-w-[700px]" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-              {SOCIAL_PROOF.subheadline}
+              Real homes. Real matches. <span style={{ color: C.gray }}>Real results.</span>
             </h2>
           </FadeIn>
 

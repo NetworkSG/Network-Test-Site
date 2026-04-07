@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
+// FloorPlan3DLanding — updated
 import { motion, AnimatePresence, useInView, useReducedMotion } from "motion/react";
 import {
   Upload, Box, Paintbrush, ArrowRight, Check, X, ChevronDown,
@@ -15,11 +16,9 @@ import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH_H = { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" };
 
-const IMG_HERO = "https://images.unsplash.com/photo-1772208392358-19e96bee3a73?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBpbnRlcmlvciUyMGRlc2lnbiUyMGxpdmluZyUyMHJvb20lMjB3YXJtJTIwbGlnaHRpbmd8ZW58MXx8fHwxNzczNTI4MTM4fDA&ixlib=rb-4.1.0&q=80&w=1080";
-const IMG_STEP1 = "https://images.unsplash.com/photo-1610650394144-a778795cf585?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhcmNoaXRlY3R1cmUlMjBmbG9vciUyMHBsYW4lMjBibHVlcHJpbnQlMjBkZXNrfGVufDF8fHx8MTc3MzUyODEzOHww&ixlib=rb-4.1.0&q=80&w=1080";
-const IMG_STEP2 = "https://images.unsplash.com/photo-1758193431353-87812fbff5cd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHwzRCUyMGFyY2hpdGVjdHVyYWwlMjByZW5kZXJpbmclMjBtb2Rlcm4lMjBhcGFydG1lbnR8ZW58MXx8fHwxNzczNTI4MTM5fDA&ixlib=rb-4.1.0&q=80&w=1080";
-const IMG_TOOL1 = "https://images.unsplash.com/photo-1768321911908-01c691fcc5a0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyZW5vdmF0aW9uJTIwY2FsY3VsYXRvciUyMGhvbWUlMjBpbnRlcmlvciUyMHRvb2xzfGVufDF8fHx8MTc3MzUyODEzOXww&ixlib=rb-4.1.0&q=80&w=1080";
-const IMG_TOOL2 = "https://images.unsplash.com/photo-1695634184046-93d24e779ea7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbnRlcmlvciUyMGRlc2lnbiUyMHN0eWxlJTIwcXVpeiUyMG1vb2QlMjBib2FyZHxlbnwxfHx8fDE3NzM1MjgxMzl8MA&ixlib=rb-4.1.0&q=80&w=1080";
+const IMG_HERO = "/r6.jpeg";
+const IMG_STEP1 = "/r4.jpeg";
+const IMG_STEP2 = "/r1.jpeg";
 
 const KEY_PERIODS = ["Keys Collected", "Within 3 months", "3-6 months", "6-12 months", "More than 12 months"];
 
@@ -293,14 +292,6 @@ function HeroSection({ onSignup }: { onSignup: () => void }) {
           <div className="overflow-hidden" style={{ borderRadius: "12px", border: `1px solid ${C.creamBorder}` }}>
             <EditorPreviewAnimation />
           </div>
-          <div className="flex flex-wrap gap-2 md:gap-3 justify-center mt-6">
-            {[{ l: "Projects Created", v: "12,400+" }, { l: "Renders Generated", v: "48,000+" }, { l: "Active Users", v: "3,200+" }].map((s) => (
-              <div key={s.l} className="px-4 md:px-5 py-2 md:py-2.5" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "100px" }}>
-                <span className="text-[12px] md:text-[14px] font-semibold" style={{ color: C.black, fontFamily: sans }}>{s.v}</span>
-                <span className="text-[10px] md:text-[12px] font-normal ml-1.5" style={{ color: C.grayLight, fontFamily: sans }}>{s.l}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </FadeIn>
     </section>
@@ -364,62 +355,6 @@ function HowItWorksSection() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Value Props / Cross-Sell
-   ═══════════════════════════════════════════════════════════════════════════ */
-function ValuePropsSection() {
-  const navigate = useNavigate();
-  const cards = [
-    { icon: Calculator, title: "Renovation Cost Guide", desc: "Estimate your renovation budget based on property type, room count, and design style. Get a detailed breakdown before committing.", cta: "Calculate Now", href: "/cost-guide", img: IMG_TOOL1 },
-    { icon: Palette, title: "Style Quiz & ID Matching", desc: "Discover your interior design style and get matched with vetted designers who specialize in it. 100% free, no obligation.", cta: "Take the Quiz", href: "/get-matched", img: IMG_TOOL2 },
-    { icon: Users, title: "Designer Directory", desc: "Browse verified interior designers in Singapore. Compare portfolios, read reviews, and request quotes directly.", cta: "Browse Designers", href: "/designers", img: IMG_HERO },
-  ];
-  return (
-    <section className="px-6 md:px-10 py-[80px] md:py-[100px]">
-      <div className="max-w-[1280px] mx-auto">
-        <FadeIn className="text-center mb-6">
-          <TagLabel>Free tools</TagLabel>
-        </FadeIn>
-        <FadeIn delay={0.05} className="text-center mb-14">
-          <h2 className="text-[28px] md:text-[36px] lg:text-[44px] font-normal leading-[1.1]" style={{ fontFamily: serif, color: C.black }}>
-            Plan Smarter With
-          </h2>
-          <p className="text-[28px] md:text-[36px] lg:text-[44px] font-normal italic leading-[1.1] mt-1" style={{ fontFamily: serif, color: C.grayLight }}>
-            Our Free Tools
-          </p>
-        </FadeIn>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[16px]">
-          {cards.map((c, i) => (
-            <FadeIn key={c.title} delay={i * 0.04}>
-              <div className="group cursor-pointer h-full" style={{ position: "relative", zIndex: 0 }}
-                onClick={() => navigate(c.href)}>
-                {/* Blurred glow on hover */}
-                <div className="absolute opacity-0 group-hover:opacity-50 transition-opacity duration-700 pointer-events-none"
-                  style={{ inset: "-20px", filter: "blur(32px) saturate(1.5) brightness(1.1)", borderRadius: "28px", zIndex: -1 }}>
-                  <ImageWithFallback src={c.img} alt="" className="w-full h-full object-cover" style={{ borderRadius: "28px" }} />
-                </div>
-                <div className="relative h-full overflow-hidden flex flex-col" style={{ borderRadius: "12px", border: `1px solid ${C.creamBorder}`, background: C.white, zIndex: 1 }}>
-                  <div className="h-[200px] overflow-hidden">
-                    <ImageWithFallback src={c.img} alt={c.title} className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]" />
-                  </div>
-                  <div className="p-6 md:p-7 flex flex-col flex-1">
-                    <h3 className="text-[20px] md:text-[22px] font-normal leading-[1.2] mb-3" style={{ fontFamily: serif, color: C.black }}>{c.title}</h3>
-                    <p className="text-[14px] font-normal leading-[1.7] mb-5 flex-1" style={{ color: C.gray, fontFamily: sans }}>{c.desc}</p>
-                    <span className="text-[14px] font-medium flex items-center gap-2 group-hover:gap-3" style={{ color: C.black, fontFamily: sans, transition: "all 0.15s" }}>
-                      {c.cta} <ArrowRight className="w-4 h-4" strokeWidth={2} />
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </FadeIn>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    Lead Capture Form
    ═══════════════════════════════════════════════════════════════════════════ */
 function LeadCaptureSection() {
@@ -430,8 +365,16 @@ function LeadCaptureSection() {
     if (!form.name || !form.email || !form.contactNumber) return;
     setStatus("loading");
     try {
-      const res = await fetch(`${API}/fp3d/lead`, { method: "POST", headers: AUTH_H, body: JSON.stringify(form) });
-      setStatus(res.ok ? "success" : "error");
+      // Save to Supabase
+      const { error } = await supabase.from("homepage_leads").insert({
+        name: form.name,
+        email: form.email,
+        phone: form.contactNumber,
+        key_date: form.keyCollectionPeriod || null,
+        source: "Floor Plan Landing",
+      });
+      if (error) throw error;
+      setStatus("success");
     } catch { setStatus("error"); }
   };
 
@@ -613,7 +556,7 @@ function FooterNav() {
               WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
             }} />
             <div className="flex items-center gap-6">
-              {[{ label: "Explore", href: "/explore" }, { label: "Designers", href: "/designers" }, { label: "Cost Guide", href: "/cost-guide" }].map((link) => (
+              {[{ label: "Get matched", href: "/" }, { label: "Find your design style", href: "/explore" }, { label: "Cost guide", href: "/cost-guide" }].map((link) => (
                 <a key={link.label} href={link.href}
                   className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
                   style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}>{link.label}</a>
@@ -735,8 +678,6 @@ export function FloorPlan3DLanding() {
       <div className="max-w-[1000px] mx-auto px-6 md:px-10">
         <div className="h-[1px]" style={{ background: C.creamBorder }} />
       </div>
-
-      <ValuePropsSection />
 
       <LeadCaptureSection />
 

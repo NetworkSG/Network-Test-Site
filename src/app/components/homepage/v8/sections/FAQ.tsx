@@ -14,7 +14,7 @@ export function FAQ({ scrollToForm }: { scrollToForm: () => void }) {
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-4">
           <h2 className="font-normal leading-[1.15]" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            Questions we get asked the most
+            Questions <span style={{ color: C.gray }}>we get asked the most</span>
           </h2>
         </FadeIn>
         <FadeIn delay={0.08} className="text-center mb-14">

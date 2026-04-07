@@ -37,7 +37,7 @@ export function Differentiators({ scrollToForm }: { scrollToForm: () => void }) 
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-16">
           <h2 className="font-normal leading-[1.15] max-w-[800px] mx-auto" style={{ fontFamily: serif, color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            Why homeowners trust Network over other options
+            Why homeowners trust Network <span style={{ color: C.gray }}>over other options</span>
           </h2>
         </FadeIn>
 

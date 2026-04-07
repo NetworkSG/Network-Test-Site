@@ -20,7 +20,7 @@ export const HERO = {
   headline: "Renovate Your Home With Total Confidence.",
   headlineItalic: "We'll Match You to a Designer You Can Trust.",
   subheadline:
-    "Struggling to find a reliable interior designer? Our concierge team handpicks 3 verified firms that fit your style, budget, and timeline. Free. In 1 business day. No obligation.",
+    "Struggling to find a reliable interior designer? Our concierge team handpicks 3 verified firms that fit your style, budget, and timeline. Free. In just 30 minutes. No obligation.",
   formTitle: "Get Your Free Designer Match",
   formSubtitle: "Answer 6 quick questions and get matched with verified designers who fit your project. Free, no obligations.",
   submitButton: "Get My Free Matches",
@@ -198,7 +198,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
 export const COMPLETION = {
   headline: "You're in.",
   subheadline:
-    "Our concierge team will reach out within 1 business day to understand your brief and get your matches ready.",
+    "Our concierge team will reach out in just 30 minutes to understand your brief and get your matches ready.",
   body: "In the meantime, use our cost guide to pressure-test your budget, or take the design style quiz to get clearer on your direction before the call.",
   cta1: { label: "Explore the cost guide", href: "/cost-guide" },
   cta2: { label: "Find your design style", href: "/explore" },
@@ -249,21 +249,21 @@ export const TESTIMONIALS = {
       role: "Homeowner, Bishan HDB",
       quote:
         "The matching was spot on. Our designer understood exactly what we wanted before we could even explain it. The whole process felt effortless.",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face",
+      avatar: "/Profile/unnamed.png",
     },
     {
       name: "James Tan",
       role: "Homeowner, Clementi Condo",
       quote:
         "No chasing contractors, no guesswork. Network matched us with a firm that delivered exactly what was promised. Every detail was considered.",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
+      avatar: "/Profile/unnamed (2).png",
     },
     {
       name: "Rachel Wong",
       role: "Homeowner, Tampines HDB",
       quote:
         "We were nervous about our first renovation. Network made it easy to find a designer who fit our budget and style. Couldn't be happier with the result.",
-      avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face",
+      avatar: "/Profile/unnamed (1).png",
     },
   ] as Testimonial[],
 };
@@ -277,7 +277,7 @@ export const HOW_IT_WORKS = {
       number: "01",
       title: "Our concierge team reviews your profile",
       description:
-        "Within 1 business day, someone from our team reaches out to confirm your brief and answer any questions before we match you.",
+        "In just 30 minutes, someone from our team reaches out to confirm your brief and answer any questions before we match you.",
     },
     {
       number: "02",
@@ -398,7 +398,7 @@ export const PAIN_POINT: PainPointContent = {
   agitate:
     "Here's what most homeowners do.\n\nThey spend 3 to 6 weeks reading forums. Collecting quotes from strangers. Asking friends who renovated 5 years ago.\n\nAnd after all that research? They still feel unsure.\n\nBecause the truth is:\n\n✓ The best firms don't advertise on classifieds\n✓ Portfolios can be staged or cherry-picked\n✓ Online reviews can be bought\n✓ The cheapest quote is almost never the best choice\n\nEvery week you delay is another week closer to key collection. Another week of stress. Another week your dream home stays on a Pinterest board instead of becoming reality.",
   solve:
-    "You don't need to spend weeks researching.\n\nYou don't need to collect 10 quotes and compare them in a spreadsheet.\n\nYou don't need to gamble on a firm you found on social media.\n\nWhat you need is a shortlist of 3 verified designers who already match your style, budget, and timeline.\n\nThat's exactly what Network does.\n\nOur concierge team reviews your brief and handpicks 3 firms from 120+ verified designers. Free. In 1 business day. No obligations.\n\n3,214 homeowners have used this exact process this year.",
+    "You don't need to spend weeks researching.\n\nYou don't need to collect 10 quotes and compare them in a spreadsheet.\n\nYou don't need to gamble on a firm you found on social media.\n\nWhat you need is a shortlist of 3 verified designers who already match your style, budget, and timeline.\n\nThat's exactly what Network does.\n\nOur concierge team reviews your brief and handpicks 3 firms from 120+ verified designers. Free. In just 30 minutes. No obligations.\n\n3,214 homeowners have used this exact process this year.",
   cta: "Get My Free Designer Matches",
 };
 
@@ -411,8 +411,8 @@ export const VALUE_PROPS: ValueProp[] = [
     cta: "See My Matches",
   },
   {
-    label: "Matched in 1 day",
-    headline: "3 Handpicked Matches. 1 Business Day.",
+    label: "Matched in 30 minutes",
+    headline: "3 Handpicked Matches. In Just 30 Minutes.",
     body: "A real person on our concierge team reviews your brief. Not an algorithm.\n\nYou get 3 firms, not 10. Each one is selected because they've done projects like yours and have capacity to start when you need them.",
     cta: "Start My Match",
   },
@@ -506,7 +506,7 @@ export const FINAL_RECAP: FinalRecapContent = {
   subheadline: "3,214 Singapore homeowners got matched this year. Takes 2 minutes. Completely free.",
   bullets: [
     "120+ verified interior design firms",
-    "3 handpicked matches in 1 business day",
+    "3 handpicked matches in just 30 minutes",
     "100% free, no obligation",
     "Real homeowner reviews you can read",
     "Matched by a real person, not a bot",

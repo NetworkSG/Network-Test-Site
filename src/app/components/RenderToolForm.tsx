@@ -721,6 +721,9 @@ function StepThankYou({
     setResultSaved(true);
 
     const saveAndNotify = async () => {
+      let imageUrl = renderResult;
+
+      // Try saving to Supabase first
       try {
         console.log("Saving render result to Supabase storage...");
         const res = await fetch(`${API_BASE}/render-save-result`, {
@@ -740,29 +743,32 @@ function StepThankYou({
           console.error("Failed to save render result:", data);
         } else {
           console.log("Render result saved:", data);
+          if (data.imageStorageUrl) imageUrl = data.imageStorageUrl;
         }
-
-        // Send to Zapier with Supabase URL (10-day signed URL)
-        const supabaseImageUrl = data.imageStorageUrl || renderResult;
-        try {
-          const formData = new FormData();
-          formData.append("First Name", contact.name);
-          formData.append("Contact Phone", contact.whatsapp);
-          formData.append("Email Address", contact.email);
-          formData.append("Property Type", propertyType);
-          formData.append("Renovation Budget", budget);
-          formData.append("Key Date", timeline);
-          formData.append("Meeting Preference", meetingPreference);
-          formData.append("Lead Form", "AI 3D Render");
-          formData.append("3D Render Image", supabaseImageUrl);
-          await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
-            method: "POST",
-            body: formData,
-          });
-          console.log("Zapier notified with Supabase image URL");
-        } catch (_) {}
       } catch (err) {
         console.error("Error saving render result:", err);
+      }
+
+      // Always send to Zapier regardless of Supabase save result
+      try {
+        const formData = new FormData();
+        formData.append("First Name", contact.name);
+        formData.append("Contact Phone", contact.whatsapp);
+        formData.append("Email Address", contact.email);
+        formData.append("Property Type", propertyType);
+        formData.append("Renovation Budget", budget);
+        formData.append("Key Date", timeline);
+        formData.append("Meeting Preference", meetingPreference);
+        formData.append("Lead Form", "AI 3D Render");
+        formData.append("Hook Id", quoteRequestId || "");
+        formData.append("3D Render Image", imageUrl);
+        await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
+          method: "POST",
+          body: formData,
+        });
+        console.log("Zapier notified with render image URL");
+      } catch (err) {
+        console.error("Zapier notification failed:", err);
       }
 
       // Everything done — show thank you page
@@ -1057,7 +1063,8 @@ export function RenderToolForm() {
       if (taskData.quoteRequestId) {
         setQuoteRequestId(taskData.quoteRequestId);
       }
-      // Zapier webhook fires after render completes (in StepThankYou)
+
+      // Zapier webhook fires after render completes (in StepThankYou useEffect)
       setStep(9); // Go to thank you
     } catch (err) {
       console.error("Error submitting render request:", err);
