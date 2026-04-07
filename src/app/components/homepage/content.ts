@@ -561,9 +561,11 @@ export const FOOTER = {
   logo: "NETWORK",
   tagline: "Singapore's trusted platform for homeowner-designer matching.",
   links: [
-    { label: "Get matched", href: "#lead-form" },
-    { label: "Find your design style", href: "/explore" },
-    { label: "Cost guide", href: "/cost-guide" },
+    { label: "Home", href: "/" },
+    { label: "3D Render", href: "/render-tool" },
+    { label: "Floor Layout Planner", href: "/floorplan3d" },
+    { label: "Cost Guide", href: "/cost-guide" },
+    { label: "Handshake", href: "/networkxhandshake" },
   ],
   social: [
     { label: "Instagram", href: "#" },
