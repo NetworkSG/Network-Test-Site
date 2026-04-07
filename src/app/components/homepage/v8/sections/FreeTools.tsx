@@ -11,7 +11,7 @@ const tools = [
     cta: "Create My Render",
     href: "/render-tool",
     time: "5 minutes • Free signup",
-    image: "/Frame 26.png",
+    image: "/inter2.png",
   },
   {
     title: "Renovation Cost Guide",
@@ -20,7 +20,7 @@ const tools = [
     cta: "Calculate My Budget",
     href: "/cost-guide",
     time: "2 minutes • Free signup",
-    image: "/Frame 27.png",
+    image: "/new interor 2.png",
   },
   {
     title: "Floor Layout Planner",
@@ -29,7 +29,7 @@ const tools = [
     cta: "Plan My Layout",
     href: "/floorplan3d",
     time: "10 minutes • Free signup",
-    image: "/tool-floorplan.png",
+    image: "/DSC09723.webp",
   },
   {
     title: "Handshake Escrow",
@@ -38,7 +38,7 @@ const tools = [
     cta: "Protect My Payments",
     href: "/networkxhandshake",
     time: "3 minutes • Free signup",
-    image: "/tool-handshake.png",
+    image: "/r6.jpeg",
   },
 ];
 

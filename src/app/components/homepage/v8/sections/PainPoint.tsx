@@ -26,7 +26,7 @@ const IconCheckCircle = () => (
 const painIcons = [<IconDollar />, <IconAlert />, <IconSearch />];
 
 const agitateCards = [
-  { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>, text: "Best firms don't advertise on classifieds" },
+  { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>, text: "The best firms don't need to advertise" },
   { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>, text: "Portfolios can be staged or cherry-picked" },
   { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4" /><path d="m16.2 7.8 2.9-2.9" /><path d="M18 12h4" /><path d="m16.2 16.2 2.9 2.9" /><path d="M12 18v4" /><path d="m4.9 19.1 2.9-2.9" /><path d="M2 12h4" /><path d="m4.9 4.9 2.9 2.9" /></svg>, text: "Online reviews can be bought" },
   { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.gray} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>, text: "Cheapest quote is almost never the best" },
@@ -94,7 +94,7 @@ export function PainPoint({ scrollToForm }: { scrollToForm: () => void }) {
               <p className="text-[16px] font-medium" style={{ fontFamily: sans, color: C.black }}>Here's what you actually need</p>
             </div>
             <p className="text-[15px] leading-[1.75]" style={{ fontFamily: sans, color: C.gray }}>
-              A shortlist of 3 verified designers who already match your style, budget, and timeline. Our concierge team reviews your brief and handpicks them from 120+ verified designers. Free. In just 30 minutes. No obligations.
+              A shortlist of 3 verified designers who already match your style, budget, and timeline. Our concierge team reviews your brief and handpicks them from 120+ verified designers. Free. Within the day. No obligations.
             </p>
           </div>
         </FadeIn>

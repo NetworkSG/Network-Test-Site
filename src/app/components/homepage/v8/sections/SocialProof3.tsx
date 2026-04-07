@@ -15,6 +15,9 @@ const selectedImages = [
   { src: "/social-proof-selected/img-056.jpg", caption: "Homeowner recommends Network to friends" },
   { src: "/social-proof-selected/img-082.jpg", caption: "Smooth renovation journey from start to finish" },
   { src: "/social-proof-selected/img-087.jpg", caption: "Contractor confirms winning project through Network" },
+  { src: "/social-proof-selected/IMG_1744.png", caption: "Homeowner meeting with matched designer" },
+  { src: "/social-proof-selected/IMG_6015.png", caption: "Designer visited and took project details" },
+  { src: "/social-proof-selected/IMG_7294.png", caption: "Homeowner received quote close to budget" },
 ];
 
 function Lightbox({ index, onClose, onPrev, onNext }: { index: number; onClose: () => void; onPrev: () => void; onNext: () => void }) {

@@ -2,7 +2,7 @@ import { C, serif, sans, FadeIn, TagLabel, SectionCTA } from "../primitives";
 import { VALUE_PROPS } from "../../content";
 const photos = [
   "/r2.jpeg",  // Verified quality — dining/living interior
-  "/r5.jpeg",  // Matched in 30 minutes — modern kitchen
+  "/r5.jpeg",  // Matched within the day — modern kitchen
   "/r3.jpeg",  // Zero risk — green kitchen with dining
 ];
 

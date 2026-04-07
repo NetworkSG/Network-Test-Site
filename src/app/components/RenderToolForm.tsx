@@ -1117,9 +1117,9 @@ export function RenderToolForm() {
 
   return (
     <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
-      {/* Header with logo */}
-      <header className="px-6 md:px-12 pt-8 md:pt-10 pb-4">
-        <div className="max-w-[1293px] mx-auto">
+      {/* Header with nav */}
+      <nav className="sticky top-0 z-50 bg-[#f0ede6]">
+        <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
           <div
             className="w-[110px] h-[23px] bg-[#2b2b2b] shrink-0 cursor-pointer"
             onClick={() => navigate("/")}
@@ -1134,8 +1134,17 @@ export function RenderToolForm() {
               WebkitMaskPosition: "0px 0px",
             }}
           />
+          <div className="hidden md:flex items-center gap-8">
+            <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Home</a>
+            <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>3D Render</a>
+            <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Floor Layout Planner</a>
+            <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Cost Guide</a>
+            <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Handshake</a>
+          </div>
+          <a href="/" className="hidden md:block text-[12px] font-medium px-5 py-2.5 hover:opacity-80 no-underline" style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Get matched</a>
         </div>
-      </header>
+        <div className="h-[1px]" style={{ background: "#d8d3c8" }} />
+      </nav>
 
       {/* Main content area */}
       <main className="flex-1 flex items-center px-6 md:px-12">

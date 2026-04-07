@@ -7,7 +7,7 @@ import type { FormState, LeadFormData } from "../types";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
 import { HeroSection } from "./sections/HeroSection";
-import { SocialProof1 } from "./sections/SocialProof1";
+import { TrustStatsBar } from "./sections/SocialProof1";
 import { PainPoint } from "./sections/PainPoint";
 import { ValueProps } from "./sections/ValueProps";
 
@@ -61,6 +61,7 @@ export function HomepageV8() {
             }} />
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-8">
+              <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Home</a>
               <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>3D Render</a>
               <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Floor Layout Planner</a>
               <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
@@ -99,6 +100,7 @@ export function HomepageV8() {
                 style={{ background: C.cream, borderBottom: `1px solid ${C.creamBorder}` }}
               >
                 <div className="px-6 py-4 flex flex-col gap-1">
+                  <a href="/" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Home</a>
                   <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>3D Render</a>
                   <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Floor Layout Planner</a>
                   <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
@@ -123,18 +125,16 @@ export function HomepageV8() {
         />
         {/* Hide all sections below hero on mobile when qualifying/complete */}
         <div className={formState !== "idle" ? "hidden md:block" : ""}>
-        <SocialProof1 scrollToForm={scrollToForm} />
-        <SocialProof3 />
+        <TrustStatsBar />
         <GoogleReviews />
+        <SocialProof3 />
         <Divider />
         <PainPoint scrollToForm={scrollToForm} />
-        <ValueProps scrollToForm={scrollToForm} />
+        <HowItWorks scrollToForm={scrollToForm} />
         <Divider />
         <Differentiators scrollToForm={scrollToForm} />
         <Divider />
         <FreeTools />
-        <Divider />
-        <HowItWorks scrollToForm={scrollToForm} />
         <Guarantee scrollToForm={scrollToForm} />
         <FAQ scrollToForm={scrollToForm} />
         <FinalRecap scrollToForm={scrollToForm} />
