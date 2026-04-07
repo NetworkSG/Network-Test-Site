@@ -1,11 +1,22 @@
 import { C, FadeIn, TagLabel } from "../primitives";
-import { SOCIAL_PROOF_IMAGES } from "../../content";
 
 const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
-export function SocialProof3() {
-  const items = SOCIAL_PROOF_IMAGES.homeownerFeedback;
+const selectedImages = [
+  { src: "/social-proof-selected/img-000.jpg", caption: "Homeowner impressed by designer's professionalism" },
+  { src: "/social-proof-selected/img-009.jpg", caption: "Homeowner happy with designer match quality" },
+  { src: "/social-proof-selected/img-010.jpg", caption: "Positive feedback on renovation experience" },
+  { src: "/social-proof-selected/img-013.jpg", caption: "Homeowner confirms engaging a matched firm" },
+  { src: "/social-proof-selected/img-018.jpg", caption: "Great experience with matched designer" },
+  { src: "/social-proof-selected/img-019.jpg", caption: "Homeowner satisfied with renovation progress" },
+  { src: "/social-proof-selected/img-029.jpg", caption: "Designer follow-up and project update" },
+  { src: "/social-proof-selected/img-033.jpg", caption: "Successful consultation with matched firm" },
+  { src: "/social-proof-selected/img-056.jpg", caption: "Homeowner recommends Network to friends" },
+  { src: "/social-proof-selected/img-082.jpg", caption: "Smooth renovation journey from start to finish" },
+  { src: "/social-proof-selected/img-087.jpg", caption: "Contractor confirms winning project through Network" },
+];
 
+export function SocialProof3() {
   return (
     <section className="px-6 md:px-10 py-[80px] md:py-[100px]" style={{ background: C.creamDark }}>
       <div className="max-w-[1280px] mx-auto">
@@ -24,11 +35,11 @@ export function SocialProof3() {
         </FadeIn>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {items.map((item, i) => (
+          {selectedImages.map((item, i) => (
             <FadeIn key={i} delay={i * 0.03}>
               <div className="overflow-hidden" style={{ borderRadius: "8px", border: `1px solid ${C.creamBorder}`, background: C.white }}>
                 <img
-                  src={item.url}
+                  src={item.src}
                   alt={item.caption}
                   className="w-full object-cover"
                   loading="lazy"
