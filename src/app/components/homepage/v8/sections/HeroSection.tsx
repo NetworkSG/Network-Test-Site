@@ -205,6 +205,10 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                       </div>
 
                       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                        {/* Honeypot — hidden from users, bots fill this */}
+                        <div style={{ position: "absolute", left: "-9999px", opacity: 0, height: 0, overflow: "hidden" }} aria-hidden="true" tabIndex={-1}>
+                          <input type="text" name="_hp_field" autoComplete="off" tabIndex={-1} />
+                        </div>
                         {/* Name */}
                         <div>
                           <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Name</label>
@@ -298,11 +302,11 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                   setFormState("complete");
                   heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   // Save lead to Supabase homepage_leads table
-                  const SUPABASE_URL = "https://hycxkpassywjvdqduzrx.supabase.co";
-                  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5Y3hrcGFzc3l3anZkcWR1enJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NzI3NTIsImV4cCI6MjA4OTA0ODc1Mn0.A3Ab9q9bSdTsIOHrpDjilfTGeUAm39HsgtLxSrQ138g";
-                  fetch(`${SUPABASE_URL}/rest/v1/homepage_leads`, {
+                  const sbUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+                  const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+                  fetch(`${sbUrl}/rest/v1/homepage_leads`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON, "Authorization": `Bearer ${SUPABASE_ANON}` },
+                    headers: { "Content-Type": "application/json", "apikey": sbKey, "Authorization": `Bearer ${sbKey}` },
                     body: JSON.stringify({
                       name: form.name,
                       phone: form.phone,
@@ -311,7 +315,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                     }),
                   }).then(r => { if (!r.ok) console.error("Lead save failed:", r.status); else console.log("Lead saved to homepage_leads"); })
                     .catch(err => console.error("Lead save error:", err));
-                  // Send to Zapier
+                  // Send to Zapier (direct until edge function is redeployed with proxy)
                   const zapForm = new FormData();
                   zapForm.append("First Name", form.name);
                   zapForm.append("Contact Phone", form.phone);

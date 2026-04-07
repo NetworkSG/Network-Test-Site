@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { motion, AnimatePresence } from "motion/react";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
@@ -1001,7 +1002,7 @@ export function CostGuide() {
       const res = await fetch(`${API_BASE}/cost-guide`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({ propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact, estimate: est }),
+        body: JSON.stringify({ propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact: { name: sanitizeInput(contact.name, 100), whatsapp: sanitizeInput(contact.whatsapp, 20), email: sanitizeEmail(contact.email) }, estimate: est }),
       });
       const data = await res.json();
       if (!res.ok) console.error("Cost guide submission failed:", data);

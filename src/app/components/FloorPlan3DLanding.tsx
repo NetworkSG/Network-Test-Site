@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
+import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 // FloorPlan3DLanding — updated
 import { motion, AnimatePresence, useInView, useReducedMotion } from "motion/react";
 import {
@@ -83,7 +84,8 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     if (form.password.length < 6) { setError("Password must be at least 6 characters"); return; }
     setLoading(true); setError("");
     try {
-      const res = await fetch(`${API}/fp3d/signup`, { method: "POST", headers: AUTH_H, body: JSON.stringify(form) });
+      const sanitizedForm = { ...form, name: sanitizeInput(form.name || "", 100), email: sanitizeEmail(form.email || ""), contactNumber: sanitizeInput(form.contactNumber || "", 20) };
+      const res = await fetch(`${API}/fp3d/signup`, { method: "POST", headers: AUTH_H, body: JSON.stringify(sanitizedForm) });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Signup failed"); setLoading(false); return; }
       const { error: loginErr } = await supabase.auth.signInWithPassword({ email: form.email, password: form.password });

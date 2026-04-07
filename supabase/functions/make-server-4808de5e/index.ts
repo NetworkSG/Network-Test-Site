@@ -69,15 +69,32 @@ function clearFailedLogins(ip: string) {
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMITS: Record<string, number> = {
-  "render-upload": 5,    // 5 uploads per minute
-  "render-task": 3,      // 3 AI renders per minute
-  "render-status": 30,   // 30 polls per minute
-  "quote-request": 5,    // 5 quote requests per minute
-  "signup": 3,           // 3 signups per minute (anti-bot)
-  "login": 10,           // 10 login attempts per minute
-  "scrape-designers": 8, // 8 designer list fetches per minute
-  "scrape-profile": 15,  // 15 profile views per minute
-  default: 20,           // 20 requests per minute for everything else
+  // --- AI / Resource-intensive ---
+  "render-upload": 5,       // 5 uploads per minute
+  "render-task": 3,         // 3 AI renders per minute
+  "render-status": 30,      // 30 polls per minute
+  "editor-render": 3,       // 3 editor renders per minute
+  "analyze-floorplan": 3,   // 3 AI analyses per minute
+  // --- Lead forms ---
+  "quote-request": 5,       // 5 quote requests per minute
+  "cost-guide": 5,          // 5 cost guide submissions per minute
+  "designer-inquiry": 5,    // 5 designer inquiries per minute
+  "zapier-proxy": 5,        // 5 webhook calls per minute
+  // --- Auth ---
+  "signup": 3,              // 3 signups per minute (anti-bot)
+  "login": 10,              // 10 login attempts per minute
+  "session": 20,            // 20 session checks per minute
+  "credentials": 3,         // 3 credential setup attempts per minute
+  // --- Data endpoints ---
+  "projects": 15,           // 15 project operations per minute
+  "templates": 15,          // 15 template operations per minute
+  "scrape-designers": 8,    // 8 designer list fetches per minute
+  "scrape-profile": 15,     // 15 profile views per minute
+  "profile-update": 10,     // 10 profile updates per minute
+  "saved-projects": 15,     // 15 saved project operations per minute
+  // --- Callbacks (external services) ---
+  "callback": 10,           // 10 callback deliveries per minute
+  default: 20,              // 20 requests per minute for everything else
 };
 
 // --- Global IP abuse tracker (escalating blocks) ---
@@ -220,7 +237,40 @@ const ALLOWED_BUDGETS = [
 
 function sanitizeString(str: string, maxLength = 500): string {
   if (typeof str !== "string") return "";
-  return str.replace(/[<>]/g, "").trim().slice(0, maxLength);
+  return str
+    .replace(/[<>'"`;\\]/g, "")          // strip dangerous chars
+    .replace(/javascript\s*:/gi, "")      // block JS protocol
+    .replace(/on\w+\s*=/gi, "")           // block event handlers (onclick=, onerror=, etc.)
+    .replace(/&#/g, "")                   // block HTML entities
+    .replace(/\x00/g, "")                 // strip null bytes
+    .trim()
+    .slice(0, maxLength);
+}
+
+// Redact PII from objects before logging
+function redactPII(obj: Record<string, any>): Record<string, any> {
+  const redacted = { ...obj };
+  const sensitive = ["email", "whatsapp", "phone", "password", "name", "contact"];
+  for (const key of Object.keys(redacted)) {
+    if (sensitive.some(s => key.toLowerCase().includes(s))) {
+      redacted[key] = typeof redacted[key] === "object" ? "[REDACTED]" : "[REDACTED]";
+    }
+  }
+  return redacted;
+}
+
+// Validate image magic bytes to prevent content-type spoofing
+function validateImageMagicBytes(base64: string): boolean {
+  try {
+    const bytes = Uint8Array.from(atob(base64.slice(0, 24)), c => c.charCodeAt(0));
+    // JPEG: FF D8 FF
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return true;
+    // PNG: 89 50 4E 47
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return true;
+    // WebP: 52 49 46 46 (RIFF)
+    if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return true;
+    return false;
+  } catch { return false; }
 }
 
 // Strict sanitizer for KV keys — only allows alphanumeric, dash, underscore, dot
@@ -238,6 +288,13 @@ function isValidUUID(str: string): boolean {
 function isValidToken(str: string): boolean {
   if (typeof str !== "string" || str.length > 200) return false;
   return /^[a-zA-Z0-9_\-\.]+$/.test(str);
+}
+
+// Check if a session has expired (returns true if valid/not expired)
+function isSessionValid(session: any): boolean {
+  if (!session) return false;
+  if (session.expiresAt && Date.now() > session.expiresAt) return false;
+  return true;
 }
 
 // Strict URL validation — only allow HTTPS URLs from known domains
@@ -279,22 +336,7 @@ async function verifyAuth(c: any): Promise<boolean> {
   // Direct match with anon key
   if (anonKey && token === anonKey) return true;
 
-  // Accept any well-formed JWT (header.payload.signature) as valid auth
-  // Rate limiting + input validation are the primary security layers
-  const jwtParts = token.split(".");
-  if (jwtParts.length === 3 && jwtParts[0].startsWith("eyJ")) {
-    // Verify it's a JWT from our Supabase project by checking the issuer
-    try {
-      const payload = JSON.parse(atob(jwtParts[1]));
-      if (payload.iss && payload.iss.includes("supabase")) {
-        return true;
-      }
-    } catch (_) {
-      // If we can't decode, fall through to other checks
-    }
-  }
-
-  // Also accept valid Supabase user tokens
+  // Validate JWT via Supabase auth (cryptographic signature verification)
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -402,11 +444,109 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// Enable CORS — allow all origins during development, restrict when production domain is set
+// Global auto rate limiting — maps URL patterns to rate limit keys
+// This catches all endpoints, even those without explicit rate limit calls
+app.use("*", async (c, next) => {
+  if (c.req.method === "OPTIONS") { await next(); return; }
+  const ip = getClientIp(c);
+  const path = c.req.path || "";
+
+  // Map URL patterns to rate limit keys
+  let rlKey = "default";
+  if (path.includes("/render-upload")) rlKey = "render-upload";
+  else if (path.includes("/render-task")) rlKey = "render-task";
+  else if (path.includes("/render-status")) rlKey = "render-status";
+  else if (path.includes("/render-callback") || path.includes("/editor-render-callback")) rlKey = "callback";
+  else if (path.includes("/editor-render")) rlKey = "editor-render";
+  else if (path.includes("/analyze-floorplan")) rlKey = "analyze-floorplan";
+  else if (path.includes("/quote-request")) rlKey = "quote-request";
+  else if (path.includes("/cost-guide")) rlKey = "cost-guide";
+  else if (path.includes("/designer-inquiry")) rlKey = "designer-inquiry";
+  else if (path.includes("/zapier-proxy")) rlKey = "zapier-proxy";
+  else if (path.includes("/signup") || path.includes("/homeowner-signup")) rlKey = "signup";
+  else if (path.includes("/login") || path.includes("/admin/login")) rlKey = "login";
+  else if (path.includes("/session") || path.includes("/verify")) rlKey = "session";
+  else if (path.includes("/credentials")) rlKey = "credentials";
+  else if (path.includes("/fp3d/projects")) rlKey = "projects";
+  else if (path.includes("/fp3d/templates")) rlKey = "templates";
+  else if (path.includes("/designers") && !path.includes("/designer-")) rlKey = "scrape-designers";
+  else if (path.includes("/homeowner-profile") || path.includes("/homeowner-saved")) rlKey = "profile-update";
+  else if (path.includes("/health")) { await next(); return; } // skip health check
+
+  const rl = checkRateLimit(ip, rlKey);
+  if (!rl.allowed) {
+    securityLog("global_rate_limit", "warn", ip, path, { rlKey });
+    return c.json({ error: "Too many requests. Please try again later.", retryAfterMs: rl.retryAfterMs }, 429);
+  }
+  await next();
+});
+
+// Bot detection middleware — reject suspicious User-Agents on sensitive endpoints
+app.use("*", async (c, next) => {
+  if (c.req.method === "POST") {
+    const path = c.req.path || "";
+    // Apply bot detection to form submissions, signups, logins, and lead capture
+    const sensitivePatterns = ["/signup", "/login", "/quote-request", "/cost-guide", "/designer-inquiry", "/render-upload", "/render-task", "/zapier-proxy", "/homeowner-signup"];
+    if (sensitivePatterns.some(p => path.includes(p))) {
+      const ua = c.req.header("user-agent");
+      if (isSuspiciousUA(ua)) {
+        const ip = getClientIp(c);
+        securityLog("bot_detected", "warn", ip, path, { ua: (ua || "").slice(0, 50) });
+        return c.json({ error: "Request blocked" }, 403);
+      }
+    }
+  }
+  await next();
+});
+
+// Honeypot field validation middleware — reject submissions with filled honeypot
+app.use("*", async (c, next) => {
+  if (c.req.method === "POST") {
+    const path = c.req.path || "";
+    const formPaths = ["/quote-request", "/cost-guide", "/designer-inquiry", "/signup", "/homeowner-signup"];
+    if (formPaths.some(p => path.includes(p))) {
+      try {
+        const cloned = c.req.raw.clone();
+        const body = await cloned.json();
+        // If honeypot field is filled, silently reject (bot filled the hidden field)
+        if (body._hp_field) {
+          const ip = getClientIp(c);
+          securityLog("honeypot_triggered", "warn", ip, path);
+          // Return success to not alert the bot
+          return c.json({ success: true, id: crypto.randomUUID() });
+        }
+      } catch { /* ignore parse errors — will be caught by handler */ }
+    }
+  }
+  await next();
+});
+
+// Content-Type validation — reject non-JSON POST requests (except callbacks)
+app.use("*", async (c, next) => {
+  if (c.req.method === "POST") {
+    const path = c.req.path || "";
+    // Skip content-type check for callback endpoints (external services may send different types)
+    if (!path.includes("/render-callback") && !path.includes("/editor-render-callback")) {
+      const ct = c.req.header("content-type") || "";
+      if (!ct.includes("application/json") && !ct.includes("multipart/form-data")) {
+        return c.json({ error: "Invalid content type. Expected application/json" }, 415);
+      }
+    }
+  }
+  await next();
+});
+
+// Enable CORS — restricted to known origins
+const ALLOWED_ORIGINS = [
+  "https://www.orangenetworkstudios.com",
+  "https://orangenetworkstudios.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: ALLOWED_ORIGINS,
     allowHeaders: ["Content-Type", "Authorization", "X-User-Token", "X-Designer-Token", "X-Homeowner-Token"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length", "X-RateLimit-Remaining"],
@@ -423,11 +563,54 @@ app.use("*", async (c, next) => {
   c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   c.res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   c.res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  c.res.headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://api.kie.ai; frame-ancestors 'none'");
 });
 
 // Health check endpoint
 app.get("/make-server-4808de5e/health", (c) => {
   return c.json({ status: "ok" });
+});
+
+// --- Zapier webhook proxy ---
+// Webhook URLs are server-side only, never exposed to frontend
+const ZAPIER_WEBHOOKS: Record<string, string> = {
+  "hero-lead": "https://hooks.zapier.com/hooks/catch/20249199/2c5b7ea/",
+  "render-lead": "https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/",
+  "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/",
+  "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
+};
+
+app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "zapier-proxy");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const body = await c.req.json();
+    const { hook, data } = body;
+
+    if (!hook || !ZAPIER_WEBHOOKS[hook]) {
+      return c.json({ error: "Invalid webhook identifier" }, 400);
+    }
+
+    // Sanitize all string values in data before forwarding
+    const sanitizedData = new FormData();
+    if (data && typeof data === "object") {
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === "string") {
+          sanitizedData.append(sanitizeString(key, 50), sanitizeString(value, 2000));
+        }
+      }
+    }
+
+    await fetch(ZAPIER_WEBHOOKS[hook], { method: "POST", body: sanitizedData });
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Zapier proxy error:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
 });
 
 // =============================================
@@ -534,11 +717,11 @@ app.post("/make-server-4808de5e/quote-request", async (c) => {
 
     const body = await c.req.json();
     const { name, whatsapp, email, property_type, timeline, budget, inquiry } = body;
-    console.log("Received quote request body:", JSON.stringify(body));
+    console.log("Received quote request body:", JSON.stringify(redactPII(body)));
 
     // Input validation
     const cleanName = sanitizeString(name, 100);
-    const cleanEmail = sanitizeString(email, 200);
+    const cleanEmail = sanitizeString(email, 200).toLowerCase();
     const cleanWhatsapp = sanitizeString(whatsapp, 20);
     const cleanInquiry = sanitizeString(inquiry || "", 2000);
 
@@ -580,7 +763,7 @@ app.post("/make-server-4808de5e/quote-request", async (c) => {
       "Created Date": new Date().toISOString(),
       "Updated Date": new Date().toISOString(),
     };
-    console.log("Insert payload:", JSON.stringify(insertPayload));
+    console.log("Insert payload:", JSON.stringify(redactPII(insertPayload)));
 
     const { data, error, status, statusText } = await supabase
       .from("Quote Request")
@@ -700,6 +883,12 @@ app.post("/make-server-4808de5e/render-upload", async (c) => {
     if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
       console.log(`Security: Rejected upload with invalid content type: ${contentType}`);
       return c.json({ error: `Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` }, 400);
+    }
+
+    // Validate magic bytes match claimed content type (prevent content-type spoofing)
+    if (!validateImageMagicBytes(imageBase64)) {
+      securityLog("upload_magic_bytes_mismatch", "warn", ip, "/render-upload", { contentType });
+      return c.json({ error: "File content does not match a valid image format" }, 400);
     }
 
     // Validate filename
@@ -915,7 +1104,7 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
     const sanitizedContact = contact ? {
       name: sanitizeString(contact.name || "", 100),
       whatsapp: sanitizeString(contact.whatsapp || "", 20),
-      email: sanitizeString(contact.email || "", 200),
+      email: sanitizeString(contact.email || "", 200).toLowerCase(),
     } : null;
 
     // Also insert into Quote Request table as a lead
@@ -1003,11 +1192,24 @@ app.post("/make-server-4808de5e/render-callback", async (c) => {
       return c.json({ success: true, message: "Received but invalid taskId" });
     }
 
-    // Verify the task exists in our KV (prevents arbitrary data injection)
+    // Verify the task exists in our KV and hasn't already been completed (prevents replay/injection)
     const existing = await kv.get(`render-task:${taskId}`);
     if (!existing) {
-      console.log(`Security: Callback for unknown taskId: ${taskId}`);
+      securityLog("callback_unknown_task", "warn", ip, "/render-callback", { taskId: taskId.slice(0, 20) });
       return c.json({ error: "Unknown task" }, 404);
+    }
+    // Reject callbacks for already-completed tasks (prevent result overwriting)
+    if (existing.status === "completed" || existing.status === "failed") {
+      securityLog("callback_duplicate_task", "warn", ip, "/render-callback", { taskId: taskId.slice(0, 20), status: existing.status });
+      return c.json({ success: true, message: "Task already finalized" });
+    }
+    // Verify task was created recently (within 30 minutes) — stale tasks shouldn't receive callbacks
+    if (existing.createdAt) {
+      const createdTime = new Date(existing.createdAt).getTime();
+      if (Date.now() - createdTime > 30 * 60 * 1000) {
+        securityLog("callback_stale_task", "warn", ip, "/render-callback", { taskId: taskId.slice(0, 20) });
+        return c.json({ error: "Task expired" }, 410);
+      }
     }
 
     // Extract status using kie.ai's actual field: data.state (lowercase)
@@ -1771,7 +1973,7 @@ app.post("/make-server-4808de5e/fp3d/signup", async (c) => {
     if (typeof password !== "string" || password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data, error } = await supabase.auth.admin.createUser({
-      email: sanitizeString(email, 200),
+      email: sanitizeString(email, 200).toLowerCase(),
       password,
       user_metadata: { role: "homeowner", name: sanitizeString(name, 100), contactNumber: sanitizeString(contactNumber || "", 20) },
       email_confirm: true,
@@ -1779,7 +1981,7 @@ app.post("/make-server-4808de5e/fp3d/signup", async (c) => {
     if (error) { console.log("Signup error:", error.message); return c.json({ error: error.message }, 400); }
     if (data?.user?.id) {
       const cleanName = sanitizeString(name, 100);
-      const cleanEmail = sanitizeString(email, 200);
+      const cleanEmail = sanitizeString(email, 200).toLowerCase();
       const cleanPhone = sanitizeString(contactNumber || "", 20);
       await kv.set(`fp3d:user:${data.user.id}`, {
         name: cleanName, email: cleanEmail,
@@ -2223,7 +2425,7 @@ app.post("/make-server-4808de5e/fp3d/lead", async (c) => {
     if (!body.name || !body.email || !body.contactNumber) return c.json({ error: "Name, email, and contact are required" }, 400);
     const id = crypto.randomUUID();
     await kv.set(`fp3d:lead:${id}`, {
-      name: sanitizeString(body.name, 100), email: sanitizeString(body.email, 200),
+      name: sanitizeString(body.name, 100), email: sanitizeString(body.email, 200).toLowerCase(),
       contactNumber: sanitizeString(body.contactNumber, 20),
       keyCollectionPeriod: sanitizeString(body.keyCollectionPeriod || "", 50),
       createdAt: new Date().toISOString(),
@@ -2264,9 +2466,13 @@ app.get("/make-server-4808de5e/designers", async (c) => {
       return c.json({ error: `Failed to fetch designers: ${error.message}` }, 500);
     }
 
-    const designers = data?.map((d: any) => d.value) ?? [];
-    console.log(`Found ${designers.length} designers`);
-    return c.json({ count: designers.length, data: designers });
+    const allDesigners = data?.map((d: any) => d.value) ?? [];
+    // Pagination — limit response size to prevent bulk scraping
+    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
+    const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
+    const designers = allDesigners.slice(offset, offset + limit);
+    console.log(`Returning ${designers.length} of ${allDesigners.length} designers`);
+    return c.json({ count: allDesigners.length, data: designers, limit, offset });
   } catch (err) {
     console.log("Unexpected error in GET /designers:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -2693,7 +2899,7 @@ app.post("/make-server-4808de5e/cost-guide", async (c) => {
 
     const body = await c.req.json();
     const { propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, contact } = body;
-    console.log("Received cost guide request:", JSON.stringify(body));
+    console.log("Received cost guide request:", JSON.stringify(redactPII(body)));
 
     if (!propertyType || !unitType || !selectedRooms?.length || !timeline) {
       return c.json({ error: "Missing required property/renovation fields" }, 400);
@@ -2703,7 +2909,7 @@ app.post("/make-server-4808de5e/cost-guide", async (c) => {
     }
 
     const cleanName = sanitizeString(contact.name, 100);
-    const cleanEmail = sanitizeString(contact.email, 200);
+    const cleanEmail = sanitizeString(contact.email, 200).toLowerCase();
     const cleanWhatsapp = sanitizeString(contact.whatsapp, 20);
 
     if (!isValidEmail(cleanEmail)) {
@@ -3584,8 +3790,13 @@ app.post("/make-server-4808de5e/designer-login", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const ip = getClientIp(c);
-    const rl = checkRateLimit(ip, "default");
-    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    // Brute force protection
+    const lockout = checkLoginLockout(ip);
+    if (lockout.locked) {
+      securityLog("designer_login_lockout", "warn", ip, "/designer-login");
+      return c.json({ error: `Too many failed attempts. Try again in ${Math.ceil(lockout.remainingMs! / 60000)} minutes.` }, 429);
+    }
 
     const body = await c.req.json();
     const email = sanitizeString(body.email || "", 200).toLowerCase();
@@ -3597,7 +3808,8 @@ app.post("/make-server-4808de5e/designer-login", async (c) => {
     const anonSupabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!);
     const { data: signInData, error: signInError } = await anonSupabase.auth.signInWithPassword({ email, password });
     if (signInError || !signInData?.user) {
-      console.log(`Designer login failed for: ${email} — ${signInError?.message || "no user"}`);
+      recordFailedLogin(ip);
+      console.log(`Designer login failed for: [REDACTED] — ${signInError?.message || "no user"}`);
       return c.json({ error: "Invalid email or password" }, 401);
     }
 
@@ -3617,9 +3829,10 @@ app.post("/make-server-4808de5e/designer-login", async (c) => {
     if (!profile) return c.json({ error: "Designer profile not found" }, 404);
 
     const sessionToken = crypto.randomUUID();
-    await kv.set(`designer-session:${sessionToken}`, { slug: designerSlug, email, userId: signInData.user.id, createdAt: new Date().toISOString() });
+    await kv.set(`designer-session:${sessionToken}`, { slug: designerSlug, email, userId: signInData.user.id, createdAt: new Date().toISOString(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
 
-    console.log(`Designer logged in: ${designerSlug} (${email})`);
+    clearFailedLogins(ip);
+    console.log(`Designer logged in: ${designerSlug}`);
     return c.json({ success: true, token: sessionToken, slug: designerSlug, profile: { name: profile.name, logo: profile.logo } });
   } catch (err) {
     console.log("Unexpected error in POST /designer-login:", err);
@@ -3749,7 +3962,7 @@ app.post("/make-server-4808de5e/designer-inquiry/:slug", async (c) => {
     const inquiry = {
       id: crypto.randomUUID(),
       name: sanitizeString(body.name || "", 100),
-      email: sanitizeString(body.email || "", 200),
+      email: sanitizeString(body.email || "", 200).toLowerCase(),
       phone: sanitizeString(body.phone || "", 20),
       propertyType: body.propertyType || "",
       budget: body.budget || "",
@@ -3917,7 +4130,7 @@ app.post("/make-server-4808de5e/homeowner-signup", async (c) => {
 
     // Auto-login: create session token
     const sessionToken = crypto.randomUUID();
-    await kv.set(`homeowner-session:${sessionToken}`, { userId, email, createdAt: new Date().toISOString() });
+    await kv.set(`homeowner-session:${sessionToken}`, { userId, email, createdAt: new Date().toISOString(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
 
     securityLog("signup_success", "info", ip, "/homeowner-signup", { userId });
     return c.json({ success: true, token: sessionToken, userId, profile: { name, email } });
@@ -3983,7 +4196,7 @@ app.post("/make-server-4808de5e/homeowner-login", async (c) => {
     }
 
     const sessionToken = crypto.randomUUID();
-    await kv.set(`homeowner-session:${sessionToken}`, { userId, email, createdAt: new Date().toISOString() });
+    await kv.set(`homeowner-session:${sessionToken}`, { userId, email, createdAt: new Date().toISOString(), expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
 
     clearFailedLogins(ip);
     securityLog("login_success", "info", ip, "/homeowner-login", { userId });

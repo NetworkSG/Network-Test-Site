@@ -1,4 +1,5 @@
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
@@ -357,7 +358,7 @@ function ProgressBar({ step }: { step: number }) {
 
 export function GetMatchedForm() {
   const navigate = useNavigate();
-  const inquiry = new URLSearchParams(window.location.search).get("inquiry") || "";
+  const inquiry = sanitizeInput(new URLSearchParams(window.location.search).get("inquiry") || "", 500);
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [contact, setContact] = useState({
@@ -398,13 +399,13 @@ export function GetMatchedForm() {
         Authorization: `Bearer ${publicAnonKey}`,
       },
       body: JSON.stringify({
-        name: contact.name,
-        whatsapp: contact.whatsapp,
-        email: contact.email,
+        name: sanitizeInput(contact.name, 100),
+        whatsapp: sanitizeInput(contact.whatsapp, 20),
+        email: sanitizeEmail(contact.email),
         property_type: propertyType,
         timeline,
         budget,
-        inquiry: inquiry,
+        inquiry,
       }),
     });
 

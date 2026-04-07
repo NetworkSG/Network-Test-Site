@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router";
+import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { Navbar } from "./Navbar";
 import { DesignerProfileFooter } from "./DesignerProfileFooter";
 import { useDesignerData } from "./useDesignerData";
@@ -461,12 +462,12 @@ function QuoteCard() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
         body: JSON.stringify({
-          name: form.name.trim(),
-          phone: form.phone.trim(),
-          email: form.email.trim(),
+          name: sanitizeInput(form.name, 100),
+          phone: sanitizeInput(form.phone, 20),
+          email: sanitizeEmail(form.email),
           propertyType: form.propertyType,
           budget: form.budget,
-          message: form.message.trim(),
+          message: sanitizeInput(form.message, 2000),
           timeline: "",
         }),
       });

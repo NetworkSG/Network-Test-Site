@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
@@ -758,7 +759,6 @@ function StepThankYou({
         formData.append("Property Type", propertyType);
         formData.append("Renovation Budget", budget);
         formData.append("Key Date", timeline);
-        formData.append("Meeting Preference", meetingPreference);
         formData.append("Lead Form", "AI 3D Render");
         formData.append("Hook Id", quoteRequestId || "");
         formData.append("3D Render Image", imageUrl);
@@ -1042,9 +1042,9 @@ export function RenderToolForm() {
           timeline,
           budget,
           contact: {
-            name: contact.name,
-            whatsapp: contact.whatsapp,
-            email: contact.email,
+            name: sanitizeInput(contact.name, 100),
+            whatsapp: sanitizeInput(contact.whatsapp, 20),
+            email: sanitizeEmail(contact.email),
           },
         }),
       });

@@ -3,7 +3,8 @@ dist/
 .vite/
 *.local
 .env
-.env.*
+.env.local
+.env.*.local
 .claude/
 .DS_Store
 Thumbs.db
