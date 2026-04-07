@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { C, serif, sans, FadeIn, TagLabel } from "../primitives";
 import { HERO, QUALIFYING_QUESTIONS, COMPLETION, TESTIMONIALS } from "../../content";
 import type { FormState, LeadFormData } from "../../types";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
 
 import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.png";
 import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.png";
@@ -302,8 +303,8 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                   setFormState("complete");
                   heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   // Save lead to Supabase homepage_leads table
-                  const sbUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
-                  const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+                  const sbUrl = `https://${projectId}.supabase.co`;
+                  const sbKey = publicAnonKey;
                   fetch(`${sbUrl}/rest/v1/homepage_leads`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "apikey": sbKey, "Authorization": `Bearer ${sbKey}` },
