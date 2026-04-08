@@ -860,6 +860,10 @@ function LeadCaptureForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.name.trim() || !form.whatsapp.trim() || !form.email.trim() || !form.propertyType || !form.budget || !form.timeline || !form.hasDesigner) {
+      toast.error("Please fill in all fields before submitting.");
+      return;
+    }
     setLoading(true);
     try {
       const { error } = await supabase.from("handshake_leads").insert({
@@ -949,15 +953,15 @@ function LeadCaptureForm() {
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <FormField label="Full Name" value={form.name} onChange={(v: string) => setForm({ ...form, name: v })} placeholder="Your full name" required />
                     <FormField label="WhatsApp Number" value={form.whatsapp} onChange={(v: string) => setForm({ ...form, whatsapp: v })} placeholder="91234567" required />
-                    <FormField label="Email Address" value={form.email} onChange={(v: string) => setForm({ ...form, email: v })} placeholder="you@email.com" type="email" />
+                    <FormField label="Email Address" value={form.email} onChange={(v: string) => setForm({ ...form, email: v })} placeholder="you@email.com" type="email" required />
                     <FormSelect label="Property Type" value={form.propertyType} onChange={(v: string) => setForm({ ...form, propertyType: v })}
-                      options={["BTO", "HDB", "Condo", "Resale", "Landed"]} />
+                      options={["BTO", "HDB", "Condo", "Resale", "Landed"]} required />
                     <FormSelect label="Estimated Budget" value={form.budget} onChange={(v: string) => setForm({ ...form, budget: v })}
-                      options={["Under $30K", "$30K – $50K", "$50K – $100K", "$100K – $150K", "$150K+"]} />
+                      options={["Under $30K", "$30K – $50K", "$50K – $100K", "$100K – $150K", "$150K+"]} required />
                     <FormSelect label="When do you plan to start?" value={form.timeline} onChange={(v: string) => setForm({ ...form, timeline: v })}
-                      options={["Immediately", "1 – 3 months", "3 – 6 months", "6+ months", "Not sure yet"]} />
+                      options={["Immediately", "1 – 3 months", "3 – 6 months", "6+ months", "Not sure yet"]} required />
                     <FormSelect label="Have you found an Interior Designer?" value={form.hasDesigner} onChange={(v: string) => setForm({ ...form, hasDesigner: v })}
-                      options={["Yes", "No", "Still looking"]} />
+                      options={["Yes", "No", "Still looking"]} required />
 
                     <button type="submit" disabled={loading}
                       className="w-full py-4 bg-white text-[#0f0f0d] text-[15px] font-semibold hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer mt-2"
@@ -1034,12 +1038,12 @@ function FormField({ label, value, onChange, placeholder, type = "text", require
   );
 }
 
-function FormSelect({ label, value, onChange, options }: any) {
+function FormSelect({ label, value, onChange, options, required }: any) {
   return (
     <div>
-      <label className="block text-[13px] font-medium text-white/50 mb-1.5">{label}</label>
+      <label className="block text-[13px] font-medium text-white/50 mb-1.5">{label}{required && <span className="text-[#FFA929] ml-0.5">*</span>}</label>
       <div className="relative">
-        <select value={value} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
+        <select value={value} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)} required={required}
           className="w-full h-[46px] px-4 bg-white/[0.06] border border-white/[0.08] text-[14px] text-white outline-none focus:border-white/30 transition-colors appearance-none cursor-pointer"
           style={{ borderRadius: 10 }}
         >
