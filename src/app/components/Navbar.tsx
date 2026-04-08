@@ -194,14 +194,14 @@ export function Navbar() {
                   ref={dropdownRef}
                   onMouseEnter={handleMouseEnter}
                   onMouseLeave={handleMouseLeave}
-                  className="fixed top-[75px] left-1/2 -translate-x-1/2 pt-2 z-50 w-[965px]"
+                  className="fixed top-[75px] left-1/2 -translate-x-1/2 pt-2 z-50 w-[1120px]"
                   initial={{ opacity: 0, y: -8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -8, scale: 0.98 }}
                   transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
                 >
                   <motion.div
-                    className="bg-white rounded-[20px] shadow-[0px_20px_60px_-10px_rgba(0,0,0,0.15)] border border-[#f0f0f0] px-4 py-4 flex gap-5 items-stretch w-[965px] h-[256px]"
+                    className="bg-white rounded-[20px] shadow-[0px_20px_60px_-10px_rgba(0,0,0,0.15)] border border-[#f0f0f0] px-4 py-4 flex gap-5 items-stretch w-[1120px] h-[256px]"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: 0.05 }}
@@ -256,6 +256,48 @@ export function Navbar() {
                           </h4>
                           <p className="font-['Inter',sans-serif] text-[12px] text-white/75 leading-[1.45]">
                             Get an instant breakdown of what your budget
+                          </p>
+                        </div>
+                      </Link>
+
+                      {/* Style Quiz */}
+                      <Link
+                        to="/style-quiz"
+                        className="group relative flex-1 rounded-[14px] overflow-hidden h-full block"
+                      >
+                        <ImageWithFallback
+                          src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080"
+                          alt="Style Quiz"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/25 to-transparent" />
+                        <div className="absolute bottom-5 left-5 right-5">
+                          <h4 className="font-['Inter',sans-serif] font-semibold text-[14px] text-white leading-[1.3] mb-1">
+                            Style Quiz
+                          </h4>
+                          <p className="font-['Inter',sans-serif] text-[12px] text-white/75 leading-[1.45]">
+                            Discover your Design DNA in 2 minutes.
+                          </p>
+                        </div>
+                      </Link>
+
+                      {/* Mood Board */}
+                      <Link
+                        to="/mood-board"
+                        className="group relative flex-1 rounded-[14px] overflow-hidden h-full block"
+                      >
+                        <ImageWithFallback
+                          src="https://images.unsplash.com/photo-1586023492125-27b2c045efd7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080"
+                          alt="Mood Board"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/25 to-transparent" />
+                        <div className="absolute bottom-5 left-5 right-5">
+                          <h4 className="font-['Inter',sans-serif] font-semibold text-[14px] text-white leading-[1.3] mb-1">
+                            Mood Board
+                          </h4>
+                          <p className="font-['Inter',sans-serif] text-[12px] text-white/75 leading-[1.45]">
+                            Collect and share your renovation inspiration.
                           </p>
                         </div>
                       </Link>
@@ -414,6 +456,18 @@ export function Navbar() {
                 className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
               >
                 Renovation Cost Guide <ArrowRight size={16} className="text-[#9ca3af]" />
+              </button>
+              <button
+                onClick={() => { setMobileMenuOpen(false); navigate("/style-quiz"); }}
+                className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
+              >
+                Style Quiz <ArrowRight size={16} className="text-[#9ca3af]" />
+              </button>
+              <button
+                onClick={() => { setMobileMenuOpen(false); navigate("/mood-board"); }}
+                className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
+              >
+                Mood Board <ArrowRight size={16} className="text-[#9ca3af]" />
               </button>
             </div>
 

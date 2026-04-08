@@ -17,6 +17,11 @@ import { DesignerDashboard } from "./components/DesignerDashboard";
 import { HomeownerDashboard } from "./components/HomeownerDashboard";
 import { ExplorePage } from "./components/ExplorePage";
 import { HandshakeLanding } from "./components/HandshakeLanding";
+import { StyleQuizLanding } from "./components/style-quiz/StyleQuizLanding";
+import { StyleQuizPage } from "./components/style-quiz/StyleQuizPage";
+import { MoodBoardLanding } from "./components/mood-board/MoodBoardLanding";
+import { MoodBoardGate } from "./components/mood-board/MoodBoardGate";
+import { MoodBoardPage } from "./components/mood-board/MoodBoardPage";
 
 const LazyFloorPlan3DEditor = lazy(() =>
   import("./components/FloorPlan3DEditor").then((m) => ({ default: m.FloorPlan3DEditor }))
@@ -97,5 +102,10 @@ export const router = createBrowserRouter([
   { path: "/profile", Component: HomeownerDashboard },
   { path: "/explore", Component: ExplorePage },
   { path: "/networkxhandshake", Component: HandshakeLanding },
+  { path: "/style-quiz", Component: StyleQuizLanding },
+  { path: "/style-quiz/start", Component: StyleQuizPage },
+  { path: "/mood-board", Component: MoodBoardLanding },
+  { path: "/mood-board/create", Component: MoodBoardGate },
+  { path: "/mood-board/create/:boardId", Component: MoodBoardPage },
   ]},
 ]);
