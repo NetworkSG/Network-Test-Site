@@ -729,6 +729,7 @@ function StepContact({
           </label>
           <input
             type="text"
+            required
             placeholder="Your name"
             value={data.name}
             onChange={(e) => onChange("name", e.target.value)}
@@ -745,6 +746,7 @@ function StepContact({
             type="text"
             inputMode="numeric"
             maxLength={8}
+            required
             placeholder="8-digit number"
             value={data.whatsapp}
             onChange={(e) => {
@@ -771,6 +773,7 @@ function StepContact({
           </label>
           <input
             type="email"
+            required
             placeholder="you@example.com"
             value={data.email}
             onChange={(e) => onChange("email", e.target.value)}

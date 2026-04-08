@@ -250,7 +250,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                         <div>
                           <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Email</label>
                           <div className="relative">
-                            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                            <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
                               onBlur={() => setTouched(t => ({ ...t, email: true }))}
                               placeholder="you@email.com" autoComplete="email"
                               className="w-full h-[48px] px-4 pr-10 text-[14px] font-normal focus-visible:outline-none transition-all"

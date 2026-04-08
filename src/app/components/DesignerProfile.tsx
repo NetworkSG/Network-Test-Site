@@ -506,15 +506,15 @@ function QuoteCard() {
       <div className="space-y-4">
         <div>
           <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Full Name</label>
-          <input type="text" placeholder="e.g. Jing Wei Tan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} />
+          <input type="text" required placeholder="e.g. Jing Wei Tan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} />
         </div>
         <div>
           <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Contact Number</label>
-          <input type="tel" placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+          <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
         </div>
         <div>
           <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
-          <select value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
+          <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
             <option value="">Select Property Type</option>
             <option value="HDB">HDB</option>
             <option value="Condo">Condo</option>
@@ -524,7 +524,7 @@ function QuoteCard() {
         </div>
         <div>
           <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
-          <select value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
+          <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
             <option value="">Select Budget Range</option>
             <option value="Below $30,000">Below $30,000</option>
             <option value="$30,000 – $50,000">$30,000 – $50,000</option>

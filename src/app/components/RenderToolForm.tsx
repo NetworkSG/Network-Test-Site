@@ -135,6 +135,7 @@ function StepContact({
         <div className="flex flex-col gap-4">
           <input
             type="text"
+            required
             placeholder="Full Name"
             value={data.name}
             onChange={(e) => onChange("name", e.target.value)}
@@ -145,6 +146,7 @@ function StepContact({
               type="text"
               inputMode="numeric"
               maxLength={8}
+              required
               placeholder="WhatsApp Number"
               value={data.whatsapp}
               onChange={(e) => {
@@ -168,6 +170,7 @@ function StepContact({
           <div className="relative">
             <input
               type="email"
+              required
               placeholder="Email"
               value={data.email}
               onChange={(e) => onChange("email", e.target.value)}

@@ -42,7 +42,7 @@ export function HomepageV8() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.phone.trim() || isSubmitting) return;
+    if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || isSubmitting) return;
     setIsSubmitting(true);
     setTimeout(() => { setIsSubmitting(false); setFormState("qualifying"); }, 600);
   };

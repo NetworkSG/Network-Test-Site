@@ -169,7 +169,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               {mode === "signup" && (
                 <div>
                   <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Name</label>
-                  <input value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="Your full name"
+                  <input required value={form.name} onChange={(e) => upd("name", e.target.value)} placeholder="Your full name"
                     onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleSignup(); }}
                     className="w-full h-[48px] px-4 text-[14px] font-normal focus-visible:outline-none" style={inputStyle} />
                 </div>
@@ -177,7 +177,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
 
               <div>
                 <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Email</label>
-                <input type="email" value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="you@example.com"
+                <input type="email" required value={form.email} onChange={(e) => upd("email", e.target.value)} placeholder="you@example.com"
                   onKeyDown={(e) => { if (e.key === 'Enter' && !loading) { mode === "signup" ? handleSignup() : handleLogin(); } }}
                   className="w-full h-[48px] px-4 text-[14px] font-normal focus-visible:outline-none" style={inputStyle} />
               </div>
@@ -185,7 +185,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               {mode === "signup" && (
                 <div>
                   <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Contact Number</label>
-                  <input type="tel" value={form.contactNumber} onChange={(e) => upd("contactNumber", e.target.value)} placeholder="91234567"
+                  <input type="tel" required value={form.contactNumber} onChange={(e) => upd("contactNumber", e.target.value)} placeholder="91234567"
                     onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleSignup(); }}
                     className="w-full h-[48px] px-4 text-[14px] font-normal focus-visible:outline-none" style={inputStyle} />
                 </div>
@@ -194,7 +194,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
               <div>
                 <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Password</label>
                 <div className="relative">
-                  <input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => upd("password", e.target.value)} placeholder="Min 6 characters"
+                  <input type={showPw ? "text" : "password"} required value={form.password} onChange={(e) => upd("password", e.target.value)} placeholder="Min 6 characters"
                     onKeyDown={(e) => { if (e.key === 'Enter' && !loading) { mode === "signup" ? handleSignup() : handleLogin(); } }}
                     className="w-full h-[48px] px-4 pr-12 text-[14px] font-normal focus-visible:outline-none" style={inputStyle} />
                   <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer">
@@ -208,7 +208,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                   <div>
                     <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Key Collection Period</label>
                     <div className="relative">
-                      <select value={form.keyCollectionPeriod} onChange={(e) => upd("keyCollectionPeriod", e.target.value)}
+                      <select required value={form.keyCollectionPeriod} onChange={(e) => upd("keyCollectionPeriod", e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleSignup(); }}
                         className="w-full h-[48px] px-4 pr-10 text-[14px] font-normal focus-visible:outline-none appearance-none" style={inputStyle}>
                         <option value="">Select period</option>
