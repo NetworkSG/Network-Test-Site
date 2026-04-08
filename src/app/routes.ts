@@ -20,6 +20,11 @@ const LazyDesignerDashboard = lazy(() => import("./components/DesignerDashboard"
 const LazyHomeownerDashboard = lazy(() => import("./components/HomeownerDashboard").then((m) => ({ default: m.HomeownerDashboard })));
 const LazyExplorePage = lazy(() => import("./components/ExplorePage").then((m) => ({ default: m.ExplorePage })));
 const LazyHandshakeLanding = lazy(() => import("./components/HandshakeLanding").then((m) => ({ default: m.HandshakeLanding })));
+const LazyStyleQuizLanding = lazy(() => import("./components/style-quiz/StyleQuizLanding").then((m) => ({ default: m.StyleQuizLanding })));
+const LazyStyleQuizPage = lazy(() => import("./components/style-quiz/StyleQuizPage").then((m) => ({ default: m.StyleQuizPage })));
+const LazyMoodBoardLanding = lazy(() => import("./components/mood-board/MoodBoardLanding").then((m) => ({ default: m.MoodBoardLanding })));
+const LazyMoodBoardGate = lazy(() => import("./components/mood-board/MoodBoardGate").then((m) => ({ default: m.MoodBoardGate })));
+const LazyMoodBoardPage = lazy(() => import("./components/mood-board/MoodBoardPage").then((m) => ({ default: m.MoodBoardPage })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -96,5 +101,10 @@ export const router = createBrowserRouter([
   { path: "/profile", element: createElement(LazyRoute, { component: LazyHomeownerDashboard }) },
   { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
   { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
+  { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
+  { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
+  { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },
+  { path: "/mood-board/create", element: createElement(LazyRoute, { component: LazyMoodBoardGate }) },
+  { path: "/mood-board/create/:boardId", element: createElement(LazyRoute, { component: LazyMoodBoardPage }) },
   ]},
 ]);

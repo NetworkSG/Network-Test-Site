@@ -558,7 +558,7 @@ function FooterNav() {
               WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
             }} />
             <div className="flex items-center gap-6">
-              {[{ label: "Home", href: "/" }, { label: "3D Render", href: "/render-tool" }, { label: "Floor Layout Planner", href: "/floorplan3d" }, { label: "Cost Guide", href: "/cost-guide" }, { label: "Handshake", href: "/networkxhandshake" }].map((link) => (
+              {[{ label: "Home", href: "/" }, { label: "3D Render", href: "/render-tool" }, { label: "Floor Layout Planner", href: "/floorplan3d" }, { label: "Cost Guide", href: "/cost-guide" }, { label: "Style Quiz", href: "/style-quiz" }, { label: "Mood Board", href: "/mood-board" }, { label: "Handshake", href: "/networkxhandshake" }].map((link) => (
                 <a key={link.label} href={link.href}
                   className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
                   style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}>{link.label}</a>
@@ -617,6 +617,8 @@ export function FloorPlan3DLanding() {
             <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>3D Render</a>
             <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Floor Layout Planner</a>
             <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
+            <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Style Quiz</a>
+            <a href="/mood-board" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Mood Board</a>
             <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Handshake</a>
           </div>
           {/* Desktop CTA */}
@@ -657,6 +659,8 @@ export function FloorPlan3DLanding() {
                 <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>3D Render</a>
                 <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Floor Layout Planner</a>
                 <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
+                <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Style Quiz</a>
+                <a href="/mood-board" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Mood Board</a>
                 <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Handshake</a>
                 <button
                   onClick={() => { setMobileMenuOpen(false); openSignup(); }}

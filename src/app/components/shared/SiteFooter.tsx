@@ -8,6 +8,8 @@ const FOOTER_LINKS = [
   { label: "3D Render", href: "/render-tool" },
   { label: "Floor Layout Planner", href: "/floorplan3d" },
   { label: "Cost Guide", href: "/cost-guide" },
+  { label: "Style Quiz", href: "/style-quiz" },
+  { label: "Mood Board", href: "/mood-board" },
   { label: "Handshake", href: "/networkxhandshake" },
 ]
 
