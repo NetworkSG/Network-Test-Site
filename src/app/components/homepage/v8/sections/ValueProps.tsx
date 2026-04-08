@@ -1,9 +1,9 @@
 import { C, serif, sans, FadeIn, TagLabel, SectionCTA } from "../primitives";
 import { VALUE_PROPS } from "../../content";
 const photos = [
-  "/r2.jpeg",  // Verified quality — dining/living interior
-  "/r5.jpeg",  // Matched within the day — modern kitchen
-  "/r3.jpeg",  // Zero risk — green kitchen with dining
+  "/r2.webp",  // Verified quality — dining/living interior
+  "/r5.webp",  // Matched within the day — modern kitchen
+  "/r3.webp",  // Zero risk — green kitchen with dining
 ];
 
 export function ValueProps({ scrollToForm }: { scrollToForm: () => void }) {
@@ -35,6 +35,7 @@ export function ValueProps({ scrollToForm }: { scrollToForm: () => void }) {
                       alt={prop.label}
                       className="w-full h-[320px] md:h-[400px] object-cover"
                       style={{ borderRadius: "12px" }}
+                      loading="lazy"
                     />
                   </div>
 

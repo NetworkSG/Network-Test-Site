@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "motion/react";
 import { supabase } from "./supabaseClient";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
-const imgHandshakeLogo = "/handshake-logo.png";
+const imgHandshakeLogo = "/handshake-logo.webp";
 import { ReactLenis } from "lenis/react";
 import {
   Shield, CreditCard, Eye, MessageSquare, Check,
@@ -108,8 +108,6 @@ function HandshakeNavbar() {
           <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>3D Render</a>
           <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Floor Layout Planner</a>
           <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Cost Guide</a>
-          <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Style Quiz</a>
-          <a href="/mood-board" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Mood Board</a>
           <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: "#6b6860", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>Handshake</a>
         </div>
 
@@ -152,8 +150,6 @@ function HandshakeNavbar() {
               <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>3D Render</a>
               <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Floor Layout Planner</a>
               <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Cost Guide</a>
-              <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Style Quiz</a>
-              <a href="/mood-board" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Mood Board</a>
               <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}>Handshake</a>
               <a href="#get-started" onClick={() => setMobileMenuOpen(false)}
                 className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer flex items-center justify-center hover:opacity-85 active:scale-[0.98]"
@@ -240,7 +236,7 @@ function HeroSection() {
         <FadeIn delay={0.35}>
           <motion.div className="mt-16 relative overflow-hidden mx-auto max-w-[1100px]" style={{ borderRadius: 24, y: imgY }}>
             <motion.img
-              src="/11284.jpg"
+              src="/11284.webp"
               alt="Beautiful renovated interior"
               className="w-full h-[300px] md:h-[500px] object-cover will-change-transform"
               style={{ scale: imgScale }}
@@ -352,7 +348,7 @@ function ProblemSolutionSection() {
           <FadeIn delay={0.1} className="md:row-span-2">
             <div className="h-full overflow-hidden" style={{ borderRadius: 18 }}>
               <img
-                src="/2148908401.jpg"
+                src="/2148908401.webp"
                 alt="Modern renovation interior"
                 className="w-full h-full object-cover"
               />

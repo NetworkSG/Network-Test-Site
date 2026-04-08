@@ -17,9 +17,9 @@ import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH_H = { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" };
 
-const IMG_HERO = "/r6.jpeg";
-const IMG_STEP1 = "/r4.jpeg";
-const IMG_STEP2 = "/r1.jpeg";
+const IMG_HERO = "/r6.webp";
+const IMG_STEP1 = "/r4.webp";
+const IMG_STEP2 = "/r1.webp";
 
 const KEY_PERIODS = ["Keys Collected", "Within 3 months", "3-6 months", "6-12 months", "More than 12 months"];
 
@@ -558,7 +558,7 @@ function FooterNav() {
               WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
             }} />
             <div className="flex items-center gap-6">
-              {[{ label: "Get matched", href: "/" }, { label: "Find your design style", href: "/explore" }, { label: "Cost guide", href: "/cost-guide" }].map((link) => (
+              {[{ label: "Home", href: "/" }, { label: "3D Render", href: "/render-tool" }, { label: "Floor Layout Planner", href: "/floorplan3d" }, { label: "Cost Guide", href: "/cost-guide" }, { label: "Handshake", href: "/networkxhandshake" }].map((link) => (
                 <a key={link.label} href={link.href}
                   className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
                   style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}>{link.label}</a>
@@ -566,7 +566,7 @@ function FooterNav() {
             </div>
           </div>
           <span className="text-[12px] font-normal" style={{ color: C.grayLight, fontFamily: sans }}>
-            &copy; {new Date().getFullYear()} Network. All rights reserved.
+            Copyright &copy; 2026. All rights reserved.
           </span>
         </div>
       </div>
@@ -613,11 +613,10 @@ export function FloorPlan3DLanding() {
           }} />
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-8">
+            <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Home</a>
             <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>3D Render</a>
             <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Floor Layout Planner</a>
             <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
-            <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Style Quiz</a>
-            <a href="/mood-board" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Mood Board</a>
             <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Handshake</a>
           </div>
           {/* Desktop CTA */}
@@ -654,11 +653,10 @@ export function FloorPlan3DLanding() {
               style={{ background: C.cream, borderBottom: `1px solid ${C.creamBorder}` }}
             >
               <div className="px-6 py-4 flex flex-col gap-1">
+                <a href="/" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Home</a>
                 <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>3D Render</a>
                 <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Floor Layout Planner</a>
                 <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
-                <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Style Quiz</a>
-                <a href="/mood-board" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Mood Board</a>
                 <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Handshake</a>
                 <button
                   onClick={() => { setMobileMenuOpen(false); openSignup(); }}

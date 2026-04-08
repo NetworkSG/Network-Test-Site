@@ -11,7 +11,7 @@ const tools = [
     cta: "Create My Render",
     href: "/render-tool",
     time: "5 minutes • Free signup",
-    image: "/inter2.png",
+    image: "/inter2.webp",
   },
   {
     title: "Renovation Cost Guide",
@@ -20,7 +20,7 @@ const tools = [
     cta: "Calculate My Budget",
     href: "/cost-guide",
     time: "2 minutes • Free signup",
-    image: "/new interor 2.png",
+    image: "/new interor 2.webp",
   },
   {
     title: "Floor Layout Planner",
@@ -38,7 +38,7 @@ const tools = [
     cta: "Protect My Payments",
     href: "/networkxhandshake",
     time: "3 minutes • Free signup",
-    image: "/r6.jpeg",
+    image: "/r6.webp",
   },
 ];
 
@@ -74,7 +74,7 @@ export function FreeTools() {
               <div className="relative group cursor-pointer isolate" style={{ minHeight: 520 }}>
                 {/* Ambient glow on hover */}
                 <div className="absolute -inset-[40px] z-0 opacity-0 group-hover:opacity-30 transition-opacity duration-700 pointer-events-none hidden md:block">
-                  <img src={tool.image} alt="" className="size-full object-cover blur-[60px] scale-110 saturate-150 brightness-110" />
+                  <img src={tool.image} alt="" className="size-full object-cover blur-[60px] scale-110 saturate-150 brightness-110" loading="lazy" />
                 </div>
 
                 <div className="relative z-10 size-full bg-[#09090b] overflow-hidden" style={{ borderRadius: 20 }}>
@@ -84,6 +84,7 @@ export function FreeTools() {
                       alt=""
                       className="size-full object-cover scale-125 opacity-65 transition-transform duration-700 group-hover:scale-[1.35]"
                       src={tool.image}
+                      loading="lazy"
                     />
                     {/* Subtle darken overlay */}
                     <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-opacity duration-500" />

@@ -32,6 +32,18 @@ export default defineConfig({
 
   build: {
     chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router'],
+          'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
+          'vendor-mui': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-motion': ['motion'],
+          'vendor-recharts': ['recharts'],
+        },
+      },
+    },
   },
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.

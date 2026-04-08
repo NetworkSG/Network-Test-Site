@@ -1,31 +1,32 @@
 import { createBrowserRouter, Outlet, useLocation } from "react-router";
 import { lazy, Suspense, createElement, useEffect, useRef, useState } from "react";
 import { useVisitorHeartbeat } from "./hooks/useVisitorHeartbeat";
-import { HomePage } from "./components/HomePage";
 import { HomepageV8 } from "./components/homepage/v8/HomepageV8";
-import { GetMatchedForm } from "./components/GetMatchedForm";
-import { RenderToolForm } from "./components/RenderToolForm";
-import { DesignerProfile } from "./components/DesignerProfile";
-import { AdminDashboard } from "./components/AdminDashboard";
 import { AdminGuard } from "./components/AdminGuard";
-import { CostGuide } from "./components/CostGuide";
-import { DesignersDirectory } from "./components/DesignersDirectory";
-import { FloorPlan3DLanding } from "./components/FloorPlan3DLanding";
-import { FloorPlan3DDashboard } from "./components/FloorPlan3DDashboard";
-import { ProjectPage } from "./components/ProjectPage";
-import { DesignerDashboard } from "./components/DesignerDashboard";
-import { HomeownerDashboard } from "./components/HomeownerDashboard";
-import { ExplorePage } from "./components/ExplorePage";
-import { HandshakeLanding } from "./components/HandshakeLanding";
-import { StyleQuizLanding } from "./components/style-quiz/StyleQuizLanding";
-import { StyleQuizPage } from "./components/style-quiz/StyleQuizPage";
-import { MoodBoardLanding } from "./components/mood-board/MoodBoardLanding";
-import { MoodBoardGate } from "./components/mood-board/MoodBoardGate";
-import { MoodBoardPage } from "./components/mood-board/MoodBoardPage";
 
-const LazyFloorPlan3DEditor = lazy(() =>
-  import("./components/FloorPlan3DEditor").then((m) => ({ default: m.FloorPlan3DEditor }))
-);
+// ── Lazy-loaded routes (code-split per page) ──────────────────────
+const LazyHomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
+const LazyGetMatchedForm = lazy(() => import("./components/GetMatchedForm").then((m) => ({ default: m.GetMatchedForm })));
+const LazyRenderToolForm = lazy(() => import("./components/RenderToolForm").then((m) => ({ default: m.RenderToolForm })));
+const LazyDesignerProfile = lazy(() => import("./components/DesignerProfile").then((m) => ({ default: m.DesignerProfile })));
+const LazyAdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
+const LazyCostGuide = lazy(() => import("./components/CostGuide").then((m) => ({ default: m.CostGuide })));
+const LazyDesignersDirectory = lazy(() => import("./components/DesignersDirectory").then((m) => ({ default: m.DesignersDirectory })));
+const LazyFloorPlan3DLanding = lazy(() => import("./components/FloorPlan3DLanding").then((m) => ({ default: m.FloorPlan3DLanding })));
+const LazyFloorPlan3DDashboard = lazy(() => import("./components/FloorPlan3DDashboard").then((m) => ({ default: m.FloorPlan3DDashboard })));
+const LazyFloorPlan3DEditor = lazy(() => import("./components/FloorPlan3DEditor").then((m) => ({ default: m.FloorPlan3DEditor })));
+const LazyProjectPage = lazy(() => import("./components/ProjectPage").then((m) => ({ default: m.ProjectPage })));
+const LazyDesignerDashboard = lazy(() => import("./components/DesignerDashboard").then((m) => ({ default: m.DesignerDashboard })));
+const LazyHomeownerDashboard = lazy(() => import("./components/HomeownerDashboard").then((m) => ({ default: m.HomeownerDashboard })));
+const LazyExplorePage = lazy(() => import("./components/ExplorePage").then((m) => ({ default: m.ExplorePage })));
+const LazyHandshakeLanding = lazy(() => import("./components/HandshakeLanding").then((m) => ({ default: m.HandshakeLanding })));
+
+
+// ── Shared loading fallback ───────────────────────────────────────
+const pageFallback = createElement("div", {
+  className: "min-h-screen flex items-center justify-center",
+  style: { background: "#f0ede6" },
+}, createElement("div", { className: "w-8 h-8 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" }));
 
 const editorFallback = createElement("div", { className: "h-screen w-screen flex items-center justify-center bg-[#C5CDD5] font-['Inter',sans-serif]" },
   createElement("div", { className: "text-center" },
@@ -34,26 +35,24 @@ const editorFallback = createElement("div", { className: "h-screen w-screen flex
   )
 );
 
+// ── Suspense wrappers ─────────────────────────────────────────────
+function LazyRoute({ component }: { component: React.LazyExoticComponent<React.ComponentType<any>> }) {
+  return createElement(Suspense, { fallback: pageFallback }, createElement(component));
+}
+
 function EditorWrapper() {
-  return createElement(
-    Suspense,
-    { fallback: editorFallback },
-    createElement(LazyFloorPlan3DEditor)
-  );
+  return createElement(Suspense, { fallback: editorFallback }, createElement(LazyFloorPlan3DEditor));
 }
 
 function TemplateEditorWrapper() {
   return createElement(
     AdminGuard,
     null,
-    createElement(
-      Suspense,
-      { fallback: editorFallback },
-      createElement(LazyFloorPlan3DEditor, { mode: "template" })
-    )
+    createElement(Suspense, { fallback: editorFallback }, createElement(LazyFloorPlan3DEditor, { mode: "template" }))
   );
 }
 
+// ── Root layout ───────────────────────────────────────────────────
 function RootLayout() {
   useVisitorHeartbeat();
   const location = useLocation();
@@ -71,41 +70,32 @@ function RootLayout() {
 
   return createElement(
     "div",
-    {
-      key: location.pathname,
-      style: {
-        animation: "pageFadeIn 0.3s ease-out forwards",
-      },
-    },
+    { key: location.pathname, style: { animation: "pageFadeIn 0.3s ease-out forwards" } },
     createElement(Outlet)
   );
 }
 
+// ── Router ────────────────────────────────────────────────────────
 export const router = createBrowserRouter([
   { Component: RootLayout, children: [
   { path: "/", Component: HomepageV8 },
-  { path: "/old-homepage", Component: HomePage },
-  { path: "/get-matched", Component: GetMatchedForm },
-  { path: "/render-tool", Component: RenderToolForm },
-  { path: "/cost-guide", Component: CostGuide },
-  { path: "/designers", Component: DesignersDirectory },
-  { path: "/designer/:slug", Component: DesignerProfile },
-  { path: "/designer/:slug/project/:projectId", Component: ProjectPage },
-  { path: "/admin", Component: AdminDashboard },
+  { path: "/old-homepage", element: createElement(LazyRoute, { component: LazyHomePage }) },
+  { path: "/get-matched", element: createElement(LazyRoute, { component: LazyGetMatchedForm }) },
+  { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderToolForm }) },
+  { path: "/cost-guide", element: createElement(LazyRoute, { component: LazyCostGuide }) },
+  { path: "/designers", element: createElement(LazyRoute, { component: LazyDesignersDirectory }) },
+  { path: "/designer/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfile }) },
+  { path: "/designer/:slug/project/:projectId", element: createElement(LazyRoute, { component: LazyProjectPage }) },
+  { path: "/admin", element: createElement(LazyRoute, { component: LazyAdminDashboard }) },
   { path: "/admin/template-editor", Component: TemplateEditorWrapper },
   { path: "/admin/template-editor/:templateId", Component: TemplateEditorWrapper },
-  { path: "/floorplan3d", Component: FloorPlan3DLanding },
-  { path: "/floorplan3d/dashboard", Component: FloorPlan3DDashboard },
+  { path: "/floorplan3d", element: createElement(LazyRoute, { component: LazyFloorPlan3DLanding }) },
+  { path: "/floorplan3d/dashboard", element: createElement(LazyRoute, { component: LazyFloorPlan3DDashboard }) },
   { path: "/floorplan3d/editor", Component: EditorWrapper },
   { path: "/floorplan3d/editor/:projectId", Component: EditorWrapper },
-  { path: "/designer-dashboard", Component: DesignerDashboard },
-  { path: "/profile", Component: HomeownerDashboard },
-  { path: "/explore", Component: ExplorePage },
-  { path: "/networkxhandshake", Component: HandshakeLanding },
-  { path: "/style-quiz", Component: StyleQuizLanding },
-  { path: "/style-quiz/start", Component: StyleQuizPage },
-  { path: "/mood-board", Component: MoodBoardLanding },
-  { path: "/mood-board/create", Component: MoodBoardGate },
-  { path: "/mood-board/create/:boardId", Component: MoodBoardPage },
+  { path: "/designer-dashboard", element: createElement(LazyRoute, { component: LazyDesignerDashboard }) },
+  { path: "/profile", element: createElement(LazyRoute, { component: LazyHomeownerDashboard }) },
+  { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
+  { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
   ]},
 ]);

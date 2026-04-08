@@ -89,12 +89,12 @@ const TOTAL_STEPS = 9;
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 const STYLE_IMAGES: Record<string, string> = {
-  Modern: "/r1.jpeg",
-  Japandi: "/r2.jpeg",
-  Scandinavian: "/r3.jpeg",
-  "Wabi-sabi": "/r4.jpeg",
-  Minimalist: "/r5.jpeg",
-  Industrial: "/r6.jpeg",
+  Modern: "/r1.webp",
+  Japandi: "/r2.webp",
+  Scandinavian: "/r3.webp",
+  "Wabi-sabi": "/r4.webp",
+  Minimalist: "/r5.webp",
+  Industrial: "/r6.webp",
 };
 
 // Step 1: Contact Details
