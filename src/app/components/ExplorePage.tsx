@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
-import { Heart, Search, X, Check, SlidersHorizontal, Palette, Building2, DollarSign } from "lucide-react";
+import { Heart, Search, X, Check, SlidersHorizontal, Palette, Building2, DollarSign, Bookmark, Plus, CheckCircle } from "lucide-react";
+import { useMoodBoardList } from "@/app/hooks/useMoodBoardList";
+import { useAuth } from "@/app/hooks/useAuth";
+import type { MoodBoard, BoardPin } from "@/app/utils/mood-board-types";
+import { useColorExtractor } from "@/app/hooks/useColorExtractor";
+import { uploadImageFromUrl } from "@/app/utils/mood-board-storage";
+import { supabase } from "@/app/components/supabaseClient";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
 /* ═══ Design Tokens (from GUIDELINES.md) ═══ */
@@ -83,6 +89,11 @@ export function ExplorePage() {
   const [activeStyles, setActiveStyles] = useState<Set<string>>(new Set());
   const [activePropTypes, setActivePropTypes] = useState<Set<string>>(new Set());
   const [activeBudgets, setActiveBudgets] = useState<Set<string>>(new Set());
+  const [showBoardPicker, setShowBoardPicker] = useState(false);
+  const [pinnedToBoard, setPinnedToBoard] = useState<string | null>(null);
+  const { boards, createBoard, updateBoardSummary } = useMoodBoardList();
+  const { extract } = useColorExtractor();
+  const { user, isLoggedIn } = useAuth();
   const hasFilters = activeStyles.size > 0 || activePropTypes.size > 0 || activeBudgets.size > 0 || searchQuery.length > 0;
 
   // Try loading real data in background (only replace samples if real data has valid images)
@@ -133,6 +144,58 @@ export function ExplorePage() {
       setSavedIds(prev => { const n = new Set(prev); was ? n.add(id) : n.delete(id); return n; });
     }
   }, [savedIds, navigate]);
+
+  const pinToBoard = useCallback(async (boardId: string) => {
+    if (!modalProject) return;
+    const key = `network-mood-board-${boardId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const board: MoodBoard = JSON.parse(raw);
+
+    // Upload image to Supabase Storage if logged in
+    let imageUrl = modalProject.image;
+    if (isLoggedIn && user) {
+      const { url: storageUrl } = await uploadImageFromUrl(imageUrl, user.email);
+      if (storageUrl) imageUrl = storageUrl;
+    }
+
+    const colors = await extract(imageUrl);
+    const pin: BoardPin = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      type: 'image',
+      imageUrl,
+      colors,
+      label: modalProject.title || '',
+      createdAt: Date.now(),
+    };
+    board.pins.push(pin);
+    board.updatedAt = Date.now();
+    localStorage.setItem(key, JSON.stringify(board));
+    updateBoardSummary(board);
+
+    // Sync to Supabase immediately
+    if (isLoggedIn && user) {
+      supabase.from('mood_boards').upsert({
+        id: board.id,
+        user_id: user.email,
+        name: board.name,
+        pins: board.pins,
+        extracted_palette: [...new Set(board.pins.flatMap(p => p.colors))],
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    setPinnedToBoard(boardId);
+    setTimeout(() => { setPinnedToBoard(null); setShowBoardPicker(false); }, 1200);
+  }, [modalProject, extract, updateBoardSummary, isLoggedIn, user]);
+
+  const pinToNewBoard = useCallback(async () => {
+    if (!modalProject) return;
+    const id = createBoard();
+    // Small delay to ensure localStorage is written
+    await new Promise(r => setTimeout(r, 50));
+    await pinToBoard(id);
+  }, [modalProject, createBoard, pinToBoard]);
 
   const toggle = (s: Set<string>, fn: (v: Set<string>) => void, v: string) => {
     const n = new Set(s); n.has(v) ? n.delete(v) : n.add(v); fn(n);
@@ -255,7 +318,7 @@ export function ExplorePage() {
       {modalProject && createPortal(
         <div ref={modalRef} className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
           style={{ background: "rgba(15,15,13,0.5)", backdropFilter: "blur(4px)", fontFamily: sans }}
-          onClick={e => { if (e.target === e.currentTarget) setModalProject(null); }}>
+          onClick={e => { if (e.target === e.currentTarget) { setModalProject(null); setShowBoardPicker(false); } }}>
           <div className="w-[98%] max-w-[1700px] flex overflow-hidden relative max-[900px]:flex-col max-[900px]:w-full max-[900px]:max-h-[100vh] max-[900px]:overflow-y-auto"
             style={{ background: C.white, borderRadius: "12px", border: `1px solid ${C.creamBorder}`, height: "92vh" }}>
 
@@ -294,6 +357,48 @@ export function ExplorePage() {
                     <Heart size={14} fill={savedIds.has(modalProject.projectId) ? "white" : "none"} />
                     {savedIds.has(modalProject.projectId) ? "Saved" : "Save"}
                   </button>
+                  <div className="relative">
+                    <button onClick={() => { setShowBoardPicker(!showBoardPicker); setPinnedToBoard(null); }}
+                      className="px-4 py-2.5 text-[13px] font-medium cursor-pointer flex items-center gap-1.5"
+                      style={{ background: C.cream, color: C.black, borderRadius: "10px", border: `1px solid ${C.creamBorder}`, fontFamily: sans, transition: "all 0.15s" }}>
+                      <Bookmark size={14} />
+                      Pin
+                    </button>
+                    {showBoardPicker && (
+                      <div className="absolute right-0 top-full mt-2 w-[260px] z-[100] shadow-lg overflow-hidden"
+                        style={{ background: C.white, borderRadius: "12px", border: `1px solid ${C.creamBorder}` }}>
+                        <div className="px-4 pt-4 pb-2">
+                          <p className="text-[12px] font-semibold uppercase tracking-[0.1em]" style={{ color: C.grayLight, fontFamily: sans }}>Pin to board</p>
+                        </div>
+                        <div className="max-h-[220px] overflow-y-auto">
+                          {boards.map(b => (
+                            <button key={b.id} onClick={() => pinToBoard(b.id)}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#f0ede6] cursor-pointer transition-colors duration-100 text-left"
+                              style={{ fontFamily: sans }}>
+                              <div className="w-10 h-10 rounded-[8px] overflow-hidden shrink-0" style={{ background: C.creamDark }}>
+                                {b.thumbnail ? <img src={b.thumbnail} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Bookmark size={14} style={{ color: C.grayLight }} /></div>}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[13px] font-medium block truncate" style={{ color: C.black }}>{b.name}</span>
+                                <span className="text-[11px]" style={{ color: C.grayLight }}>{b.pinCount} {b.pinCount === 1 ? 'pin' : 'pins'}</span>
+                              </div>
+                              {pinnedToBoard === b.id && <CheckCircle size={16} className="text-green-500 shrink-0" />}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="border-t" style={{ borderColor: C.creamBorder }}>
+                          <button onClick={pinToNewBoard}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#f0ede6] cursor-pointer transition-colors duration-100"
+                            style={{ fontFamily: sans }}>
+                            <div className="w-10 h-10 rounded-[8px] flex items-center justify-center" style={{ background: C.creamDark }}>
+                              <Plus size={16} style={{ color: C.gray }} />
+                            </div>
+                            <span className="text-[13px] font-medium" style={{ color: C.black }}>Create new board</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => setModalProject(null)}
                     className="px-4 py-2.5 text-[13px] font-medium no-underline flex items-center gap-1.5"
                     style={{ background: C.black, color: C.white, borderRadius: "10px", fontFamily: sans }}>

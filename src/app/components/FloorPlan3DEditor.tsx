@@ -18,8 +18,14 @@ async function getEditorAuthHeaders(): Promise<Record<string, string>> {
     "Content-Type": "application/json",
   };
   try {
-    const { data } = await supabaseClient.auth.getSession();
-    if (data?.session?.access_token) {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) {
+      // Session may be expired — try refreshing
+      const { data: refreshData } = await supabaseClient.auth.refreshSession();
+      if (refreshData?.session?.access_token) {
+        headers["X-User-Token"] = refreshData.session.access_token;
+      }
+    } else if (data?.session?.access_token) {
       headers["X-User-Token"] = data.session.access_token;
     }
   } catch (e) {
@@ -2422,7 +2428,7 @@ interface ThreeSceneRef {
   mouse: THREE.Vector2;
   selectedOutline: THREE.Group | null;
   selectedGlow: THREE.Group | null;
-  animationId: number;
+  animRef: { id: number };
   ceilingPointLight: THREE.PointLight | null;
   floorPointLight: THREE.PointLight | null;
   accentSpotLight: THREE.SpotLight | null;
@@ -3038,7 +3044,7 @@ function buildScene(container: HTMLDivElement): ThreeSceneRef {
     }
   };
 
-  let animationId = 0;
+  const animRef = { id: 0 };
   let frameCount = 0;
   // On low-power devices, run cutaway updates every 2nd frame
   const cutawayInterval = isLowPower ? 2 : 1;
@@ -3094,7 +3100,7 @@ function buildScene(container: HTMLDivElement): ThreeSceneRef {
   };
 
   const animate = () => {
-    animationId = requestAnimationFrame(animate);
+    animRef.id = requestAnimationFrame(animate);
     frameCount++;
 
     // Camera fly-to animation
@@ -3270,7 +3276,7 @@ function buildScene(container: HTMLDivElement): ThreeSceneRef {
   return {
     scene, camera, renderer, css2dRenderer, controls, roomGroup, furnitureGroup, lightsGroup,
     wallMeshes, floorMesh, ceilingMesh, raycaster, mouse, selectedOutline: null, selectedGlow: null,
-    animationId,
+    animRef,
     ceilingPointLight, floorPointLight, accentSpotLight, underCabinetLight,
     directionalLight, ambientLight,
     cameraAnim: null, flyToZone,
@@ -3363,7 +3369,7 @@ function useThreeScene(
     // Dispose previous scene if rebuilding
     if (sceneRef.current) {
       const old = sceneRef.current;
-      cancelAnimationFrame(old.animationId);
+      cancelAnimationFrame(old.animRef.id);
       old.controls.dispose();
       old.renderer.dispose();
       old.css2dRenderer.domElement.remove();
@@ -3376,8 +3382,16 @@ function useThreeScene(
       itemGroupMap.current.clear();
     }
     if (!containerRef.current) return;
-    sceneRef.current = buildScene(containerRef.current);
+    try {
+      sceneRef.current = buildScene(containerRef.current);
+    } catch (buildErr) {
+      console.error("[Editor] Failed to build 3D scene (WebGL may not be supported):", buildErr);
+      return;
+    }
     if (externalSceneRef) externalSceneRef.current = sceneRef.current;
+
+    // Capture container element for cleanup (avoid stale ref in cleanup function)
+    const container = containerRef.current;
 
     // Invisible floor plane for drag raycasting
     const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -3666,7 +3680,7 @@ function useThreeScene(
         }
       }
     };
-    containerRef.current.addEventListener("mousedown", handleMouseDown);
+    container.addEventListener("mousedown", handleMouseDown);
 
     // MOUSEMOVE — drag furniture or openings
     const handleMouseMove = (event: MouseEvent) => {
@@ -3955,7 +3969,7 @@ function useThreeScene(
         }
       }
     };
-    containerRef.current.addEventListener("mousemove", handleMouseMove);
+    container.addEventListener("mousemove", handleMouseMove);
 
     // MOUSEUP — commit drag or handle click
     const handleMouseUp = (event: MouseEvent) => {
@@ -4074,10 +4088,10 @@ function useThreeScene(
       dragItemId = null;
       hasMoved = false;
     };
-    containerRef.current.addEventListener("mouseup", handleMouseUp);
+    container.addEventListener("mouseup", handleMouseUp);
 
     const handleContextMenu = (e: MouseEvent) => { if (isDragging) e.preventDefault(); };
-    containerRef.current.addEventListener("contextmenu", handleContextMenu);
+    container.addEventListener("contextmenu", handleContextMenu);
 
     // ═══ TOUCH HANDLERS — Mobile furniture & opening drag ═══
     let touchDragItemId: string | null = null;
@@ -4149,7 +4163,7 @@ function useThreeScene(
         }
       }
     };
-    containerRef.current.addEventListener("touchstart", handleTouchStart, { passive: true });
+    container.addEventListener("touchstart", handleTouchStart, { passive: true });
 
     const handleTouchMove = (event: TouchEvent) => {
       if (event.touches.length !== 1) return;
@@ -4380,7 +4394,7 @@ function useThreeScene(
         }
       }
     };
-    containerRef.current.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
 
     const handleTouchEnd = (_event: TouchEvent) => {
       const s = sceneRef.current;
@@ -4504,19 +4518,19 @@ function useThreeScene(
       touchDragItemId = null;
       touchHasMoved = false;
     };
-    containerRef.current.addEventListener("touchend", handleTouchEnd);
-    containerRef.current.addEventListener("touchcancel", handleTouchEnd);
+    container.addEventListener("touchend", handleTouchEnd);
+    container.addEventListener("touchcancel", handleTouchEnd);
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      containerRef.current?.removeEventListener("mousedown", handleMouseDown);
-      containerRef.current?.removeEventListener("mousemove", handleMouseMove);
-      containerRef.current?.removeEventListener("mouseup", handleMouseUp);
-      containerRef.current?.removeEventListener("contextmenu", handleContextMenu);
-      containerRef.current?.removeEventListener("touchstart", handleTouchStart);
-      containerRef.current?.removeEventListener("touchmove", handleTouchMove);
-      containerRef.current?.removeEventListener("touchend", handleTouchEnd);
-      containerRef.current?.removeEventListener("touchcancel", handleTouchEnd);
+      container.removeEventListener("mousedown", handleMouseDown);
+      container.removeEventListener("mousemove", handleMouseMove);
+      container.removeEventListener("mouseup", handleMouseUp);
+      container.removeEventListener("contextmenu", handleContextMenu);
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchEnd);
       // Clean up overlap outlines
       overlapOutlines.current.forEach((ol) => {
         ol.geometry.dispose();
@@ -4526,7 +4540,18 @@ function useThreeScene(
       // Clean up opening hover highlight
       clearOpeningHighlight();
       if (sceneRef.current) {
-        cancelAnimationFrame(sceneRef.current.animationId);
+        cancelAnimationFrame(sceneRef.current.animRef.id);
+        // Traverse entire scene and dispose all geometries/materials to free GPU memory
+        sceneRef.current.scene.traverse((child) => {
+          const mesh = child as THREE.Mesh;
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            const mat = mesh.material;
+            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+            else mat.dispose();
+          }
+        });
+        sceneRef.current.controls.dispose();
         sceneRef.current.renderer.dispose();
         sceneRef.current.renderer.domElement.remove();
         sceneRef.current.css2dRenderer.domElement.remove();
@@ -4534,6 +4559,8 @@ function useThreeScene(
         sceneRef.current.houseRoomLabels.forEach((obj) => {
           obj.element.remove();
         });
+        sceneRef.current.standaloneWallGroups.forEach((grp) => { disposeGroup(grp); });
+        sceneRef.current.standaloneWallGroups.clear();
         sceneRef.current = null;
       }
       // Clear furniture map so next mount creates fresh groups in the new scene
@@ -6109,6 +6136,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
   // ═══ Save State ═══
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -6506,7 +6534,8 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
           console.error("[Editor] Failed to load " + (isTemplateMode ? "template" : "project") + ":", res.status);
           return;
         }
-        const data = await res.json();
+        let data;
+        try { data = await res.json(); } catch { console.error("[Editor] Invalid JSON in response"); return; }
         const project = isTemplateMode ? data.template : data.project;
         if (isTemplateMode && project?.name) setHouseName(project.name);
         else if (project?.title) setHouseName(project.title);
@@ -6789,7 +6818,8 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
 
   // ═══ Save Project/Template to Supabase ═══
   const handleSaveProject = useCallback(async () => {
-    if (isSaving) return;
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -6923,9 +6953,10 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       console.error("[Editor] Save error:", e);
       setSaveError(e.message || "Save failed");
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [urlProjectId, isSaving, allRoomFurniture, materials, lighting, houseName, activeEditorRoomId, isTemplateMode, templateCategory, templateUnitType, templateDescription, captureThumbnail]);
+  }, [urlProjectId, allRoomFurniture, materials, lighting, houseName, activeEditorRoomId, isTemplateMode, templateCategory, templateUnitType, templateDescription, captureThumbnail]);
 
   // ═══ Auto-Save (every 30 seconds when dirty) ═══
   useEffect(() => {
@@ -7035,6 +7066,8 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
 
   const handleSaveAndLeave = useCallback(async () => {
     await handleSaveProject();
+    // Only navigate if save didn't fail (isSavingRef is false means save completed)
+    if (isSavingRef.current) return;
     setShowUnsavedModal(false);
     const dest = pendingNavigationRef.current || (isTemplateMode ? "/admin" : "/floorplan3d/dashboard");
     pendingNavigationRef.current = null;
@@ -7066,8 +7099,14 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
 
   // ═══ Keyboard Shortcuts (defined after all handlers to avoid TDZ) ═══
   const kbPlacedItems = allRoomFurniture[activeEditorRoomId] || [];
+  const kbPlacedItemsRef = useRef(kbPlacedItems);
+  kbPlacedItemsRef.current = kbPlacedItems;
   const is2DModeRef = useRef(is2DMode);
   is2DModeRef.current = is2DMode;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
   keyHandlersRef.current = {
     handleUndo, handleRedo, handleSaveProject, handleDuplicateSelected,
     handleDeleteSelected, handleZoomFit, handleMoveItem, handleRotateSelected,
@@ -7097,28 +7136,30 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       if (mod && e.key === "y") { e.preventDefault(); h.handleRedo(); return; }
       if (mod && e.key === "d") { e.preventDefault(); h.handleDuplicateSelected(); return; }
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (selectedId) { e.preventDefault(); h.handleDeleteSelected(); return; }
+        if (selectedIdRef.current) { e.preventDefault(); h.handleDeleteSelected(); return; }
       }
       if (e.key === "v" || e.key === "V") { e.preventDefault(); setIs2DMode(true); return; }
       if (e.key === "g" || e.key === "G") { setShowGrid((p) => !p); return; }
       if (!mod && (e.key === "s" || e.key === "S")) { setSnapEnabled((p) => !p); return; }
       if (e.key === "f" || e.key === "F") { h.handleZoomFit(); return; }
 
-      if (selectedId && viewMode === "editor") {
-        const item = kbPlacedItems.find(i => i.id === selectedId);
+      const curSelectedId = selectedIdRef.current;
+      const curViewMode = viewModeRef.current;
+      if (curSelectedId && curViewMode === "editor") {
+        const item = kbPlacedItemsRef.current.find(i => i.id === curSelectedId);
         if (item) {
           const nudge = e.shiftKey ? 0.01 : 0.05;
-          if (e.key === "ArrowLeft") { e.preventDefault(); h.handleMoveItem(selectedId, item.position[0] - nudge, item.position[2]); return; }
-          if (e.key === "ArrowRight") { e.preventDefault(); h.handleMoveItem(selectedId, item.position[0] + nudge, item.position[2]); return; }
-          if (e.key === "ArrowUp") { e.preventDefault(); h.handleMoveItem(selectedId, item.position[0], item.position[2] - nudge); return; }
-          if (e.key === "ArrowDown") { e.preventDefault(); h.handleMoveItem(selectedId, item.position[0], item.position[2] + nudge); return; }
+          if (e.key === "ArrowLeft") { e.preventDefault(); h.handleMoveItem(curSelectedId, item.position[0] - nudge, item.position[2]); return; }
+          if (e.key === "ArrowRight") { e.preventDefault(); h.handleMoveItem(curSelectedId, item.position[0] + nudge, item.position[2]); return; }
+          if (e.key === "ArrowUp") { e.preventDefault(); h.handleMoveItem(curSelectedId, item.position[0], item.position[2] - nudge); return; }
+          if (e.key === "ArrowDown") { e.preventDefault(); h.handleMoveItem(curSelectedId, item.position[0], item.position[2] + nudge); return; }
         }
       }
-      if ((e.key === "r" || e.key === "R") && selectedId) { h.handleRotateSelected(); return; }
+      if ((e.key === "r" || e.key === "R") && curSelectedId) { h.handleRotateSelected(); return; }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, viewMode, kbPlacedItems]);
+  }, []);
 
   // ═══ Camera Presets ═══
   const CAMERA_PRESETS = [

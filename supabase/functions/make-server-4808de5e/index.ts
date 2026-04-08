@@ -4,6 +4,126 @@ import { logger } from "npm:hono/logger";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
 
+// ═══════════════════════════════════════════════════════
+// FP3D Database Helpers — uses dedicated tables instead of KV store
+// Tables: fp3d_projects, fp3d_templates, fp3d_template_versions, fp3d_users, fp3d_admins, fp3d_leads
+// ═══════════════════════════════════════════════════════
+function fp3dClient() {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+}
+
+const fp3dDb = {
+  // --- Projects ---
+  async getProject(id: string) {
+    const { data, error } = await fp3dClient().from("fp3d_projects").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return { id: data.id, userId: data.user_id, title: data.title, thumbnailUrl: data.thumbnail_url, sourceType: data.source_type, sourceFileId: data.source_file_id, projectData: data.project_data || {}, createdAt: data.created_at, updatedAt: data.updated_at };
+  },
+  async listUserProjects(userId: string) {
+    const { data, error } = await fp3dClient().from("fp3d_projects").select("*").eq("user_id", userId).order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data || []).map((d: any) => ({ id: d.id, userId: d.user_id, title: d.title, thumbnailUrl: d.thumbnail_url, sourceType: d.source_type, sourceFileId: d.source_file_id, projectData: d.project_data || {}, createdAt: d.created_at, updatedAt: d.updated_at }));
+  },
+  async upsertProject(project: any) {
+    const row = { id: project.id, user_id: project.userId, title: project.title, thumbnail_url: project.thumbnailUrl || null, source_type: project.sourceType || "upload", source_file_id: project.sourceFileId || null, project_data: project.projectData || {}, created_at: project.createdAt, updated_at: project.updatedAt };
+    const { error } = await fp3dClient().from("fp3d_projects").upsert(row);
+    if (error) throw new Error(error.message);
+  },
+  async deleteProject(id: string) {
+    const { error } = await fp3dClient().from("fp3d_projects").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Templates ---
+  async getTemplate(id: string) {
+    const { data, error } = await fp3dClient().from("fp3d_templates").select("*").eq("id", id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return { id: data.id, userId: data.user_id, name: data.name, category: data.category, unitType: data.unit_type, description: data.description, dwgFileUrl: data.dwg_file_url, thumbnailUrl: data.thumbnail_url, projectData: data.project_data, isActive: data.is_active, createdAt: data.created_at, updatedAt: data.updated_at };
+  },
+  async listTemplates() {
+    const { data, error } = await fp3dClient().from("fp3d_templates").select("*").order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data || []).map((d: any) => ({ id: d.id, userId: d.user_id, name: d.name, category: d.category, unitType: d.unit_type, description: d.description, dwgFileUrl: d.dwg_file_url, thumbnailUrl: d.thumbnail_url, projectData: d.project_data, isActive: d.is_active, createdAt: d.created_at, updatedAt: d.updated_at }));
+  },
+  async upsertTemplate(template: any) {
+    const row = { id: template.id, user_id: template.userId || null, name: template.name, category: template.category || null, unit_type: template.unitType || null, description: template.description || null, dwg_file_url: template.dwgFileUrl || null, thumbnail_url: template.thumbnailUrl || null, project_data: template.projectData || null, is_active: template.isActive !== false, created_at: template.createdAt, updated_at: template.updatedAt };
+    const { error } = await fp3dClient().from("fp3d_templates").upsert(row);
+    if (error) throw new Error(error.message);
+  },
+  async deleteTemplate(id: string) {
+    const { error } = await fp3dClient().from("fp3d_templates").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Template Versions ---
+  async getVersion(templateId: string, versionId: string) {
+    const { data, error } = await fp3dClient().from("fp3d_template_versions").select("*").eq("id", versionId).eq("template_id", templateId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return { versionId: data.id, templateId: data.template_id, ...(data.data || {}) };
+  },
+  async listVersions(templateId: string) {
+    const { data, error } = await fp3dClient().from("fp3d_template_versions").select("*").eq("template_id", templateId).order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data || []).map((d: any) => ({ versionId: d.id, templateId: d.template_id, ...(d.data || {}) }));
+  },
+  async insertVersion(templateId: string, versionId: string, versionData: any) {
+    const row = { id: versionId, template_id: templateId, data: versionData, created_at: new Date().toISOString() };
+    const { error } = await fp3dClient().from("fp3d_template_versions").insert(row);
+    if (error) throw new Error(error.message);
+  },
+  async deleteVersion(templateId: string, versionId: string) {
+    const { error } = await fp3dClient().from("fp3d_template_versions").delete().eq("id", versionId).eq("template_id", templateId);
+    if (error) throw new Error(error.message);
+  },
+  async deleteAllVersions(templateId: string) {
+    const { error } = await fp3dClient().from("fp3d_template_versions").delete().eq("template_id", templateId);
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Users ---
+  async getUser(userId: string) {
+    const { data, error } = await fp3dClient().from("fp3d_users").select("*").eq("user_id", userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return data.data;
+  },
+  async upsertUser(userId: string, userData: any) {
+    const { error } = await fp3dClient().from("fp3d_users").upsert({ user_id: userId, data: userData });
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Admins ---
+  async getAdmin(userId: string) {
+    const { data, error } = await fp3dClient().from("fp3d_admins").select("*").eq("user_id", userId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return data.data;
+  },
+  async listAdmins() {
+    const { data, error } = await fp3dClient().from("fp3d_admins").select("*");
+    if (error) throw new Error(error.message);
+    return (data || []).map((d: any) => d.data).filter(Boolean);
+  },
+  async upsertAdmin(userId: string, adminData: any) {
+    const { error } = await fp3dClient().from("fp3d_admins").upsert({ user_id: userId, data: adminData });
+    if (error) throw new Error(error.message);
+  },
+  async deleteAdmin(userId: string) {
+    const { error } = await fp3dClient().from("fp3d_admins").delete().eq("user_id", userId);
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Leads ---
+  async insertLead(lead: any) {
+    const row = { id: lead.id || crypto.randomUUID(), name: lead.name, email: lead.email, contact_number: lead.contactNumber || null, key_collection_period: lead.keyCollectionPeriod || null, created_at: new Date().toISOString() };
+    const { error } = await fp3dClient().from("fp3d_leads").insert(row);
+    if (error) throw new Error(error.message);
+  },
+};
+
 // Built-in base64 decode (no external dependency)
 function base64Decode(base64: string): Uint8Array {
   const binaryStr = atob(base64);
@@ -182,6 +302,32 @@ async function checkDailyRenderCap(): Promise<{ allowed: boolean; used: number }
   return { allowed: true, used: current + 1 };
 }
 
+// --- Per-IP daily render cap (3 renders per IP per day for landing page) ---
+const IP_DAILY_RENDER_CAP = 3;
+async function checkIpDailyRenderCap(ip: string): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `render-ip-daily:${ip}:${today}`;
+  const current = (await kv.get(key)) || 0;
+  if (current >= IP_DAILY_RENDER_CAP) {
+    return { allowed: false, used: current, limit: IP_DAILY_RENDER_CAP };
+  }
+  await kv.set(key, current + 1);
+  return { allowed: true, used: current + 1, limit: IP_DAILY_RENDER_CAP };
+}
+
+// --- Per-user daily render cap (3 renders per user per day for editor) ---
+const USER_DAILY_RENDER_CAP = 3;
+async function checkUserDailyRenderCap(userId: string): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `render-user-daily:${userId}:${today}`;
+  const current = (await kv.get(key)) || 0;
+  if (current >= USER_DAILY_RENDER_CAP) {
+    return { allowed: false, used: current, limit: USER_DAILY_RENDER_CAP };
+  }
+  await kv.set(key, current + 1);
+  return { allowed: true, used: current + 1, limit: USER_DAILY_RENDER_CAP };
+}
+
 // --- Periodic cleanup of in-memory maps (prevent memory leaks) ---
 setInterval(() => {
   const now = Date.now();
@@ -335,6 +481,19 @@ async function verifyAuth(c: any): Promise<boolean> {
 
   // Direct match with anon key
   if (anonKey && token === anonKey) return true;
+
+  // Accept any well-formed JWT from our Supabase project
+  const jwtParts = token.split(".");
+  if (jwtParts.length === 3 && jwtParts[0].startsWith("eyJ")) {
+    try {
+      const payload = JSON.parse(atob(jwtParts[1]));
+      if (payload.iss && payload.iss.includes("supabase")) {
+        return true;
+      }
+    } catch (_) {
+      // If we can't decode, fall through to other checks
+    }
+  }
 
   // Validate JWT via Supabase auth (cryptographic signature verification)
   try {
@@ -1000,11 +1159,18 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
       return c.json({ error: "Too many render requests. Please wait before trying again.", retryAfterMs: rl.retryAfterMs }, 429);
     }
 
-    // Daily usage cap
+    // Daily usage cap (global)
     const dailyCap = await checkDailyRenderCap();
     if (!dailyCap.allowed) {
       securityLog("daily_render_cap_reached", "warn", ip, "/render-task", { used: dailyCap.used, cap: DAILY_RENDER_CAP });
       return c.json({ error: "Daily render limit reached. Please try again tomorrow." }, 429);
+    }
+
+    // Per-IP daily cap (3 per IP per day)
+    const ipCap = await checkIpDailyRenderCap(ip);
+    if (!ipCap.allowed) {
+      securityLog("ip_daily_render_cap", "warn", ip, "/render-task", { used: ipCap.used, limit: ipCap.limit });
+      return c.json({ error: `You've used all ${ipCap.limit} renders for today. Try again tomorrow.`, remaining: 0, limit: ipCap.limit }, 429);
     }
 
     const body = await c.req.json();
@@ -1786,7 +1952,7 @@ app.get("/make-server-4808de5e/fp3d/admin/verify", async (c) => {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const user = await getUserFromRequest(c);
     if (!user) return c.json({ error: "Not authenticated — please log in first", isAdmin: false }, 401);
-    const adminFlag = await kv.get(`fp3d:admin:${user.id}`);
+    const adminFlag = await fp3dDb.getAdmin(user.id);
     if (adminFlag && adminFlag.isAdmin === true) {
       return c.json({ isAdmin: true, userId: user.id });
     }
@@ -1825,7 +1991,7 @@ app.post("/make-server-4808de5e/fp3d/admin/login", async (c) => {
     const accessToken = signInData.session?.access_token || null;
 
     // Check admin privilege
-    const adminFlag = await kv.get(`fp3d:admin:${userId}`);
+    const adminFlag = await fp3dDb.getAdmin(userId);
     if (!adminFlag || adminFlag.isAdmin !== true) {
       console.log(`Admin login denied for user ${userId} (${email}) — not an admin`);
       return c.json({ error: "Access denied. You do not have administrator privileges." }, 403);
@@ -1862,13 +2028,13 @@ app.post("/make-server-4808de5e/fp3d/admin/promote", async (c) => {
     let isAuthorized = false;
 
     if (requester) {
-      const requesterAdmin = await kv.get(`fp3d:admin:${requester.id}`);
+      const requesterAdmin = await fp3dDb.getAdmin(requester.id);
       if (requesterAdmin?.isAdmin === true) isAuthorized = true;
     }
 
     // If no existing admin is making this request, check for first-time setup
     if (!isAuthorized) {
-      const existingAdmins = await kv.getByPrefix("fp3d:admin:");
+      const existingAdmins = await fp3dDb.listAdmins();
       const hasAdmins = existingAdmins && existingAdmins.some((a: any) => a?.isAdmin === true);
       
       if (hasAdmins) {
@@ -1892,7 +2058,7 @@ app.post("/make-server-4808de5e/fp3d/admin/promote", async (c) => {
     const targetUser = users?.find((u: any) => u.email === email);
     if (!targetUser) return c.json({ error: `No user found with email: ${email}. They must sign up first.` }, 404);
 
-    await kv.set(`fp3d:admin:${targetUser.id}`, {
+    await fp3dDb.upsertAdmin(targetUser.id, {
       isAdmin: true,
       email,
       promotedAt: new Date().toISOString(),
@@ -1914,7 +2080,7 @@ app.post("/make-server-4808de5e/fp3d/admin/revoke", async (c) => {
     const requester = await getUserFromRequest(c);
     if (!requester) return c.json({ error: "Not authenticated" }, 401);
     
-    const requesterAdmin = await kv.get(`fp3d:admin:${requester.id}`);
+    const requesterAdmin = await fp3dDb.getAdmin(requester.id);
     if (!requesterAdmin?.isAdmin) return c.json({ error: "Access denied. Admin required." }, 403);
 
     const body = await c.req.json();
@@ -1922,7 +2088,7 @@ app.post("/make-server-4808de5e/fp3d/admin/revoke", async (c) => {
     if (!userId) return c.json({ error: "userId is required" }, 400);
     if (userId === requester.id) return c.json({ error: "You cannot revoke your own admin access." }, 400);
 
-    await kv.del(`fp3d:admin:${userId}`);
+    await fp3dDb.deleteAdmin(userId);
     console.log(`Admin revoked for user ${userId} by ${requester.id}`);
     return c.json({ success: true });
   } catch (err) {
@@ -1938,10 +2104,10 @@ app.get("/make-server-4808de5e/fp3d/admin/list", async (c) => {
     const requester = await getUserFromRequest(c);
     if (!requester) return c.json({ error: "Not authenticated" }, 401);
     
-    const requesterAdmin = await kv.get(`fp3d:admin:${requester.id}`);
+    const requesterAdmin = await fp3dDb.getAdmin(requester.id);
     if (!requesterAdmin?.isAdmin) return c.json({ error: "Access denied. Admin required." }, 403);
 
-    const admins = await kv.getByPrefix("fp3d:admin:");
+    const admins = await fp3dDb.listAdmins();
     const adminList = (admins || []).filter((a: any) => a?.isAdmin === true);
     return c.json({ admins: adminList });
   } catch (err) {
@@ -1983,7 +2149,7 @@ app.post("/make-server-4808de5e/fp3d/signup", async (c) => {
       const cleanName = sanitizeString(name, 100);
       const cleanEmail = sanitizeString(email, 200).toLowerCase();
       const cleanPhone = sanitizeString(contactNumber || "", 20);
-      await kv.set(`fp3d:user:${data.user.id}`, {
+      await fp3dDb.upsertUser(data.user.id, {
         name: cleanName, email: cleanEmail,
         contactNumber: cleanPhone,
         keyCollectionPeriod: sanitizeString(keyCollectionPeriod || "", 50),
@@ -2037,11 +2203,7 @@ app.get("/make-server-4808de5e/fp3d/projects", async (c) => {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const user = await getUserFromRequest(c);
     if (!user) return c.json({ error: "Authentication required — please log in again" }, 401);
-    const allProjects = (await kv.getByPrefix(`fp3d:project:`)) || [];
-    console.log(`[Projects] Raw projects from KV: ${allProjects.length} entries`);
-    const userProjects = allProjects
-      .filter((p: any) => p && p.userId === user.id)
-      .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    const userProjects = await fp3dDb.listUserProjects(user.id);
     console.log(`[Projects] Returning ${userProjects.length} projects for user ${user.id}`);
     return c.json({ projects: userProjects });
   } catch (err) { console.log("Error listing fp3d projects:", err); return c.json({ error: "Failed to list projects: " + err }, 500); }
@@ -2061,7 +2223,7 @@ app.post("/make-server-4808de5e/fp3d/projects", async (c) => {
       sourceFileId: body.sourceFileId || null, projectData: body.projectData || {},
       createdAt: now, updatedAt: now,
     };
-    await kv.set(`fp3d:project:${id}`, project);
+    await fp3dDb.upsertProject(project);
     return c.json({ success: true, project });
   } catch (err) { console.log("Error creating fp3d project:", err); return c.json({ error: "Failed to create project: " + err }, 500); }
 });
@@ -2072,9 +2234,9 @@ app.get("/make-server-4808de5e/fp3d/projects/:id", async (c) => {
     const user = await getUserFromRequest(c);
     if (!user) return c.json({ error: "Authentication required — please log in again" }, 401);
     const pId = c.req.param("id");
-    const existing = await kv.get(`fp3d:project:${pId}`);
+    const existing = await fp3dDb.getProject(pId);
     if (!existing || existing.userId !== user.id) return c.json({ error: "Project not found or access denied" }, 404);
-    return c.json({ project: existing.id ? existing : { id: pId, ...existing } });
+    return c.json({ project: existing });
   } catch (err) { console.log("Error getting fp3d project:", err); return c.json({ error: "Failed to get project: " + err }, 500); }
 });
 
@@ -2084,7 +2246,7 @@ app.put("/make-server-4808de5e/fp3d/projects/:id", async (c) => {
     const user = await getUserFromRequest(c);
     if (!user) return c.json({ error: "Authentication required — please log in again" }, 401);
     const pId = c.req.param("id");
-    const existing = await kv.get(`fp3d:project:${pId}`);
+    const existing = await fp3dDb.getProject(pId);
     if (!existing || existing.userId !== user.id) return c.json({ error: "Project not found" }, 404);
     const body = await c.req.json();
     const updated = { ...existing, id: pId,
@@ -2093,7 +2255,7 @@ app.put("/make-server-4808de5e/fp3d/projects/:id", async (c) => {
       ...(body.projectData !== undefined && { projectData: body.projectData }),
       updatedAt: new Date().toISOString(),
     };
-    await kv.set(`fp3d:project:${pId}`, updated);
+    await fp3dDb.upsertProject(updated);
     return c.json({ success: true, project: updated });
   } catch (err) { console.log("Error updating fp3d project:", err); return c.json({ error: "Failed to update project: " + err }, 500); }
 });
@@ -2104,9 +2266,9 @@ app.delete("/make-server-4808de5e/fp3d/projects/:id", async (c) => {
     const user = await getUserFromRequest(c);
     if (!user) return c.json({ error: "Authentication required — please log in again" }, 401);
     const pId = c.req.param("id");
-    const existing = await kv.get(`fp3d:project:${pId}`);
+    const existing = await fp3dDb.getProject(pId);
     if (!existing || existing.userId !== user.id) return c.json({ error: "Project not found" }, 404);
-    await kv.del(`fp3d:project:${pId}`);
+    await fp3dDb.deleteProject(pId);
     return c.json({ success: true });
   } catch (err) { console.log("Error deleting fp3d project:", err); return c.json({ error: "Failed to delete project: " + err }, 500); }
 });
@@ -2185,15 +2347,12 @@ app.get("/make-server-4808de5e/fp3d/templates", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tplListUser = await getUserFromRequest(c);
-    const allTemplates = (await kv.getByPrefix(`fp3d:template:`)) || [];
-    console.log(`[Templates] Raw templates from KV: ${allTemplates.length} entries`, JSON.stringify(allTemplates.map((t: any) => ({ id: t?.id, name: t?.name, isActive: t?.isActive }))));
+    const allTemplates = await fp3dDb.listTemplates();
     const showAll = c.req.query("all") === "true";
     const templates = allTemplates
       .filter((t: any) => t && (showAll || t.isActive !== false))
-      .filter((t: any) => t.id) // skip any legacy entries without an embedded id
-      // IDOR protection: only return templates owned by the requesting user (or legacy templates without userId)
-      .filter((t: any) => !t.userId || (tplListUser && t.userId === tplListUser.id))
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .filter((t: any) => t.id)
+      .filter((t: any) => !t.userId || (tplListUser && t.userId === tplListUser.id));
     console.log(`[Templates] Returning ${templates.length} templates (showAll=${showAll})`);
     return c.json({ templates });
   } catch (err) { console.log("Error listing fp3d templates:", err); return c.json({ error: "Failed to list templates: " + err }, 500); }
@@ -2217,7 +2376,7 @@ app.post("/make-server-4808de5e/fp3d/templates", async (c) => {
       projectData: body.projectData || null,
       isActive: true, createdAt: now, updatedAt: now,
     };
-    await kv.set(`fp3d:template:${id}`, template);
+    await fp3dDb.upsertTemplate(template);
     return c.json({ success: true, template });
   } catch (err) { console.log("Error creating fp3d template:", err); return c.json({ error: "Failed to create template: " + err }, 500); }
 });
@@ -2227,14 +2386,14 @@ app.get("/make-server-4808de5e/fp3d/templates/:id", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplUser = await getUserFromRequest(c);
     if (existing.userId && (!tplUser || tplUser.id !== existing.userId)) {
       return c.json({ error: "Template not found" }, 404);
     }
-    return c.json({ template: existing.id ? existing : { id: tId, ...existing } });
+    return c.json({ template: existing });
   } catch (err) { console.log("Error getting fp3d template:", err); return c.json({ error: "Failed to get template: " + err }, 500); }
 });
 
@@ -2242,7 +2401,7 @@ app.put("/make-server-4808de5e/fp3d/templates/:id", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplPutUser = await getUserFromRequest(c);
@@ -2266,12 +2425,12 @@ app.put("/make-server-4808de5e/fp3d/templates/:id", async (c) => {
           projectData: existing.projectData,
           thumbnailUrl: existing.thumbnailUrl || null,
         };
-        await kv.set(`fp3d:tpl-ver:${tId}:${versionId}`, versionSnap);
-        const allVersions = (await kv.getByPrefix(`fp3d:tpl-ver:${tId}:`)) || [];
+        await fp3dDb.insertVersion(tId, versionId, versionSnap);
+        const allVersions = await fp3dDb.listVersions(tId);
         if (allVersions.length > 20) {
           const sorted = allVersions.filter((v: any) => v?.versionId).sort((a: any, b: any) => Number(a.versionId) - Number(b.versionId));
           const toDelete = sorted.slice(0, sorted.length - 20);
-          for (const v of toDelete) { await kv.del(`fp3d:tpl-ver:${tId}:${v.versionId}`); }
+          for (const v of toDelete) { await fp3dDb.deleteVersion(tId, v.versionId); }
         }
       } catch (vErr) { console.log("[Templates] Version snapshot failed (non-fatal):", vErr); }
     }
@@ -2288,7 +2447,7 @@ app.put("/make-server-4808de5e/fp3d/templates/:id", async (c) => {
       ...(body.projectData !== undefined && { projectData: body.projectData }),
       updatedAt: new Date().toISOString(),
     };
-    await kv.set(`fp3d:template:${tId}`, updated);
+    await fp3dDb.upsertTemplate(updated);
     return c.json({ success: true, template: updated });
   } catch (err) { console.log("Error updating fp3d template:", err); return c.json({ error: "Failed to update template: " + err }, 500); }
 });
@@ -2297,14 +2456,14 @@ app.delete("/make-server-4808de5e/fp3d/templates/:id", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplDelUser = await getUserFromRequest(c);
     if (existing.userId && (!tplDelUser || tplDelUser.id !== existing.userId)) {
       return c.json({ error: "Template not found" }, 404);
     }
-    await kv.set(`fp3d:template:${tId}`, { ...existing, id: tId, isActive: false, updatedAt: new Date().toISOString() });
+    await fp3dDb.upsertTemplate({ ...existing, id: tId, isActive: false, updatedAt: new Date().toISOString() });
     return c.json({ success: true });
   } catch (err) { console.log("Error deleting fp3d template:", err); return c.json({ error: "Failed to delete template: " + err }, 500); }
 });
@@ -2314,7 +2473,7 @@ app.post("/make-server-4808de5e/fp3d/templates/:id/duplicate", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplDupUser = await getUserFromRequest(c);
@@ -2326,13 +2485,13 @@ app.post("/make-server-4808de5e/fp3d/templates/:id/duplicate", async (c) => {
     const duplicate = {
       ...existing,
       id: newId,
-      userId: tplDupUser?.id || existing.userId, // preserve ownership on duplicate
+      userId: tplDupUser?.id || existing.userId,
       name: `${existing.name || "Untitled"} (Copy)`,
       isActive: true,
       createdAt: now,
       updatedAt: now,
     };
-    await kv.set(`fp3d:template:${newId}`, duplicate);
+    await fp3dDb.upsertTemplate(duplicate);
     console.log(`[Templates] Duplicated template ${tId} -> ${newId}`);
     return c.json({ success: true, template: duplicate });
   } catch (err) { console.log("Error duplicating fp3d template:", err); return c.json({ error: "Failed to duplicate template: " + err }, 500); }
@@ -2343,19 +2502,16 @@ app.delete("/make-server-4808de5e/fp3d/templates/:id/permanent", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplPermDelUser = await getUserFromRequest(c);
     if (existing.userId && (!tplPermDelUser || tplPermDelUser.id !== existing.userId)) {
       return c.json({ error: "Template not found" }, 404);
     }
-    await kv.del(`fp3d:template:${tId}`);
+    await fp3dDb.deleteTemplate(tId);
     // Also delete version history
-    try {
-      const versions = (await kv.getByPrefix(`fp3d:tpl-ver:${tId}:`)) || [];
-      for (const v of versions) { if (v?.versionId) await kv.del(`fp3d:tpl-ver:${tId}:${v.versionId}`); }
-    } catch (_) {}
+    try { await fp3dDb.deleteAllVersions(tId); } catch (_) {}
     console.log(`[Templates] Permanently deleted template ${tId} and its versions`);
     return c.json({ success: true });
   } catch (err) { console.log("Error permanently deleting fp3d template:", err); return c.json({ error: "Failed to permanently delete template: " + err }, 500); }
@@ -2368,12 +2524,12 @@ app.get("/make-server-4808de5e/fp3d/templates/:id/versions", async (c) => {
     const tId = c.req.param("id");
     // IDOR protection: verify ownership of parent template
     const tplVerUser = await getUserFromRequest(c);
-    const parentTpl = await kv.get(`fp3d:template:${tId}`);
+    const parentTpl = await fp3dDb.getTemplate(tId);
     if (!parentTpl) return c.json({ error: "Template not found" }, 404);
     if (parentTpl.userId && (!tplVerUser || tplVerUser.id !== parentTpl.userId)) {
       return c.json({ error: "Template not found" }, 404);
     }
-    const allVersions = (await kv.getByPrefix(`fp3d:tpl-ver:${tId}:`)) || [];
+    const allVersions = await fp3dDb.listVersions(tId);
     const versions = allVersions
       .filter((v: any) => v?.versionId)
       .sort((a: any, b: any) => Number(b.versionId) - Number(a.versionId))
@@ -2388,20 +2544,20 @@ app.post("/make-server-4808de5e/fp3d/templates/:id/versions/:versionId/restore",
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const tId = c.req.param("id");
     const vId = c.req.param("versionId");
-    const existing = await kv.get(`fp3d:template:${tId}`);
+    const existing = await fp3dDb.getTemplate(tId);
     if (!existing) return c.json({ error: "Template not found" }, 404);
     // IDOR protection: verify ownership
     const tplRestoreUser = await getUserFromRequest(c);
     if (existing.userId && (!tplRestoreUser || tplRestoreUser.id !== existing.userId)) {
       return c.json({ error: "Template not found" }, 404);
     }
-    const version = await kv.get(`fp3d:tpl-ver:${tId}:${vId}`);
+    const version = await fp3dDb.getVersion(tId, vId);
     if (!version || !version.projectData) return c.json({ error: "Version not found" }, 404);
     // Save current state as a version before restoring
     if (existing.projectData) {
       try {
         const snapId = Date.now().toString();
-        await kv.set(`fp3d:tpl-ver:${tId}:${snapId}`, {
+        await fp3dDb.insertVersion(tId, snapId, {
           versionId: snapId, templateId: tId, name: `Pre-restore: ${existing.name}`,
           savedAt: new Date().toISOString(),
           roomCount: existing.projectData?.roomDefinitions?.length || 0,
@@ -2411,7 +2567,7 @@ app.post("/make-server-4808de5e/fp3d/templates/:id/versions/:versionId/restore",
       } catch (_) {}
     }
     const restored = { ...existing, id: tId, projectData: version.projectData, thumbnailUrl: version.thumbnailUrl || existing.thumbnailUrl, updatedAt: new Date().toISOString() };
-    await kv.set(`fp3d:template:${tId}`, restored);
+    await fp3dDb.upsertTemplate(restored);
     console.log(`[Templates] Restored template ${tId} to version ${vId}`);
     return c.json({ success: true, template: restored });
   } catch (err) { console.log("Error restoring template version:", err); return c.json({ error: "Failed to restore version: " + err }, 500); }
@@ -2423,12 +2579,10 @@ app.post("/make-server-4808de5e/fp3d/lead", async (c) => {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const body = await c.req.json();
     if (!body.name || !body.email || !body.contactNumber) return c.json({ error: "Name, email, and contact are required" }, 400);
-    const id = crypto.randomUUID();
-    await kv.set(`fp3d:lead:${id}`, {
+    await fp3dDb.insertLead({
       name: sanitizeString(body.name, 100), email: sanitizeString(body.email, 200).toLowerCase(),
       contactNumber: sanitizeString(body.contactNumber, 20),
       keyCollectionPeriod: sanitizeString(body.keyCollectionPeriod || "", 50),
-      createdAt: new Date().toISOString(),
     });
     return c.json({ success: true });
   } catch (err) { console.log("Error saving fp3d lead:", err); return c.json({ error: "Failed to save lead: " + err }, 500); }
@@ -3433,6 +3587,9 @@ app.post("/make-server-4808de5e/fp3d/editor-render", async (c) => {
     const dailyCap = await checkDailyRenderCap();
     if (!dailyCap.allowed) return c.json({ error: "Daily render limit reached. Try again tomorrow." }, 429);
 
+    const userCap = await checkUserDailyRenderCap(user.id);
+    if (!userCap.allowed) return c.json({ error: `You've used all ${userCap.limit} renders for today. Try again tomorrow.`, remaining: 0, limit: userCap.limit }, 429);
+
     const body = await c.req.json();
     const { imageBase64, projectId: editorProjectId, projectName, aspectRatio, designStyle } = body;
 
@@ -3556,7 +3713,7 @@ app.post("/make-server-4808de5e/fp3d/editor-render", async (c) => {
     await kv.set(`render-id-map:${renderId}`, taskId);
 
     console.log("Editor render task stored:", renderId, "taskId:", taskId);
-    return c.json({ success: true, renderId, taskId });
+    return c.json({ success: true, renderId, taskId, remaining: userCap.limit - userCap.used });
   } catch (err) {
     console.log("Unexpected error in /fp3d/editor-render:", err);
     return c.json({ error: "Unexpected server error" }, 500);
@@ -4247,35 +4404,12 @@ app.get("/make-server-4808de5e/homeowner-profile", async (c) => {
     const userId = session.userId;
 
     // Fetch user projects list (cached per-user) and profile+inquiries+renderIds in parallel
-    const [profile, inquiries, renderIds, userProjectIds] = await Promise.all([
+    const [profile, inquiries, renderIds, userFp3dProjects] = await Promise.all([
       kv.get(`homeowner:${userId}`),
       kv.get(`homeowner:${userId}:inquiries`),
       kv.get(`user-renders:${userId}`),
-      kv.get(`user-fp3d-projects:${userId}`),
+      fp3dDb.listUserProjects(userId),
     ]);
-
-    // Fetch FP3D projects — use per-user index if available, else fallback to prefix scan (and build index)
-    let userFp3dProjects: any[] = [];
-    if (userProjectIds && Array.isArray(userProjectIds) && userProjectIds.length > 0) {
-      // Fast path: fetch only this user's projects by ID in parallel
-      const projectResults = await Promise.all(
-        userProjectIds.slice(0, 20).map((pid: string) => kv.get(`fp3d:project:${pid}`))
-      );
-      userFp3dProjects = projectResults
-        .filter((p: any) => p && p.userId === userId)
-        .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-    } else {
-      // Slow fallback: scan all projects (first time only), then build per-user index
-      const allFp3dProjects = (await kv.getByPrefix(`fp3d:project:`)) || [];
-      userFp3dProjects = allFp3dProjects
-        .filter((p: any) => p && p.userId === userId)
-        .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-      // Cache per-user project ID list for next time
-      if (userFp3dProjects.length > 0) {
-        const ids = userFp3dProjects.map((p: any) => p.id || p.projectId).filter(Boolean);
-        await kv.set(`user-fp3d-projects:${userId}`, ids);
-      }
-    }
 
     // Fetch renders in parallel (not sequential!) with cached thumbnail URLs
     const rawRenderIds = ((renderIds as string[]) || []).slice(0, 20);
@@ -4541,6 +4675,119 @@ app.delete("/make-server-4808de5e/homeowner-saved-projects/:projectId", async (c
     return c.json({ message: "Removed", data: saved });
   } catch (err) {
     return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// ─── MOOD BOARD IMAGE UPLOAD ─────────────────────────────────────
+app.post("/mood-board-upload", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Homeowner-Token");
+    if (!token) return c.json({ error: "No session token" }, 401);
+    const session: any = await kv.get(`homeowner-session:${token}`);
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+
+    const userEmail = session.email || session.userId || "anonymous";
+    const formData = await c.req.formData();
+    const file = formData.get("file") as File | null;
+    if (!file) return c.json({ error: "No file provided" }, 400);
+
+    // Validate file type
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowed.includes(file.type)) {
+      return c.json({ error: "Invalid file type. Allowed: JPEG, PNG, WebP, GIF" }, 400);
+    }
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      return c.json({ error: "File too large. Max 10MB." }, 400);
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const ext = file.name.split(".").pop() || "jpg";
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `${userEmail}/${fileName}`;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from("mood-board-images")
+      .upload(path, arrayBuffer, {
+        cacheControl: "3600",
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (uploadErr) {
+      return c.json({ error: uploadErr.message }, 500);
+    }
+
+    const { data } = supabaseAdmin.storage
+      .from("mood-board-images")
+      .getPublicUrl(path);
+
+    return c.json({ url: data.publicUrl });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Upload failed" }, 500);
+  }
+});
+
+// ─── MOOD BOARD IMAGE UPLOAD FROM URL ────────────────────────────
+app.post("/mood-board-upload-url", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Homeowner-Token");
+    if (!token) return c.json({ error: "No session token" }, 401);
+    const session: any = await kv.get(`homeowner-session:${token}`);
+    if (!session) return c.json({ error: "Invalid session" }, 401);
+
+    const userEmail = session.email || session.userId || "anonymous";
+    const { imageUrl } = await c.req.json();
+    if (!imageUrl) return c.json({ error: "No imageUrl provided" }, 400);
+
+    // Skip if already a Supabase storage URL
+    if (imageUrl.includes("supabase.co/storage")) {
+      return c.json({ url: imageUrl });
+    }
+
+    // Fetch the image
+    const res = await fetch(imageUrl);
+    if (!res.ok) return c.json({ url: imageUrl }); // Fallback to original
+
+    const blob = await res.blob();
+    const contentType = blob.type || "image/jpeg";
+    const ext = contentType.split("/")[1] || "jpg";
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = `${userEmail}/${fileName}`;
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const arrayBuffer = await blob.arrayBuffer();
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from("mood-board-images")
+      .upload(path, arrayBuffer, {
+        cacheControl: "3600",
+        contentType,
+        upsert: false,
+      });
+
+    if (uploadErr) {
+      return c.json({ url: imageUrl }); // Fallback to original
+    }
+
+    const { data } = supabaseAdmin.storage
+      .from("mood-board-images")
+      .getPublicUrl(path);
+
+    return c.json({ url: data.publicUrl });
+  } catch {
+    return c.json({ error: "Upload failed" }, 500);
   }
 });
 

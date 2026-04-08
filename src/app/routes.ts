@@ -21,7 +21,6 @@ const LazyHomeownerDashboard = lazy(() => import("./components/HomeownerDashboar
 const LazyExplorePage = lazy(() => import("./components/ExplorePage").then((m) => ({ default: m.ExplorePage })));
 const LazyHandshakeLanding = lazy(() => import("./components/HandshakeLanding").then((m) => ({ default: m.HandshakeLanding })));
 
-
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
   className: "min-h-screen flex items-center justify-center",
