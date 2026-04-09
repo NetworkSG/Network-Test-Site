@@ -3052,7 +3052,8 @@ app.post("/make-server-4808de5e/cost-guide", async (c) => {
     }
 
     const body = await c.req.json();
-    const { propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, contact } = body;
+    const { propertyType, propertyStatus, postalCode, unitType, selectedRooms, timeline, lifestyle, preferredThemes, uploadedPhotos, additionalNotes, roomScopes, contact } = body;
+    const isResale = propertyStatus === "Existing" || propertyStatus === "Resale";
     console.log("Received cost guide request:", JSON.stringify(redactPII(body)));
 
     if (!propertyType || !unitType || !selectedRooms?.length || !timeline) {
@@ -3077,10 +3078,16 @@ app.post("/make-server-4808de5e/cost-guide", async (c) => {
     const payload = {
       id,
       propertyType: sanitizeString(propertyType, 50),
+      propertyStatus: sanitizeString(propertyStatus || "", 20),
+      postalCode: sanitizeString(postalCode || "", 10),
       isResale: Boolean(isResale),
       unitType: sanitizeString(unitType, 50),
       selectedRooms,
       timeline: sanitizeString(timeline, 50),
+      lifestyle: lifestyle || {},
+      preferredThemes: Array.isArray(preferredThemes) ? preferredThemes.map((t: string) => sanitizeString(t, 30)).slice(0, 2) : [],
+      uploadedPhotos: Array.isArray(uploadedPhotos) ? uploadedPhotos.slice(0, 5) : [],
+      additionalNotes: sanitizeString(additionalNotes || "", 1000),
       roomScopes,
       contact: { name: cleanName, whatsapp: cleanWhatsapp, email: cleanEmail },
       createdAt: new Date().toISOString(),
@@ -3113,7 +3120,7 @@ app.post("/make-server-4808de5e/cost-guide", async (c) => {
         "Property Type": sanitizeString(propertyType, 50),
         "Key Collection Date": sanitizeString(timeline, 50),
         "Renovation Budget": budgetStr,
-        "Inquiry": `Cost Guide — ${sanitizeString(unitType, 50)}${isResale ? " (Resale)" : ""}, Rooms: ${(selectedRooms || []).join(", ")}`,
+        "Inquiry": `Cost Guide — ${sanitizeString(unitType, 50)} (${sanitizeString(propertyStatus || "New", 20)}), Rooms: ${(selectedRooms || []).join(", ")}${Array.isArray(preferredThemes) && preferredThemes.length ? `, Themes: ${preferredThemes.join(", ")}` : ""}${postalCode ? `, Postal: ${sanitizeString(postalCode, 10)}` : ""}`,
         "Lead Form": "Network Cost Guide Lead Form",
         "Created Date": new Date().toISOString(),
         "Updated Date": new Date().toISOString(),
@@ -3222,7 +3229,7 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
     }
 
     const body = await c.req.json();
-    const { propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope, estimate, templateId, quoteRequestId } = body;
+    const { propertyType, isResale, propertyStatus, unitType, selectedRooms, timeline, roomScopes, fullHomeScope, estimate, templateId, quoteRequestId, postalCode, verifiedAddress, lifestyle, preferredThemes, meetingPreference, additionalNotes, uploadedPhotos, contact } = body;
     console.log("PDF generation request received:", JSON.stringify({ propertyType, unitType, selectedRooms, templateId, quoteRequestId }));
 
     if (!templateId) {
@@ -3246,7 +3253,8 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
 
     // Compute multipliers
     const pf = PDF_PROPERTY_FACTOR[propertyType] ?? 1;
-    const rf = isResale ? (PDF_RESALE_FACTOR[propertyType] ?? 1) : 1;
+    const isResaleUnit = propertyStatus ? (propertyStatus === "Existing" || propertyStatus === "Resale") : !!isResale;
+    const rf = isResaleUnit ? (PDF_RESALE_FACTOR[propertyType] ?? 1) : 1;
     const sw = PDF_SIZE_WEIGHT[propertyType]?.[unitType] ?? 1.0;
 
     // Total cost range
@@ -3308,13 +3316,30 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
       kitchen_price = "Included"; bedrooms_price = "Included"; bathrooms_price = "Included"; other_rooms_price = "Included";
     }
 
+    // Lifestyle labels
+    const boolLabel = (v: boolean | null | undefined) => v === true ? "Yes" : v === false ? "No" : "-";
+
     const pdfData = {
       renovationcost,
-      property_type: propertyType,
-      resale_unit: isResale ? "Yes" : "No",
-      unit_type: unitType,
-      rooms_to_renovate: (selectedRooms as string[]).join(", "),
-      renovation_timeline: timeline || "Not specified",
+      date: new Date().toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric" }),
+      contact_name: contact?.name ?? "",
+      contact_phone: contact?.whatsapp ?? "",
+      property_type: propertyType ?? "",
+      property_status: propertyStatus || (isResaleUnit ? "Resale" : "New"),
+      unit_type: unitType ?? "",
+      address: verifiedAddress ?? "",
+      zipcode: postalCode ?? "",
+      rooms_to_renovate: Array.isArray(selectedRooms) ? (selectedRooms as string[]).join(", ") : "",
+      renovation_timeline: timeline ?? "",
+      preferred_themes: Array.isArray(preferredThemes) ? preferredThemes.join(", ") : (preferredThemes ?? ""),
+      lifestyle_pets: boolLabel(lifestyle?.pets),
+      lifestyle_children: boolLabel(lifestyle?.children),
+      lifestyle_handicap: boolLabel(lifestyle?.handicap),
+      lifestyle_ecoFriendly: boolLabel(lifestyle?.ecoFriendly),
+      lifestyle_boldDesign: boolLabel(lifestyle?.boldDesign),
+      meeting_preference: meetingPreference ?? "",
+      additional_notes: additionalNotes ?? "",
+      reference_photos: Array.isArray(uploadedPhotos) ? uploadedPhotos.join(", ") : "",
       living_room, living_room_price, living_room_include: livingRoom_include,
       kitchen, kitchen_price, kitchen_include,
       bedrooms, bedrooms_price, bedrooms_count: bdr_count, bed_room_include,

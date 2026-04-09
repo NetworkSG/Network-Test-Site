@@ -6,7 +6,7 @@ import {
   Grid3X3, List, Trash2, Copy, Pencil, ChevronLeft, LogOut, Settings,
   User, Check, Image as ImageIcon, Loader2, AlertCircle, Sparkles, X,
   LayoutTemplate, ChevronDown, Sofa, Home, Download, RefreshCw,
-  PenLine, FileDown,
+  PenLine, FileDown, Send, Phone,
 } from "lucide-react";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
@@ -718,6 +718,12 @@ export function FloorPlan3DDashboard() {
   const [rendersLoading, setRendersLoading] = useState(false);
   const [rendersLoaded, setRendersLoaded] = useState(false);
 
+  // Render detail modal + lead form
+  const [renderModal, setRenderModal] = useState<RenderItem | null>(null);
+  const [leadForm, setLeadForm] = useState({ name: "", email: "", contactNumber: "", postalCode: "", propertyType: "", unitType: "", budget: "", keyCollectionPeriod: "", hackingWorks: "", preferredThemes: [] as string[] });
+  const [leadSending, setLeadSending] = useState(false);
+  const [leadSent, setLeadSent] = useState(false);
+
   const loadRenders = useCallback(async () => {
     setRendersLoading(true);
     try {
@@ -758,6 +764,65 @@ export function FloorPlan3DDashboard() {
     else await handleDeleteRender(deleteConfirm.id);
     setDeleteLoading(false);
     setDeleteConfirm(null);
+  };
+
+  const openRenderModal = async (r: RenderItem) => {
+    if (r.status !== "completed" || !r.resultUrl) return;
+    // Pre-fill lead form from cached profile & session metadata
+    let name = userName || "";
+    let email = "";
+    let contactNumber = "";
+    let keyCollectionPeriod = "";
+    try {
+      const cached = localStorage.getItem("homeowner-profile-cache");
+      if (cached) {
+        const p = JSON.parse(cached);
+        if (p.name) name = p.name;
+        if (p.email) email = p.email;
+        if (p.contactNumber) contactNumber = p.contactNumber;
+      }
+    } catch {}
+    // Also check session user_metadata for contactNumber
+    try {
+      const { data } = await supabaseClient.auth.getSession();
+      const meta = data?.session?.user?.user_metadata;
+      if (meta) {
+        if (!email && data.session?.user?.email) email = data.session.user.email;
+        if (!name && meta.name) name = meta.name;
+        if (!contactNumber && meta.contactNumber) contactNumber = meta.contactNumber;
+      }
+    } catch {}
+    setLeadForm({ name, email, contactNumber, postalCode: "", propertyType: "", unitType: "", budget: "", keyCollectionPeriod: "", hackingWorks: "", preferredThemes: [] });
+    setLeadSent(false);
+    setRenderModal(r);
+  };
+
+  const handleLeadSubmit = async () => {
+    if (!leadForm.name || !leadForm.email || !leadForm.contactNumber) return;
+    setLeadSending(true);
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`${API}/fp3d/lead`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: leadForm.name,
+          email: leadForm.email,
+          contactNumber: leadForm.contactNumber,
+          postalCode: leadForm.postalCode,
+          propertyType: leadForm.propertyType,
+          unitType: leadForm.unitType,
+          budget: leadForm.budget,
+          keyCollectionPeriod: leadForm.keyCollectionPeriod,
+          hackingWorks: leadForm.hackingWorks,
+          preferredThemes: leadForm.preferredThemes,
+        }),
+      });
+      setLeadSent(true);
+    } catch (e) {
+      console.error("Failed to submit lead:", e);
+    }
+    setLeadSending(false);
   };
 
   const timeAgoFn = (d: string) => {
@@ -930,7 +995,8 @@ export function FloorPlan3DDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {renders.map((r) => (
                 <motion.div key={r.renderId} whileHover={{ y: -4 }} transition={{ duration: 0.3 }}
-                  className="bg-white border border-[#F3F4F6] rounded-[17px] shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)] overflow-hidden group">
+                  onClick={() => openRenderModal(r)}
+                  className={`bg-white border border-[#F3F4F6] rounded-[17px] shadow-[0px_25px_35.9px_rgba(0,0,0,0.07)] overflow-hidden group ${r.status === "completed" && r.resultUrl ? "cursor-pointer" : ""}`}>
                   <div className="relative h-[200px] bg-[#F6F6F6] flex items-center justify-center overflow-hidden">
                     {r.status === "completed" && r.resultUrl ? (
                       <img src={r.resultUrl} alt={r.projectName} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -973,13 +1039,7 @@ export function FloorPlan3DDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 ml-3">
-                        {r.status === "completed" && r.resultUrl && (
-                          <a href={r.resultUrl} target="_blank" rel="noopener noreferrer" download
-                            className="size-[34px] rounded-[10px] bg-[#09090B] flex items-center justify-center hover:opacity-80 transition-opacity">
-                            <Download className="size-[16px] text-white" strokeWidth={1.5} />
-                          </a>
-                        )}
-                        <button onClick={() => requestDeleteRender(r.renderId, r.projectName || "Render")}
+                        <button onClick={(e) => { e.stopPropagation(); requestDeleteRender(r.renderId, r.projectName || "Render"); }}
                           className="size-[34px] rounded-[10px] hover:bg-red-50 flex items-center justify-center transition-colors">
                           <Trash2 className="size-[16px] text-[#ABABAB] hover:text-red-500 transition-colors" strokeWidth={1.5} />
                         </button>
@@ -1243,6 +1303,223 @@ export function FloorPlan3DDashboard() {
               <Loader2 className="size-[32px] text-[#09090B] animate-spin" />
               <p className="font-['Inter',sans-serif] text-[14px] font-medium text-[#09090B] tracking-[-0.3px]">Creating project from template...</p>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Render detail + lead form modal */}
+      <AnimatePresence>
+        {renderModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[260] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => { if (!leadSending) setRenderModal(null); }}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.25 }}
+              className="bg-white rounded-[20px] shadow-[0_25px_50px_rgba(0,0,0,0.15)] border border-[#F3F4F6] w-full max-w-[900px] max-h-[90vh] overflow-hidden flex flex-col md:flex-row"
+              onClick={(e) => e.stopPropagation()}>
+
+              {/* Left: Render image */}
+              <div className="md:w-[55%] w-full bg-[#F6F6F6] flex items-center justify-center min-h-[250px] md:min-h-0">
+                {renderModal.resultUrl && (
+                  <img src={renderModal.resultUrl} alt={renderModal.projectName}
+                    className="w-full h-full object-cover" />
+                )}
+              </div>
+
+              {/* Right: Lead form */}
+              <div className="md:w-[45%] w-full p-6 md:p-8 flex flex-col">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-['Inter',sans-serif] font-bold text-[20px] text-[#09090B] tracking-[-0.5px] leading-tight">
+                      Get this design matched
+                    </h3>
+                    <p className="font-['Inter',sans-serif] text-[13px] text-[#71717A] mt-1">
+                      We&apos;ll connect you with a designer for this look
+                    </p>
+                  </div>
+                  <button onClick={() => setRenderModal(null)}
+                    className="size-[32px] rounded-[10px] hover:bg-[#F6F6F6] flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                    <X className="size-[16px] text-[#71717A]" strokeWidth={1.5} />
+                  </button>
+                </div>
+
+                {leadSent ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+                    <div className="size-[56px] rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                      <Check className="size-[28px] text-emerald-600" strokeWidth={2} />
+                    </div>
+                    <h4 className="font-['Inter',sans-serif] font-bold text-[18px] text-[#09090B] tracking-[-0.3px] mb-2">Request sent!</h4>
+                    <p className="font-['Inter',sans-serif] text-[13px] text-[#71717A] max-w-[260px]">
+                      Our team will review your request and get back to you shortly.
+                    </p>
+                    <button onClick={() => setRenderModal(null)}
+                      className="mt-6 h-[40px] px-6 rounded-[14px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] font-medium hover:bg-[#F6F6F6] transition-colors cursor-pointer">
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1 space-y-3.5 overflow-y-auto pr-1 max-h-[calc(90vh-220px)] md:max-h-none">
+                      {/* Name & Email row */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Name</label>
+                          <input type="text" value={leadForm.name} readOnly
+                            className="w-full h-[38px] px-3 rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none cursor-not-allowed opacity-70" />
+                        </div>
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Email</label>
+                          <input type="email" value={leadForm.email} readOnly
+                            className="w-full h-[38px] px-3 rounded-[10px] border border-[#E5E7EB] bg-[#FAFAFA] text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none cursor-not-allowed opacity-70" />
+                        </div>
+                      </div>
+                      {/* Contact & Postal Code row */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Contact Number</label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB]" strokeWidth={1.5} />
+                            <input type="tel" value={leadForm.contactNumber}
+                              onChange={(e) => setLeadForm((f) => ({ ...f, contactNumber: e.target.value }))}
+                              placeholder="Enter number"
+                              className="w-full h-[38px] pl-8 pr-3 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Postal Code</label>
+                          <input type="text" value={leadForm.postalCode} maxLength={6}
+                            onChange={(e) => setLeadForm((f) => ({ ...f, postalCode: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                            placeholder="e.g. 520123"
+                            className="w-full h-[38px] px-3 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all" />
+                        </div>
+                      </div>
+                      {/* Property Type & Unit Type row */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Property Type</label>
+                          <div className="relative">
+                            <select value={leadForm.propertyType}
+                              onChange={(e) => setLeadForm((f) => ({ ...f, propertyType: e.target.value, unitType: e.target.value !== "HDB" ? "" : f.unitType }))}
+                              className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all appearance-none cursor-pointer">
+                              <option value="">Select type</option>
+                              <option value="HDB">HDB</option>
+                              <option value="Condo">Condo</option>
+                              <option value="Landed">Landed</option>
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB] pointer-events-none" strokeWidth={1.5} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Unit Type</label>
+                          <div className="relative">
+                            <select value={leadForm.unitType}
+                              onChange={(e) => setLeadForm((f) => ({ ...f, unitType: e.target.value }))}
+                              className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all appearance-none cursor-pointer disabled:bg-[#FAFAFA] disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={leadForm.propertyType !== "HDB"}>
+                              <option value="">Select unit</option>
+                              {["1-Room", "2-Room", "3-Room", "4-Room", "5-Room", "Executive", "3Gen", "Jumbo"].map((u) => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB] pointer-events-none" strokeWidth={1.5} />
+                          </div>
+                        </div>
+                      </div>
+                      {/* Budget & Key Collection row */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Renovation Budget</label>
+                          <div className="relative">
+                            <select value={leadForm.budget}
+                              onChange={(e) => setLeadForm((f) => ({ ...f, budget: e.target.value }))}
+                              className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all appearance-none cursor-pointer">
+                              <option value="">Select budget</option>
+                              <option value="Below $30K">Below $30K</option>
+                              <option value="$30K – $50K">$30K – $50K</option>
+                              <option value="$50K – $80K">$50K – $80K</option>
+                              <option value="$80K – $100K">$80K – $100K</option>
+                              <option value="$100K – $200K">$100K – $200K</option>
+                              <option value="$200K – $400K">$200K – $400K</option>
+                              <option value="$400K – $500K">$400K – $500K</option>
+                              <option value="$500K & Above">$500K & Above</option>
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB] pointer-events-none" strokeWidth={1.5} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Key Collection</label>
+                          <div className="relative">
+                            <select value={leadForm.keyCollectionPeriod}
+                              onChange={(e) => setLeadForm((f) => ({ ...f, keyCollectionPeriod: e.target.value }))}
+                              className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all appearance-none cursor-pointer">
+                              <option value="">Select period</option>
+                              <option value="Keys Collected">Keys Collected</option>
+                              <option value="Within 3 months">Within 3 months</option>
+                              <option value="3-6 months">3-6 months</option>
+                              <option value="6-12 months">6-12 months</option>
+                              <option value="More than 12 months">More than 12 months</option>
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB] pointer-events-none" strokeWidth={1.5} />
+                          </div>
+                        </div>
+                      </div>
+                      {/* Hacking Works — dropdown */}
+                      <div>
+                        <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1 block">Hacking Works</label>
+                        <div className="relative">
+                          <select value={leadForm.hackingWorks}
+                            onChange={(e) => setLeadForm((f) => ({ ...f, hackingWorks: e.target.value }))}
+                            className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] outline-none focus:border-[#09090B] focus:ring-1 focus:ring-[#09090B] transition-all appearance-none cursor-pointer">
+                            <option value="">Do you plan hacking works?</option>
+                            <option value="None">None</option>
+                            <option value="Minor">Minor (walls / toilet tiles)</option>
+                            <option value="Major">Major (complete overhaul)</option>
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-[13px] text-[#ABABAB] pointer-events-none" strokeWidth={1.5} />
+                        </div>
+                      </div>
+                      {/* Preferred Themes — multi-select chips */}
+                      <div>
+                        <label className="font-['Inter',sans-serif] text-[11px] font-medium text-[#71717A] mb-1.5 block">Preferred Themes <span className="text-[#ABABAB] font-normal">(pick up to 2)</span></label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {["Modern", "Minimalist", "Scandinavian", "Industrial", "Contemporary", "Japanese", "Japandi", "Luxury", "Wabi Sabi", "Vintage", "Eclectic", "Boutique", "Classical", "Country", "Peranakan"].map((theme) => {
+                            const selected = leadForm.preferredThemes.includes(theme);
+                            return (
+                              <button key={theme} type="button"
+                                onClick={() => setLeadForm((f) => {
+                                  const themes = f.preferredThemes.includes(theme)
+                                    ? f.preferredThemes.filter((t) => t !== theme)
+                                    : f.preferredThemes.length < 2 ? [...f.preferredThemes, theme] : f.preferredThemes;
+                                  return { ...f, preferredThemes: themes };
+                                })}
+                                className={`px-2.5 py-1 rounded-[8px] font-['Inter',sans-serif] text-[12px] font-medium border transition-all cursor-pointer ${
+                                  selected
+                                    ? "bg-[#09090B] text-white border-[#09090B]"
+                                    : "bg-white text-[#09090B] border-[#E5E7EB] hover:border-[#09090B]"
+                                }`}>
+                                {theme}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button onClick={handleLeadSubmit} disabled={leadSending || !leadForm.contactNumber}
+                      className="mt-6 w-full h-[46px] rounded-[14px] bg-[#09090B] text-white font-['Inter',sans-serif] text-[14px] font-semibold flex items-center justify-center gap-2.5 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                      {leadSending ? (
+                        <Loader2 className="size-[16px] animate-spin" />
+                      ) : (
+                        <>
+                          <Send className="size-[15px]" strokeWidth={1.5} />
+                          Send to get this design matched
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

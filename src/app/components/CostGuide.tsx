@@ -32,7 +32,7 @@ interface CostEstimate {
 }
 
 // ─── Constants ───────────────────────────────────────────
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 12;
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1768144092684-c1a5dd6c7aad?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBpbnRlcmlvciUyMHJlbm92YXRpb24lMjBsaXZpbmclMjByb29tJTIwd2FybSUyMGxpZ2h0aW5nfGVufDF8fHx8MTc3MzI5NjkzMnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
@@ -193,7 +193,7 @@ function roundTo(value: number, nearest: number): number {
 // ─── Cost Computation Engine ─────────────────────────────
 function computeEstimate(
   propertyType: PropertyType,
-  isResale: boolean,
+  propertyStatus: string,
   unitType: string,
   selectedRooms: RoomKey[],
   roomScopes: Partial<Record<RoomKey, RoomScope>>,
@@ -201,6 +201,7 @@ function computeEstimate(
 ): CostEstimate {
   // Stage 1 multipliers
   const pf = PROPERTY_FACTOR[propertyType];
+  const isResale = propertyStatus === "Existing" || propertyStatus === "Resale";
   const rf = isResale ? RESALE_FACTOR[propertyType] : 1;
   const sw = SIZE_WEIGHT[propertyType]?.[unitType] ?? 1.0;
 
@@ -314,28 +315,24 @@ function StepProperty({
 function StepUnit({
   propertyType,
   unitType,
-  isResale,
   onUnitChange,
-  onResaleChange,
 }: {
   propertyType: PropertyType;
   unitType: string;
-  isResale: boolean;
   onUnitChange: (v: string) => void;
-  onResaleChange: (v: boolean) => void;
 }) {
   const units = UNIT_OPTIONS[propertyType] || [];
 
   return (
     <div className="w-full max-w-[480px] mx-auto">
       <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        Which unit type?
+        What's your unit type?
       </h1>
       <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
         Choose the closest match to your home.
       </p>
 
-      <div className="flex flex-col gap-3 mb-6">
+      <div className="flex flex-col gap-3">
         {units.map((unit) => (
           <button
             key={unit}
@@ -359,30 +356,174 @@ function StepUnit({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
 
-      {/* Resale toggle */}
-      <div className="flex items-center justify-between px-5 py-4 rounded-[12px] border border-[#d8d3c8] bg-[#fafaf8]">
-        <div>
-          <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] block">
-            Resale property
-          </span>
-          <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] block mt-0.5">
-            Resale homes typically cost more to renovate
-          </span>
-        </div>
-        <button
-          onClick={() => onResaleChange(!isResale)}
-          className={`relative w-[44px] h-[24px] rounded-full transition-colors duration-200 shrink-0 ml-4 ${
-            isResale ? "bg-[#0f0f0d]" : "bg-[#d8d3c8]"
-          }`}
-        >
-          <span
-            className={`absolute top-[2px] left-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
-              isResale ? "translate-x-[20px]" : ""
-            }`}
-          />
-        </button>
+// ═══════════════════════════════════════════════════════════
+// STEP 3 — Property Status
+// ═══════════════════════════════════════════════════════════
+function StepPropertyStatus({
+  propertyStatus,
+  onStatusChange,
+}: {
+  propertyStatus: string;
+  onStatusChange: (v: string) => void;
+}) {
+  const statusOptions: { label: string; sub: string }[] = [
+    { label: "New", sub: "BTO or new launch" },
+    { label: "Existing", sub: "Currently living in" },
+    { label: "Resale", sub: "Recently purchased resale" },
+  ];
+
+  return (
+    <div className="w-full max-w-[480px] mx-auto">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+        What's your property status?
+      </h1>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+        Existing & resale homes typically cost more to renovate.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        {statusOptions.map((opt) => (
+          <button key={opt.label} onClick={() => onStatusChange(opt.label)}
+            className={`w-full flex items-start justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
+              propertyStatus === opt.label
+                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
+                : "border-[#d8d3c8] hover:border-[#9a9790]"
+            }`}>
+            <div>
+              <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">{opt.label}</span>
+              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] block mt-0.5">{opt.sub}</span>
+            </div>
+            {propertyStatus === opt.label && (
+              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0 mt-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            )}
+          </button>
+        ))}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 4 — Postal Code
+// ═══════════════════════════════════════════════════════════
+function StepPostalCode({
+  postalCode,
+  onPostalChange,
+  onAddressVerified,
+}: {
+  postalCode: string;
+  onPostalChange: (v: string) => void;
+  onAddressVerified?: (address: string) => void;
+}) {
+  const [verifyState, setVerifyState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
+  const [addressHint, setAddressHint] = useState("");
+  const timerRef = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  const verifyPostal = async (code: string) => {
+    if (code.length !== 6) {
+      setVerifyState("idle");
+      setAddressHint("");
+      return;
+    }
+    setVerifyState("checking");
+    try {
+      const res = await fetch(
+        `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${code}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
+      );
+      const data = await res.json();
+      if (data.found && data.found > 0 && data.results?.length > 0) {
+        const r = data.results[0];
+        const addr = r.ADDRESS || r.BLK_NO ? `${r.BLK_NO || ""} ${r.ROAD_NAME || ""}`.trim() : "";
+        setAddressHint(addr);
+        setVerifyState("valid");
+        onAddressVerified?.(addr);
+      } else {
+        setAddressHint("");
+        setVerifyState("invalid");
+        onAddressVerified?.("");
+      }
+    } catch {
+      // Network error — don't block the user
+      setVerifyState("idle");
+      setAddressHint("");
+    }
+  };
+
+  const handleChange = (raw: string) => {
+    const code = raw.replace(/\D/g, "").slice(0, 6);
+    onPostalChange(code);
+    // Debounce verification
+    if (timerRef[0]) clearTimeout(timerRef[0]);
+    if (code.length === 6) {
+      timerRef[0] = setTimeout(() => verifyPostal(code), 400);
+    } else {
+      setVerifyState("idle");
+      setAddressHint("");
+    }
+  };
+
+  return (
+    <div className="w-full max-w-[480px] mx-auto">
+      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+        What's your postal code?
+      </h1>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+        Helps us match you with nearby designers.
+      </p>
+
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={6}
+          placeholder="e.g. 520123"
+          value={postalCode}
+          onChange={(e) => handleChange(e.target.value)}
+          className={`w-full border rounded-[10px] h-[52px] px-5 pr-12 font-['DM_Sans',sans-serif] text-[16px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
+            verifyState === "valid" ? "border-green-600 focus:border-green-600" :
+            verifyState === "invalid" ? "border-red-500 focus:border-red-500" :
+            "border-[#d8d3c8] focus:border-[#0f0f0d]"
+          }`}
+        />
+        {verifyState === "checking" && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2">
+            <div className="w-5 h-5 border-2 border-[#d8d3c8] border-t-[#0f0f0d] rounded-full animate-spin" />
+          </div>
+        )}
+        {verifyState === "valid" && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[22px] h-[22px] rounded-full bg-green-600 flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+        )}
+        {verifyState === "invalid" && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[22px] h-[22px] rounded-full bg-red-500 flex items-center justify-center">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {verifyState === "valid" && addressHint && (
+        <p className="font-['DM_Sans',sans-serif] text-[13px] text-green-700 mt-3 flex items-center gap-1.5">
+          <span>{addressHint}</span>
+        </p>
+      )}
+      {verifyState === "invalid" && (
+        <p className="font-['DM_Sans',sans-serif] text-[13px] text-red-500 mt-3">
+          We couldn't find this postal code. Please check and try again.
+        </p>
+      )}
     </div>
   );
 }
@@ -647,6 +788,14 @@ function StepScope({
 // ══════════════════════════════════════════════════════════
 // STEP 5 — Timeline
 // ═══════════════════════════════════════════════════════════
+interface LifestyleState {
+  pets: boolean | null;
+  children: boolean | null;
+  handicap: boolean | null;
+  ecoFriendly: boolean | null;
+  boldDesign: boolean | null;
+}
+
 function StepTimeline({
   selected,
   onSelect,
@@ -686,6 +835,81 @@ function StepTimeline({
             )}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 6 — Lifestyle
+// ═══════════════════════════════════════════════════════════
+function StepLifestyle({
+  lifestyle,
+  onLifestyleChange,
+}: {
+  lifestyle: LifestyleState;
+  onLifestyleChange: (key: keyof LifestyleState, value: boolean) => void;
+}) {
+  const items: { key: keyof LifestyleState; label: string; description: string }[] = [
+    { key: "pets", label: "Do you have pets?", description: "We'll recommend durable, scratch-resistant materials" },
+    { key: "children", label: "Children in the home?", description: "We'll prioritise child-safe designs and rounded edges" },
+    { key: "handicap", label: "Need accessible features?", description: "Wider doorways, grab bars, and barrier-free layouts" },
+    { key: "ecoFriendly", label: "Eco-friendly materials?", description: "Sustainable, low-VOC, and energy-efficient options" },
+    { key: "boldDesign", label: "Love bold designs?", description: "Adventurous colours, patterns, and statement pieces" },
+  ];
+
+  return (
+    <div className="w-full max-w-[480px] mx-auto">
+      <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+        Tell us about your lifestyle
+      </h1>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+        This helps us match you with the right designers. All optional.
+      </p>
+
+      <div className="flex flex-col gap-4">
+        {items.map(({ key, label, description }) => {
+          const value = lifestyle[key];
+          return (
+            <div
+              key={key}
+              className="bg-[#fafaf8] border border-[#e8e4db] rounded-[14px] px-5 py-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] leading-[1.3] mb-1">
+                    {label}
+                  </p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.4]">
+                    {description}
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0 pt-0.5">
+                  <button
+                    onClick={() => onLifestyleChange(key, true)}
+                    className={`px-4 py-[6px] rounded-full text-[13px] font-medium font-['DM_Sans',sans-serif] transition-all duration-200 cursor-pointer ${
+                      value === true
+                        ? "bg-[#0f0f0d] text-white"
+                        : "bg-[#f0ede6] text-[#9a9790] hover:text-[#0f0f0d] hover:bg-[#e8e4db]"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => onLifestyleChange(key, false)}
+                    className={`px-4 py-[6px] rounded-full text-[13px] font-medium font-['DM_Sans',sans-serif] transition-all duration-200 cursor-pointer ${
+                      value === false
+                        ? "bg-[#0f0f0d] text-white"
+                        : "bg-[#f0ede6] text-[#9a9790] hover:text-[#0f0f0d] hover:bg-[#e8e4db]"
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -803,45 +1027,11 @@ function StepContact({
 // STEP 7 — Results
 // ═══════════════════════════════════════════════════════════
 // CraftMyPDF template ID
-const CRAFTMYPDF_TEMPLATE_ID = "28177b236b53ee54";
+const CRAFTMYPDF_TEMPLATE_ID = "79b77b23586a939e";
 
-function StepResults({ estimate, propertyType, unitType, isResale, selectedRooms, isFullHomePath, roomScopes, fullHomeScope, timeline, quoteRequestId }: { estimate: CostEstimate; propertyType: string; unitType: string; isResale: boolean; selectedRooms: RoomKey[]; isFullHomePath: boolean; roomScopes: Partial<Record<RoomKey, RoomScope>>; fullHomeScope: FullHomeScope | null; timeline: string; quoteRequestId: string | null }) {
+function StepResults({ estimate, propertyType, unitType, propertyStatus, selectedRooms, isFullHomePath, roomScopes, fullHomeScope, timeline, quoteRequestId, postalCode, verifiedAddress, lifestyle, preferredThemes, meetingPreference, additionalNotes, uploadedPhotos, contact }: { estimate: CostEstimate; propertyType: string; unitType: string; propertyStatus: string; selectedRooms: RoomKey[]; isFullHomePath: boolean; roomScopes: Partial<Record<RoomKey, RoomScope>>; fullHomeScope: FullHomeScope | null; timeline: string; quoteRequestId: string | null; postalCode: string; verifiedAddress: string; lifestyle: Record<string, boolean | null>; preferredThemes: string[]; meetingPreference: string; additionalNotes: string; uploadedPhotos: string[]; contact: { name: string; whatsapp: string } }) {
   const navigate = useNavigate();
   const displayRange = estimate.isFloor ? "$30K – $35K" : `${formatCurrency(estimate.estMin)} – ${formatCurrency(estimate.estMax)}`;
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState<string | null>(null);
-
-  const handleDownloadPdf = async () => {
-    setPdfLoading(true);
-    setPdfError(null);
-    try {
-      const res = await fetch(`${API_BASE}/cost-guide-pdf`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({
-          propertyType, isResale, unitType, selectedRooms, timeline,
-          roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null,
-          estimate, templateId: CRAFTMYPDF_TEMPLATE_ID,
-          quoteRequestId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.pdfUrl) {
-        console.error("PDF generation failed:", data);
-        setPdfError(data.error || "Failed to generate PDF");
-        return;
-      }
-      setPdfUrl(data.pdfUrl);
-      // Open PDF in new tab
-      window.open(data.pdfUrl, "_blank");
-    } catch (err) {
-      console.error("Error generating PDF:", err);
-      setPdfError("Something went wrong. Please try again.");
-    } finally {
-      setPdfLoading(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-[520px] mx-auto py-10 md:py-16">
@@ -923,12 +1113,18 @@ export function CostGuide() {
   // Form state
   const [propertyType, setPropertyType] = useState<PropertyType | "">("");
   const [unitType, setUnitType] = useState("");
-  const [isResale, setIsResale] = useState(false);
+  const [propertyStatus, setPropertyStatus] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [verifiedAddress, setVerifiedAddress] = useState("");
   const [selectedRooms, setSelectedRooms] = useState<RoomKey[]>([]);
   const [roomScopes, setRoomScopes] = useState<Partial<Record<RoomKey, RoomScope>>>({});
   const [fullHomeScope, setFullHomeScope] = useState<FullHomeScope>({ scope: "Moderate", carpentry: "Medium", layout: "No" });
   const [timeline, setTimeline] = useState("");
   const [meetingPreference, setMeetingPreference] = useState("");
+  const [lifestyle, setLifestyle] = useState<{ pets: boolean | null; children: boolean | null; handicap: boolean | null; ecoFriendly: boolean | null; boldDesign: boolean | null }>({ pets: null, children: null, handicap: null, ecoFriendly: null, boldDesign: null });
+  const [preferredThemes, setPreferredThemes] = useState<string[]>([]);
+  const [uploadedPhotos, setUploadedPhotos] = useState<{ name: string; url: string }[]>([]);
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const [contact, setContact] = useState({ name: "", whatsapp: "", email: "" });
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   const [quoteRequestId, setQuoteRequestId] = useState<string | null>(null);
@@ -967,15 +1163,25 @@ export function CostGuide() {
       case 2:
         return unitType !== "";
       case 3:
-        return selectedRooms.length > 0;
+        return propertyStatus !== "";
       case 4:
+        return true; // postal code is optional
+      case 5:
+        return selectedRooms.length > 0;
+      case 6:
         if (isFullHomePath) return true;
         return selectedRooms.every((r) => roomScopes[r]?.level);
-      case 5:
-        return timeline !== "";
-      case 6:
-        return meetingPreference !== "";
       case 7:
+        return timeline !== "";
+      case 8:
+        return true; // lifestyle is all optional
+      case 9:
+        return true; // themes are optional
+      case 10:
+        return true; // photos & notes are optional
+      case 11:
+        return meetingPreference !== "";
+      case 12:
         return (
           contact.name.trim() !== "" &&
           contact.whatsapp.length === 8 &&
@@ -1000,13 +1206,13 @@ export function CostGuide() {
     if (submitting || !propertyType) return;
     setSubmitting(true);
     // Compute estimate client-side
-    const est = computeEstimate(propertyType as PropertyType, isResale, unitType, selectedRooms, roomScopes, isFullHomePath ? fullHomeScope : null);
+    const est = computeEstimate(propertyType as PropertyType, propertyStatus, unitType, selectedRooms, roomScopes, isFullHomePath ? fullHomeScope : null);
     setEstimate(est);
     try {
       const res = await fetch(`${API_BASE}/cost-guide`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({ propertyType, isResale, unitType, selectedRooms, timeline, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact: { name: sanitizeInput(contact.name, 100), whatsapp: sanitizeInput(contact.whatsapp, 20), email: sanitizeEmail(contact.email) }, estimate: est }),
+        body: JSON.stringify({ propertyType, propertyStatus, postalCode, unitType, selectedRooms, timeline, lifestyle, preferredThemes, uploadedPhotos: uploadedPhotos.map((p) => p.url), additionalNotes, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact: { name: sanitizeInput(contact.name, 100), whatsapp: sanitizeInput(contact.whatsapp, 20), email: sanitizeEmail(contact.email) }, estimate: est }),
       });
       const data = await res.json();
       if (!res.ok) console.error("Cost guide submission failed:", data);
@@ -1014,7 +1220,7 @@ export function CostGuide() {
         console.log("Cost guide submitted:", data);
         if (data.qrId) setQuoteRequestId(data.qrId);
       }
-      setStep(8);
+      setStep(13);
 
       // Generate PDF then send to Zapier with PDF URL in background
       (async () => {
@@ -1023,10 +1229,14 @@ export function CostGuide() {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
             body: JSON.stringify({
-              propertyType, isResale, unitType, selectedRooms, timeline,
+              propertyType, propertyStatus, unitType, selectedRooms, timeline,
               roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null,
               estimate: est, templateId: CRAFTMYPDF_TEMPLATE_ID,
               quoteRequestId: data.qrId || null,
+              postalCode, verifiedAddress, lifestyle, preferredThemes,
+              meetingPreference, additionalNotes,
+              uploadedPhotos: uploadedPhotos.map((p) => p.url),
+              contact: { name: contact.name, whatsapp: contact.whatsapp },
             }),
           });
           const pdfData = await pdfRes.json();
@@ -1047,6 +1257,12 @@ export function CostGuide() {
           formData.append("Lead Form", "Cost Guide Lead Form");
           formData.append("Key Date", timeline);
           formData.append("Contact Phone", contact.whatsapp);
+          formData.append("Postal Code", postalCode);
+          formData.append("Property Status", propertyStatus);
+          formData.append("Lifestyle Preferences", JSON.stringify(lifestyle));
+          formData.append("Preferred Themes", preferredThemes.join(", "));
+          formData.append("Additional Notes", additionalNotes);
+          formData.append("Reference Photos", uploadedPhotos.map((p) => p.url).join(", "));
           await fetch("https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/", {
             method: "POST",
             body: formData,
@@ -1057,7 +1273,7 @@ export function CostGuide() {
       })();
     } catch (err) {
       console.error("Error submitting cost guide:", err);
-      setStep(8);
+      setStep(13);
     } finally {
       setSubmitting(false);
     }
@@ -1175,7 +1391,7 @@ export function CostGuide() {
       <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
 
       {/* ── Content ── */}
-      <main className="flex-1 flex items-center px-6 md:px-12">
+      <main className="flex-1 flex items-start px-6 md:px-12 overflow-y-auto py-10 md:py-16">
         <div className="max-w-[1293px] mx-auto w-full">
           <AnimatePresence mode="wait">
             <motion.div
@@ -1198,42 +1414,143 @@ export function CostGuide() {
                 <StepUnit
                   propertyType={propertyType as PropertyType}
                   unitType={unitType}
-                  isResale={isResale}
                   onUnitChange={setUnitType}
-                  onResaleChange={setIsResale}
                 />
               )}
               {step === 3 && (
-                <StepRooms selected={selectedRooms} onToggle={toggleRoom} />
+                <StepPropertyStatus
+                  propertyStatus={propertyStatus}
+                  onStatusChange={setPropertyStatus}
+                />
               )}
-              {step === 4 && isFullHomePath && (
-                <StepFullHomeScope data={fullHomeScope} onChange={(u) => setFullHomeScope((p) => ({ ...p, ...u }))} />
-              )}
-              {step === 4 && !isFullHomePath && (
-                <StepScope rooms={selectedRooms} scopes={roomScopes} onUpdate={updateScope} />
+              {step === 4 && (
+                <StepPostalCode
+                  postalCode={postalCode}
+                  onPostalChange={setPostalCode}
+                  onAddressVerified={setVerifiedAddress}
+                />
               )}
               {step === 5 && (
+                <StepRooms selected={selectedRooms} onToggle={toggleRoom} />
+              )}
+              {step === 6 && isFullHomePath && (
+                <StepFullHomeScope data={fullHomeScope} onChange={(u) => setFullHomeScope((p) => ({ ...p, ...u }))} />
+              )}
+              {step === 6 && !isFullHomePath && (
+                <StepScope rooms={selectedRooms} scopes={roomScopes} onUpdate={updateScope} />
+              )}
+              {step === 7 && (
                 <StepTimeline selected={timeline} onSelect={setTimeline} />
               )}
-              {step === 6 && (
-                <div className="w-full max-w-[520px] mx-auto text-center">
-                  <h1 className="font-semibold text-[28px] md:text-[36px] text-[#0f0f0d] tracking-[-1.5px] leading-[1.2] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                    How would you prefer to meet your designer?
+              {step === 8 && (
+                <StepLifestyle
+                  lifestyle={lifestyle}
+                  onLifestyleChange={(key, value) => setLifestyle((p) => ({ ...p, [key]: value }))}
+                />
+              )}
+              {step === 9 && (
+                <div className="w-full max-w-[520px] mx-auto">
+                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                    What styles do you love?
                   </h1>
-                  <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] leading-[1.6] mb-10 max-w-[420px] mx-auto">
-                    Let us know so we can arrange the right type of consultation.
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+                    Pick up to 2 themes that match your taste (optional)
                   </p>
-                  <div className="grid grid-cols-2 gap-4 max-w-[400px] mx-auto">
+                  <div className="flex flex-wrap gap-2">
+                    {["Modern", "Minimalist", "Scandinavian", "Industrial", "Contemporary", "Japanese", "Japandi", "Luxury", "Wabi Sabi", "Vintage", "Eclectic", "Boutique", "Classical", "Country", "Peranakan"].map((theme) => {
+                      const isSelected = preferredThemes.includes(theme);
+                      return (
+                        <button key={theme}
+                          onClick={() => {
+                            if (isSelected) setPreferredThemes((p) => p.filter((t) => t !== theme));
+                            else if (preferredThemes.length < 2) setPreferredThemes((p) => [...p, theme]);
+                          }}
+                          className={`px-4 py-2 rounded-[10px] font-['DM_Sans',sans-serif] text-[13px] font-medium border transition-all duration-200 ${
+                            isSelected
+                              ? "bg-[#0f0f0d] text-white border-[#0f0f0d]"
+                              : "bg-[#fafaf8] text-[#0f0f0d] border-[#d8d3c8] hover:border-[#9a9790]"
+                          }`}>
+                          {theme}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {step === 10 && (
+                <div className="w-full max-w-[520px] mx-auto">
+                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                    Share your inspiration
+                  </h1>
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+                    Upload reference photos or add notes for your designer (optional)
+                  </p>
+
+                  {/* Photo upload */}
+                  <h3 className="font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.3px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Reference photos</h3>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">Upload site photos or inspiration images (max 5)</p>
+                  <div className="mb-8">
+                    {uploadedPhotos.length < 5 && (
+                      <label className="flex flex-col items-center justify-center w-full h-[120px] rounded-[12px] border-2 border-dashed border-[#d8d3c8] bg-[#fafaf8] hover:border-[#9a9790] transition-colors cursor-pointer mb-3">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9a9790" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                        <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] mt-2">Click to upload (max 3MB each)</span>
+                        <input type="file" accept="image/*" multiple className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const remaining = 5 - uploadedPhotos.length;
+                            const valid = files.filter((f) => f.size <= 3 * 1024 * 1024).slice(0, remaining);
+                            const newPhotos = valid.map((f) => ({ name: f.name, url: URL.createObjectURL(f), file: f }));
+                            setUploadedPhotos((p) => [...p, ...newPhotos.map(({ name, url }) => ({ name, url }))]);
+                            e.target.value = "";
+                          }} />
+                      </label>
+                    )}
+                    {uploadedPhotos.length > 0 && (
+                      <div className="grid grid-cols-5 gap-2">
+                        {uploadedPhotos.map((photo, i) => (
+                          <div key={i} className="relative group">
+                            <img src={photo.url} alt={photo.name} className="w-full h-[64px] object-cover rounded-[8px] border border-[#d8d3c8]" />
+                            <button onClick={() => setUploadedPhotos((p) => p.filter((_, idx) => idx !== i))}
+                              className="absolute -top-1.5 -right-1.5 w-[20px] h-[20px] rounded-full bg-[#0f0f0d] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[11px]">
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Additional notes */}
+                  <h3 className="font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.3px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Additional notes</h3>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">Anything else you'd like us to know</p>
+                  <textarea
+                    value={additionalNotes}
+                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                    placeholder="e.g. specific requirements, design references, links..."
+                    rows={3}
+                    className="w-full border border-[#d8d3c8] rounded-[10px] px-4 py-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none focus:border-[#0f0f0d] transition-colors bg-[#fafaf8] resize-none"
+                  />
+                </div>
+              )}
+              {step === 11 && (
+                <div className="w-full max-w-[480px] mx-auto">
+                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                    How would you like to meet?
+                  </h1>
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
+                    Choose how you'd prefer to meet your designer.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
                     {["Virtual", "Physical"].map((opt) => (
                       <button key={opt} onClick={() => setMeetingPreference(opt)}
-                        className={`flex items-center justify-center px-6 py-5 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${meetingPreference === opt ? "border-[#0f0f0d] shadow-[0px_4px_12px_rgba(0,0,0,0.1)]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
+                        className={`flex items-center justify-center px-6 py-4 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${meetingPreference === opt ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
                         <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">{opt}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              {step === 7 && (
+              {step === 12 && (
                 <StepContact
                   data={contact}
                   onChange={(field, value) =>
@@ -1241,8 +1558,8 @@ export function CostGuide() {
                   }
                 />
               )}
-              {step === 8 && (
-                <StepResults estimate={estimate} propertyType={propertyType} unitType={unitType} isResale={isResale} selectedRooms={selectedRooms} isFullHomePath={isFullHomePath} roomScopes={roomScopes} fullHomeScope={isFullHomePath ? fullHomeScope : null} timeline={timeline} quoteRequestId={quoteRequestId} />
+              {step === 13 && (
+                <StepResults estimate={estimate} propertyType={propertyType} unitType={unitType} propertyStatus={propertyStatus} selectedRooms={selectedRooms} isFullHomePath={isFullHomePath} roomScopes={roomScopes} fullHomeScope={isFullHomePath ? fullHomeScope : null} timeline={timeline} quoteRequestId={quoteRequestId} postalCode={postalCode} verifiedAddress={verifiedAddress} lifestyle={lifestyle} preferredThemes={preferredThemes} meetingPreference={meetingPreference} additionalNotes={additionalNotes} uploadedPhotos={uploadedPhotos.map(p => p.url)} contact={{ name: contact.name, whatsapp: contact.whatsapp }} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -1250,11 +1567,11 @@ export function CostGuide() {
       </main>
 
       {/* ── Footer nav ── */}
-      {step >= 1 && step <= 7 && (
+      {step >= 1 && step <= 12 && (
         <footer className="px-6 md:px-12 pb-8 md:pb-10">
           <div className="max-w-[1293px] mx-auto">
             <div className="mb-6">
-              <ProgressBar step={step} total={7} />
+              <ProgressBar step={step} total={12} />
             </div>
 
             <div className="flex items-center justify-between mt-4">
@@ -1275,19 +1592,19 @@ export function CostGuide() {
               )}
 
               <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] tracking-[0.5px] uppercase">
-                {step === 7 ? "Last step" : `Step ${step} of 7`}
+                {step === 12 ? "Last step" : `Step ${step} of 12`}
               </p>
 
               <button
-                onClick={step === 7 ? handleSubmit : handleNext}
-                disabled={!canNext() || (step === 7 && submitting)}
+                onClick={step === 12 ? handleSubmit : handleNext}
+                disabled={!canNext() || (step === 12 && submitting)}
                 className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
-                  canNext() && !(step === 7 && submitting)
+                  canNext() && !(step === 12 && submitting)
                     ? "bg-[#0f0f0d] hover:bg-[#0f0f0d]"
                     : "bg-[#d8d3c8] cursor-not-allowed"
                 }`}
               >
-                {step === 7
+                {step === 12
                   ? submitting
                     ? "Calculating..."
                     : "Get my cost guide"

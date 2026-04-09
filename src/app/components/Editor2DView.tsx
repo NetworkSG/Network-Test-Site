@@ -35,6 +35,7 @@ export interface EditableDoor {
   side: "north" | "south" | "east" | "west";
   t: number;  // position along wall (0-1)
   width: number;
+  flipped?: boolean;
 }
 
 export interface EditableWindow {
@@ -530,6 +531,7 @@ function convertInitialRooms(rooms: RoomDef[]): EditableRoom[] {
       side: side3Dto2D(d.side),
       t: tVal3Dto2D(d.side, d.t),
       width: d.w,
+      flipped: d.flipped,
     })),
     windows: (r.windows || []).map((w, i) => ({
       id: `${r.id}-win-${i}`,
@@ -2169,7 +2171,22 @@ export function Editor2DView({
       const dz = worldZ - dragMode.startWorld[1];
       let newX = snapToGrid(dragMode.startPos[0] + dx, SNAP_GRID);
       let newZ = snapToGrid(dragMode.startPos[1] + dz, SNAP_GRID);
-      // Free placement: no room clamping
+
+      // Snap to room edges and other furniture centers
+      const FURN_SNAP = 0.15; // 15cm snap threshold
+      const furnSnaps: { axis: "x" | "z"; value: number }[] = [];
+      // Collect snap targets: room edges
+      for (const r of editableRooms) {
+        const [rxMin, rxMax, rzMin, rzMax] = r.bounds;
+        const rcx = (rxMin + rxMax) / 2, rcz = (rzMin + rzMax) / 2;
+        for (const tx of [rxMin, rxMax, rcx]) {
+          if (Math.abs(newX - tx) < FURN_SNAP) { newX = tx; furnSnaps.push({ axis: "x", value: tx }); break; }
+        }
+        for (const tz of [rzMin, rzMax, rcz]) {
+          if (Math.abs(newZ - tz) < FURN_SNAP) { newZ = tz; furnSnaps.push({ axis: "z", value: tz }); break; }
+        }
+      }
+      setSnapLines(furnSnaps);
       setDraggedFurniturePos({ itemId: dragMode.itemId, x: newX, z: newZ });
       return;
     }
@@ -3559,6 +3576,7 @@ export function Editor2DView({
                 const cos45 = Math.cos(Math.PI / 4);
                 const sin45 = Math.sin(Math.PI / 4);
                 const panelThick = 5;
+                const isFlipped = !!door.flipped;
 
                 let gapX1: number, gapY1: number, gapX2: number, gapY2: number;
                 let hingeX: number, hingeY: number;
@@ -3570,35 +3588,35 @@ export function Editor2DView({
                 if (side === "north") {
                   gapX1 = cx - half; gapY1 = cy;
                   gapX2 = cx + half; gapY2 = cy;
-                  hingeX = cx - half; hingeY = cy;
-                  leafEndX = hingeX + swingR * cos45; leafEndY = hingeY + swingR * sin45;
-                  closedX = hingeX + swingR; closedY = hingeY;
+                  hingeX = isFlipped ? cx + half : cx - half; hingeY = cy;
+                  leafEndX = isFlipped ? hingeX - swingR * cos45 : hingeX + swingR * cos45; leafEndY = hingeY + swingR * sin45;
+                  closedX = isFlipped ? hingeX - swingR : hingeX + swingR; closedY = hingeY;
                   openX = hingeX; openY = hingeY + swingR;
-                  arcSweep = 1;
+                  arcSweep = isFlipped ? 0 : 1;
                 } else if (side === "south") {
                   gapX1 = cx - half; gapY1 = cy;
                   gapX2 = cx + half; gapY2 = cy;
-                  hingeX = cx - half; hingeY = cy;
-                  leafEndX = hingeX + swingR * cos45; leafEndY = hingeY - swingR * sin45;
-                  closedX = hingeX + swingR; closedY = hingeY;
+                  hingeX = isFlipped ? cx + half : cx - half; hingeY = cy;
+                  leafEndX = isFlipped ? hingeX - swingR * cos45 : hingeX + swingR * cos45; leafEndY = hingeY - swingR * sin45;
+                  closedX = isFlipped ? hingeX - swingR : hingeX + swingR; closedY = hingeY;
                   openX = hingeX; openY = hingeY - swingR;
-                  arcSweep = 0;
+                  arcSweep = isFlipped ? 1 : 0;
                 } else if (side === "west") {
                   gapX1 = cx; gapY1 = cy - half;
                   gapX2 = cx; gapY2 = cy + half;
-                  hingeX = cx; hingeY = cy - half;
-                  leafEndX = hingeX + swingR * sin45; leafEndY = hingeY + swingR * cos45;
-                  closedX = hingeX; closedY = hingeY + swingR;
+                  hingeX = cx; hingeY = isFlipped ? cy + half : cy - half;
+                  leafEndX = hingeX + swingR * sin45; leafEndY = isFlipped ? hingeY - swingR * cos45 : hingeY + swingR * cos45;
+                  closedX = hingeX; closedY = isFlipped ? hingeY - swingR : hingeY + swingR;
                   openX = hingeX + swingR; openY = hingeY;
-                  arcSweep = 0;
+                  arcSweep = isFlipped ? 1 : 0;
                 } else {
                   gapX1 = cx; gapY1 = cy - half;
                   gapX2 = cx; gapY2 = cy + half;
-                  hingeX = cx; hingeY = cy - half;
-                  leafEndX = hingeX - swingR * sin45; leafEndY = hingeY + swingR * cos45;
-                  closedX = hingeX; closedY = hingeY + swingR;
+                  hingeX = cx; hingeY = isFlipped ? cy + half : cy - half;
+                  leafEndX = hingeX - swingR * sin45; leafEndY = isFlipped ? hingeY - swingR * cos45 : hingeY + swingR * cos45;
+                  closedX = hingeX; closedY = isFlipped ? hingeY - swingR : hingeY + swingR;
                   openX = hingeX - swingR; openY = hingeY;
-                  arcSweep = 1;
+                  arcSweep = isFlipped ? 0 : 1;
                 }
 
                 const isHoriz = side === "north" || side === "south";
@@ -4567,6 +4585,17 @@ export function Editor2DView({
               </g>
             );
           })()}
+
+          {/* ═══ Snap alignment guide lines (shown during room drag/resize) ═══ */}
+          {snapLines.map((sl, i) => {
+            if (sl.axis === "x") {
+              const [sx] = toSVG(sl.value, 0);
+              return <line key={`snap-${i}`} x1={sx} y1={0} x2={sx} y2={svgH} stroke="#3B82F6" strokeWidth={1} strokeDasharray="6 3" opacity={0.7} />;
+            } else {
+              const [, sy] = toSVG(0, sl.value);
+              return <line key={`snap-${i}`} x1={0} y1={sy} x2={svgW} y2={sy} stroke="#3B82F6" strokeWidth={1} strokeDasharray="6 3" opacity={0.7} />;
+            }
+          })}
         </svg>
       </div>
 

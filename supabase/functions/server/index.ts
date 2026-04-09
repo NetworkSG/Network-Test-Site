@@ -2871,6 +2871,10 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
     const body = await c.req.json();
     const { propertyType, isResale, propertyStatus, unitType, selectedRooms, timeline, roomScopes, fullHomeScope, estimate, templateId, quoteRequestId, postalCode, verifiedAddress, lifestyle, preferredThemes, meetingPreference, additionalNotes, uploadedPhotos, contact } = body;
     console.log("PDF generation request received:", JSON.stringify({ propertyType, unitType, selectedRooms, templateId, quoteRequestId }));
+    console.log("PDF DEBUG - full body keys:", Object.keys(body).join(", "));
+    console.log("PDF DEBUG - contact:", JSON.stringify(contact));
+    console.log("PDF DEBUG - lifestyle:", JSON.stringify(lifestyle));
+    console.log("PDF DEBUG - verifiedAddress:", verifiedAddress, "postalCode:", postalCode, "preferredThemes:", JSON.stringify(preferredThemes));
 
     if (!templateId) {
       return c.json({ error: "Missing templateId for CraftMyPDF" }, 400);

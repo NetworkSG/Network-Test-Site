@@ -10,6 +10,37 @@ import type { ParsedHouseRoomDef } from "./floor-plan-analyzer";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase as supabaseClient } from "./supabaseClient";
 
+// ── New modular imports (Phase 1 migration) ──
+import {
+  WALL_H as _WALL_H, WALL_THICK as _WALL_THICK,
+  FURNITURE_CATEGORIES as _FURNITURE_CATEGORIES,
+  CATALOG as _CATALOG,
+  MATERIAL_DEFS as _MATERIAL_DEFS,
+  MATERIALS_UI as _MATERIALS_UI,
+  ROOM_ZONES as _ROOM_ZONES,
+  DINING_TABLE_IDS as _DINING_TABLE_IDS,
+  DINING_CHAIR_IDS as _DINING_CHAIR_IDS,
+  DEFAULT_HOUSE_ROOM_DEFS,
+  DEFAULT_CAM_POS,
+  DEFAULT_CAM_TARGET,
+} from "./editor/constants";
+import { ensureOpeningIds, generateOpeningId } from "./editor/types";
+import type {
+  HouseRoomDef as HouseRoomDefNew,
+  DoorDef, WindowDef,
+  PlacedItem as PlacedItemNew,
+  SceneMaterials as SceneMaterialsNew,
+  SceneLighting as SceneLightingNew,
+  SharedWallNeighbor as SharedWallNeighborNew,
+  SharedWallData as SharedWallDataNew,
+  RoomBounds as RoomBoundsNew,
+  CatalogItem as CatalogItemNew,
+  RoomZone as RoomZoneNew,
+} from "./editor/types";
+import { EditorProvider, useEditorStore, useEditorAction } from "./editor/store/EditorContext";
+import type { EditorAction } from "./editor/store/EditorContext";
+import { disposeObject3D, disposeMaterial, clearTextureCache } from "./editor/scene/dispose-utils";
+
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 async function getEditorAuthHeaders(): Promise<Record<string, string>> {
@@ -1239,10 +1270,10 @@ let _wasImported = false;
 let ROOMS = HOUSE_ROOM_DEFS.map((d) => d.label);
 
 // ═══ Save original defaults so we can reset module-level state on re-mount ═══
-const _DEFAULT_HOUSE_ROOM_DEFS = JSON.parse(JSON.stringify(HOUSE_ROOM_DEFS));
-const _DEFAULT_ROOMS = [...ROOMS];
-const _DEFAULT_CAM_POS: [number, number, number] = [9, 14.5, 12];
-const _DEFAULT_CAM_TARGET: [number, number, number] = [0, 0, 0];
+const _DEFAULT_HOUSE_ROOM_DEFS = JSON.parse(JSON.stringify(DEFAULT_HOUSE_ROOM_DEFS));
+const _DEFAULT_ROOMS = DEFAULT_HOUSE_ROOM_DEFS.map((d: { label: string }) => d.label);
+const _DEFAULT_CAM_POS: [number, number, number] = [...DEFAULT_CAM_POS];
+const _DEFAULT_CAM_TARGET: [number, number, number] = [...DEFAULT_CAM_TARGET];
 // Track which editor instance last reset the state to prevent cross-mount contamination
 let _lastEditorMountId = 0;
 
@@ -1811,23 +1842,24 @@ function buildHouseRoom(def: HouseRoomDef): THREE.Group {
       const ws2 = sideToWallSide(door.side);
       const dd = WALL_THICK;
       const [dwpX, dwpZ] = openingWorldPos(door.side, door.t);
+      const flipped = !!door.flipped;
       let hingeX = 0, hingeZ = 0, angle = doorOpenAngle;
       if (door.side === "north") {
-        hingeX = dwpX - door.w / 2;
+        hingeX = flipped ? dwpX + door.w / 2 : dwpX - door.w / 2;
         hingeZ = dwpZ - dd;
-        angle = Math.PI - doorOpenAngle;
+        angle = flipped ? -(Math.PI - doorOpenAngle) : Math.PI - doorOpenAngle;
       } else if (door.side === "south") {
-        hingeX = dwpX + door.w / 2;
+        hingeX = flipped ? dwpX - door.w / 2 : dwpX + door.w / 2;
         hingeZ = dwpZ + dd;
-        angle = -doorOpenAngle;
+        angle = flipped ? doorOpenAngle : -doorOpenAngle;
       } else if (door.side === "east") {
         hingeX = dwpX - dd;
-        hingeZ = dwpZ - door.w / 2;
-        angle = -Math.PI / 2 + doorOpenAngle;
+        hingeZ = flipped ? dwpZ + door.w / 2 : dwpZ - door.w / 2;
+        angle = flipped ? -(-Math.PI / 2 + doorOpenAngle) : -Math.PI / 2 + doorOpenAngle;
       } else {
         hingeX = dwpX + dd;
-        hingeZ = dwpZ + door.w / 2;
-        angle = Math.PI / 2 + doorOpenAngle;
+        hingeZ = flipped ? dwpZ - door.w / 2 : dwpZ + door.w / 2;
+        angle = flipped ? -(Math.PI / 2 + doorOpenAngle) : Math.PI / 2 + doorOpenAngle;
       }
       const doorPanel = buildDoorPanel(door.w, doorH, hingeX, hingeZ, angle, ws2);
       doorPanel.userData.openingType = "door";
@@ -1944,23 +1976,32 @@ function buildHouseRoom(def: HouseRoomDef): THREE.Group {
     for (const door of def.doors) {
       const ws = sideToWallSide(door.side);
       const dd = shared.has(door.side) ? WALL_THICK / 2 : WALL_THICK;
+      const flipped = !!door.flipped;
       let hingeX = 0, hingeZ = 0, angle = doorOpenAngle;
       if (door.side === "north") {
-        hingeX = cx + (-w / 2 + door.t * w) - door.w / 2;
+        hingeX = flipped
+          ? cx + (-w / 2 + door.t * w) + door.w / 2
+          : cx + (-w / 2 + door.t * w) - door.w / 2;
         hingeZ = zMax - dd;
-        angle = Math.PI - doorOpenAngle;
+        angle = flipped ? -(Math.PI - doorOpenAngle) : Math.PI - doorOpenAngle;
       } else if (door.side === "south") {
-        hingeX = cx + (w / 2 - door.t * w) + door.w / 2;
+        hingeX = flipped
+          ? cx + (w / 2 - door.t * w) - door.w / 2
+          : cx + (w / 2 - door.t * w) + door.w / 2;
         hingeZ = zMin + dd;
-        angle = -doorOpenAngle;
+        angle = flipped ? doorOpenAngle : -doorOpenAngle;
       } else if (door.side === "east") {
         hingeX = xMax - dd;
-        hingeZ = cz + (-d / 2 + door.t * d) - door.w / 2;
-        angle = -Math.PI / 2 + doorOpenAngle;
+        hingeZ = flipped
+          ? cz + (-d / 2 + door.t * d) + door.w / 2
+          : cz + (-d / 2 + door.t * d) - door.w / 2;
+        angle = flipped ? -(-Math.PI / 2 + doorOpenAngle) : -Math.PI / 2 + doorOpenAngle;
       } else {
         hingeX = xMin + dd;
-        hingeZ = cz + (d / 2 - door.t * d) + door.w / 2;
-        angle = Math.PI / 2 + doorOpenAngle;
+        hingeZ = flipped
+          ? cz + (d / 2 - door.t * d) - door.w / 2
+          : cz + (d / 2 - door.t * d) + door.w / 2;
+        angle = flipped ? -(Math.PI / 2 + doorOpenAngle) : Math.PI / 2 + doorOpenAngle;
       }
       const doorPanel = buildDoorPanel(door.w, doorH, hingeX, hingeZ, angle, ws);
       doorPanel.userData.openingType = "door";
@@ -2262,16 +2303,9 @@ function rebuildRoomOpenings(
   }
 }
 
-/** Dispose all geometry & materials in a group, then remove from parent. */
+/** Dispose all geometry, materials & textures in a group, then remove from parent. */
 function disposeGroup(group: THREE.Group) {
-  group.traverse((child) => {
-    if ((child as any).geometry) (child as any).geometry.dispose();
-    if ((child as any).material) {
-      const m = (child as any).material;
-      if (Array.isArray(m)) m.forEach((mm: any) => mm.dispose());
-      else m.dispose();
-    }
-  });
+  disposeObject3D(group);
   group.removeFromParent();
 }
 
@@ -2428,7 +2462,7 @@ interface ThreeSceneRef {
   mouse: THREE.Vector2;
   selectedOutline: THREE.Group | null;
   selectedGlow: THREE.Group | null;
-  animRef: { id: number };
+  animRef: { id: number; paused: boolean };
   ceilingPointLight: THREE.PointLight | null;
   floorPointLight: THREE.PointLight | null;
   accentSpotLight: THREE.SpotLight | null;
@@ -3044,7 +3078,7 @@ function buildScene(container: HTMLDivElement): ThreeSceneRef {
     }
   };
 
-  const animRef = { id: 0 };
+  const animRef = { id: 0, paused: false };
   let frameCount = 0;
   // On low-power devices, run cutaway updates every 2nd frame
   const cutawayInterval = isLowPower ? 2 : 1;
@@ -3101,6 +3135,10 @@ function buildScene(container: HTMLDivElement): ThreeSceneRef {
 
   const animate = () => {
     animRef.id = requestAnimationFrame(animate);
+
+    // Skip all rendering when paused (2D mode) to save CPU/GPU
+    if (animRef.paused) return;
+
     frameCount++;
 
     // Camera fly-to animation
@@ -3370,11 +3408,16 @@ function useThreeScene(
     if (sceneRef.current) {
       const old = sceneRef.current;
       cancelAnimationFrame(old.animRef.id);
+      // Dispose all geometry, materials, and textures before clearing
+      disposeObject3D(old.scene);
+      old.scene.clear();
       old.controls.dispose();
       old.renderer.dispose();
       old.css2dRenderer.domElement.remove();
       old.renderer.domElement.remove();
-      old.houseRoomLabels.forEach((obj) => { obj.element.remove(); });
+      old.houseRoomLabels.forEach((obj) => {
+        if (obj.element?.parentNode) obj.element.parentNode.removeChild(obj.element);
+      });
       old.standaloneWallGroups.forEach((grp) => { disposeGroup(grp); });
       old.standaloneWallGroups.clear();
       sceneRef.current = null;
@@ -3419,6 +3462,7 @@ function useThreeScene(
       openingW: number; // width of the door/window
       openingH?: number; // height for windows
       sillH?: number; // sill height for windows
+      currentT?: number; // current t value during drag (avoids position reverse-engineering)
     } | null = null;
     let isOpeningDragging = false;
 
@@ -3444,12 +3488,78 @@ function useThreeScene(
       return dists[0].side;
     };
 
-    /** Apply snap to nearest snap position */
-    const snapOpeningT = (t: number): { t: number; snapped: number | null } => {
-      for (const st of SNAP_T_POSITIONS) {
-        if (Math.abs(t - st) < SNAP_T_THRESHOLD) return { t: st, snapped: st };
+    /** Apply snap to nearest snap position, snap to adjacent openings, and prevent overlap */
+    const snapOpeningT = (t: number, roomId?: string, side?: string, dragIndex?: number, dragType?: "door" | "window", openingW?: number): { t: number; snapped: number | null } => {
+      let clamped = t;
+
+      // Prevent overlap with other openings on the same wall
+      if (roomId && side && dragIndex !== undefined && dragType && openingW) {
+        const def = HOUSE_ROOM_DEFS.find((r) => r.id === roomId);
+        if (def) {
+          const wallLen = wallLengthForSide(side, def.bounds);
+          const halfW = openingW / 2;
+          const halfT = wallLen > 0 ? halfW / wallLen : 0;
+          const GAP_T = wallLen > 0 ? 0.05 / wallLen : 0.02; // 5cm gap between openings
+
+          // Collect all other openings on the same wall
+          const others: { tCenter: number; halfT: number }[] = [];
+          def.doors.forEach((d, i) => {
+            if (d.side === side && !(dragType === "door" && i === dragIndex)) {
+              const oHalfT = wallLen > 0 ? (d.w / 2) / wallLen : 0;
+              others.push({ tCenter: d.t, halfT: oHalfT });
+            }
+          });
+          (def.windows || []).forEach((w, i) => {
+            if (w.side === side && !(dragType === "window" && i === dragIndex)) {
+              const oHalfT = wallLen > 0 ? (w.w / 2) / wallLen : 0;
+              others.push({ tCenter: w.t, halfT: oHalfT });
+            }
+          });
+
+          // Sort by t position
+          others.sort((a, b) => a.tCenter - b.tCenter);
+
+          // Clamp to prevent overlap with each neighboring opening
+          for (const other of others) {
+            const minDist = halfT + other.halfT + GAP_T;
+            if (Math.abs(clamped - other.tCenter) < minDist) {
+              // Push away from the overlapping opening
+              if (clamped < other.tCenter) {
+                clamped = other.tCenter - minDist;
+              } else {
+                clamped = other.tCenter + minDist;
+              }
+            }
+          }
+
+          // Snap to adjacent opening edges (magnetic alignment within 5cm)
+          const EDGE_SNAP = wallLen > 0 ? 0.05 / wallLen : 0.02;
+          for (const other of others) {
+            const myLeftEdge = clamped - halfT;
+            const myRightEdge = clamped + halfT;
+            const otherLeftEdge = other.tCenter - other.halfT;
+            const otherRightEdge = other.tCenter + other.halfT;
+            // Snap my right edge to their left edge (with gap)
+            if (Math.abs(myRightEdge - (otherLeftEdge - GAP_T)) < EDGE_SNAP) {
+              clamped = otherLeftEdge - GAP_T - halfT;
+              return { t: Math.max(0.02, Math.min(0.98, clamped)), snapped: clamped };
+            }
+            // Snap my left edge to their right edge (with gap)
+            if (Math.abs(myLeftEdge - (otherRightEdge + GAP_T)) < EDGE_SNAP) {
+              clamped = otherRightEdge + GAP_T + halfT;
+              return { t: Math.max(0.02, Math.min(0.98, clamped)), snapped: clamped };
+            }
+          }
+
+          clamped = Math.max(0.02, Math.min(0.98, clamped));
+        }
       }
-      return { t, snapped: null };
+
+      // Standard snap positions (25%, 50%, 75%)
+      for (const st of SNAP_T_POSITIONS) {
+        if (Math.abs(clamped - st) < SNAP_T_THRESHOLD) return { t: st, snapped: st };
+      }
+      return { t: clamped, snapped: null };
     };
 
     /** Compute wall length for a given side */
@@ -3751,32 +3861,38 @@ function useThreeScene(
 
         const rawT = computeOpeningT(ndc, openingDrag.side, openingDrag.bounds, openingDrag.openingW);
         if (rawT !== null) {
-          const { t: newT, snapped: snapT } = snapOpeningT(rawT);
+          const { t: newT, snapped: snapT } = snapOpeningT(rawT, openingDrag.roomId, openingDrag.side, openingDrag.index, openingDrag.type, openingDrag.openingW);
 
-          // Move the opening group in real-time along the wall
-          const [xMin, xMax, zMin, zMax] = openingDrag.bounds;
-          const w = xMax - xMin, d = zMax - zMin;
-          const grp = openingDrag.group;
-
-          if (openingDrag.type === "door") {
-            if (openingDrag.side === "north") grp.position.x = xMin + newT * w - openingDrag.openingW / 2;
-            else if (openingDrag.side === "south") grp.position.x = xMax - newT * w + openingDrag.openingW / 2;
-            else if (openingDrag.side === "east") grp.position.z = zMin + newT * d - openingDrag.openingW / 2;
-            else grp.position.z = zMax - newT * d + openingDrag.openingW / 2;
-          } else {
-            if (openingDrag.side === "north") grp.position.x = xMin + newT * w;
-            else if (openingDrag.side === "south") grp.position.x = xMax - newT * w;
-            else if (openingDrag.side === "east") grp.position.z = zMin + newT * d;
-            else grp.position.z = zMax - newT * d;
+          // Update HOUSE_ROOM_DEFS and rebuild wall cutouts in real-time
+          const def = HOUSE_ROOM_DEFS.find((r) => r.id === openingDrag!.roomId);
+          if (def) {
+            if (openingDrag.type === "door" && def.doors[openingDrag.index]) {
+              def.doors[openingDrag.index] = { ...def.doors[openingDrag.index], t: newT };
+            } else if (openingDrag.type === "window" && (def.windows || [])[openingDrag.index]) {
+              def.windows[openingDrag.index] = { ...def.windows[openingDrag.index], t: newT };
+            }
+            const rg = s.houseRoomGroups.get(openingDrag.roomId);
+            if (rg) {
+              rebuildRoomOpenings(rg, def.bounds, def.doors, def.windows || [], def.wallColor, openingDrag.roomId);
+              const newGrp = rg.children.find((c) =>
+                c.userData.openingType === openingDrag!.type &&
+                c.userData.openingIndex === openingDrag!.index &&
+                c.userData.openingSide === openingDrag!.side
+              ) as THREE.Group | undefined;
+              if (newGrp) openingDrag.group = newGrp;
+            }
           }
+          openingDrag.currentT = newT;
 
           // Compute dimension overlay info
+          const [xMin, xMax, zMin, zMax] = openingDrag.bounds;
+          const w = xMax - xMin, d = zMax - zMin;
           const wLen = wallLengthForSide(openingDrag.side, openingDrag.bounds);
           const { left, right } = computeEdgeDistances(newT, wLen, openingDrag.openingW);
 
           // Project opening center to screen for overlay position
           const openingCenter3D = new THREE.Vector3();
-          grp.getWorldPosition(openingCenter3D);
+          openingDrag.group.getWorldPosition(openingCenter3D);
           openingCenter3D.y = 1.2; // midway up the wall
           openingCenter3D.project(s.camera);
           const rect = containerRef.current!.getBoundingClientRect();
@@ -3979,10 +4095,9 @@ function useThreeScene(
       // ── Opening drag commit ──
       if (openingDrag) {
         if (isOpeningDragging) {
-          const ndc = getMouseNDC(event);
-          const rawT = computeOpeningT(ndc, openingDrag.side, openingDrag.bounds, openingDrag.openingW);
-          if (rawT !== null) {
-            const { t: finalT } = snapOpeningT(rawT);
+          // Use stored currentT from drag (already snapped, avoids position reverse-engineering drift)
+          const finalT = openingDrag.currentT;
+          if (finalT !== undefined) {
             onOpeningMoveRef.current?.(openingDrag.roomId, openingDrag.type, openingDrag.index, finalT);
           }
           s.controls.enabled = true;
@@ -4027,13 +4142,7 @@ function useThreeScene(
               if (s.furnitureGroup.children.includes(group)) {
                 s.furnitureGroup.remove(group);
               }
-              group.traverse((child: any) => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                  if (Array.isArray(child.material)) child.material.forEach((m: any) => m.dispose());
-                  else child.material.dispose();
-                }
-              });
+              disposeObject3D(group);
               itemGroupMap.current.delete(commitId);
               if (s.selectedOutline) { s.scene.remove(s.selectedOutline); disposeContourGroup(s.selectedOutline); s.selectedOutline = null; }
               if (s.selectedGlow) { s.scene.remove(s.selectedGlow); disposeContourGroup(s.selectedGlow); s.selectedGlow = null; }
@@ -4227,27 +4336,36 @@ function useThreeScene(
 
         const rawT = computeOpeningT(ndc, touchOpeningDrag.side, touchOpeningDrag.bounds, touchOpeningDrag.openingW);
         if (rawT !== null) {
-          const { t: newT, snapped: snapT } = snapOpeningT(rawT);
-          const [xMin, xMax, zMin, zMax] = touchOpeningDrag.bounds;
-          const w = xMax - xMin, d = zMax - zMin;
-          const grp = touchOpeningDrag.group;
-          if (touchOpeningDrag.type === "door") {
-            if (touchOpeningDrag.side === "north") grp.position.x = xMin + newT * w - touchOpeningDrag.openingW / 2;
-            else if (touchOpeningDrag.side === "south") grp.position.x = xMax - newT * w + touchOpeningDrag.openingW / 2;
-            else if (touchOpeningDrag.side === "east") grp.position.z = zMin + newT * d - touchOpeningDrag.openingW / 2;
-            else grp.position.z = zMax - newT * d + touchOpeningDrag.openingW / 2;
-          } else {
-            if (touchOpeningDrag.side === "north") grp.position.x = xMin + newT * w;
-            else if (touchOpeningDrag.side === "south") grp.position.x = xMax - newT * w;
-            else if (touchOpeningDrag.side === "east") grp.position.z = zMin + newT * d;
-            else grp.position.z = zMax - newT * d;
+          const { t: newT, snapped: snapT } = snapOpeningT(rawT, touchOpeningDrag.roomId, touchOpeningDrag.side, touchOpeningDrag.index, touchOpeningDrag.type, touchOpeningDrag.openingW);
+
+          // Update HOUSE_ROOM_DEFS and rebuild wall cutouts in real-time
+          const def = HOUSE_ROOM_DEFS.find((r) => r.id === touchOpeningDrag!.roomId);
+          if (def) {
+            if (touchOpeningDrag.type === "door" && def.doors[touchOpeningDrag.index]) {
+              def.doors[touchOpeningDrag.index] = { ...def.doors[touchOpeningDrag.index], t: newT };
+            } else if (touchOpeningDrag.type === "window" && (def.windows || [])[touchOpeningDrag.index]) {
+              def.windows[touchOpeningDrag.index] = { ...def.windows[touchOpeningDrag.index], t: newT };
+            }
+            const rg = s.houseRoomGroups.get(touchOpeningDrag.roomId);
+            if (rg) {
+              rebuildRoomOpenings(rg, def.bounds, def.doors, def.windows || [], def.wallColor, touchOpeningDrag.roomId);
+              const newGrp = rg.children.find((c) =>
+                c.userData.openingType === touchOpeningDrag!.type &&
+                c.userData.openingIndex === touchOpeningDrag!.index &&
+                c.userData.openingSide === touchOpeningDrag!.side
+              ) as THREE.Group | undefined;
+              if (newGrp) touchOpeningDrag.group = newGrp;
+            }
           }
+          touchOpeningDrag.currentT = newT;
 
           // Update overlay
+          const [xMin, xMax, zMin, zMax] = touchOpeningDrag.bounds;
+          const w = xMax - xMin, d = zMax - zMin;
           const wLen = wallLengthForSide(touchOpeningDrag.side, touchOpeningDrag.bounds);
           const { left, right } = computeEdgeDistances(newT, wLen, touchOpeningDrag.openingW);
           const openingCenter3D = new THREE.Vector3();
-          grp.getWorldPosition(openingCenter3D);
+          touchOpeningDrag.group.getWorldPosition(openingCenter3D);
           openingCenter3D.y = 1.2;
           openingCenter3D.project(s.camera);
           const rect = containerRef.current!.getBoundingClientRect();
@@ -4403,25 +4521,11 @@ function useThreeScene(
       // ── Touch opening drag commit ──
       if (touchOpeningDrag) {
         if (isTouchOpeningDragging) {
-          // Compute final t from the group's current position
-          const [xMin, xMax, zMin, zMax] = touchOpeningDrag.bounds;
-          const w = xMax - xMin, d = zMax - zMin;
-          const grp = touchOpeningDrag.group;
-          let finalT: number;
-          if (touchOpeningDrag.type === "door") {
-            if (touchOpeningDrag.side === "north") finalT = (grp.position.x + touchOpeningDrag.openingW / 2 - xMin) / w;
-            else if (touchOpeningDrag.side === "south") finalT = (xMax - grp.position.x + touchOpeningDrag.openingW / 2) / w;
-            else if (touchOpeningDrag.side === "east") finalT = (grp.position.z + touchOpeningDrag.openingW / 2 - zMin) / d;
-            else finalT = (zMax - grp.position.z + touchOpeningDrag.openingW / 2) / d;
-          } else {
-            if (touchOpeningDrag.side === "north") finalT = (grp.position.x - xMin) / w;
-            else if (touchOpeningDrag.side === "south") finalT = (xMax - grp.position.x) / w;
-            else if (touchOpeningDrag.side === "east") finalT = (grp.position.z - zMin) / d;
-            else finalT = (zMax - grp.position.z) / d;
+          // Use stored currentT from drag (already snapped, avoids position reverse-engineering drift)
+          const finalT = touchOpeningDrag.currentT;
+          if (finalT !== undefined) {
+            onOpeningMoveRef.current?.(touchOpeningDrag.roomId, touchOpeningDrag.type, touchOpeningDrag.index, finalT);
           }
-          finalT = Math.max(0.05, Math.min(0.95, finalT));
-          const { t: snappedFinalT } = snapOpeningT(finalT);
-          onOpeningMoveRef.current?.(touchOpeningDrag.roomId, touchOpeningDrag.type, touchOpeningDrag.index, snappedFinalT);
           s.controls.enabled = true;
           onDraggingChangeRef.current(false);
           onOpeningDragOverlayRef.current?.(null);
@@ -4461,13 +4565,7 @@ function useThreeScene(
               if (s.furnitureGroup.children.includes(group)) {
                 s.furnitureGroup.remove(group);
               }
-              group.traverse((child: any) => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                  if (Array.isArray(child.material)) child.material.forEach((m: any) => m.dispose());
-                  else child.material.dispose();
-                }
-              });
+              disposeObject3D(group);
               itemGroupMap.current.delete(commitId);
               if (s.selectedOutline) { s.scene.remove(s.selectedOutline); disposeContourGroup(s.selectedOutline); s.selectedOutline = null; }
               if (s.selectedGlow) { s.scene.remove(s.selectedGlow); disposeContourGroup(s.selectedGlow); s.selectedGlow = null; }
@@ -4541,28 +4639,23 @@ function useThreeScene(
       clearOpeningHighlight();
       if (sceneRef.current) {
         cancelAnimationFrame(sceneRef.current.animRef.id);
-        // Traverse entire scene and dispose all geometries/materials to free GPU memory
-        sceneRef.current.scene.traverse((child) => {
-          const mesh = child as THREE.Mesh;
-          if (mesh.geometry) mesh.geometry.dispose();
-          if (mesh.material) {
-            const mat = mesh.material;
-            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-            else mat.dispose();
-          }
-        });
+        // Dispose all geometry, materials, AND textures in the scene tree
+        disposeObject3D(sceneRef.current.scene);
+        sceneRef.current.scene.clear();
         sceneRef.current.controls.dispose();
         sceneRef.current.renderer.dispose();
         sceneRef.current.renderer.domElement.remove();
         sceneRef.current.css2dRenderer.domElement.remove();
-        // Clean up house room labels
+        // Clean up house room labels (CSS2D DOM elements)
         sceneRef.current.houseRoomLabels.forEach((obj) => {
-          obj.element.remove();
+          if (obj.element?.parentNode) obj.element.parentNode.removeChild(obj.element);
         });
         sceneRef.current.standaloneWallGroups.forEach((grp) => { disposeGroup(grp); });
         sceneRef.current.standaloneWallGroups.clear();
         sceneRef.current = null;
       }
+      // Clear wood grain texture cache to free GPU memory
+      clearTextureCache(_woodTexCache);
       // Clear furniture map so next mount creates fresh groups in the new scene
       itemGroupMap.current.clear();
     };
@@ -4962,7 +5055,7 @@ const DESKTOP_CATEGORY_GROUPS: DesktopCategoryGroup[] = [
   },
 ];
 
-function FurniturePanel({ onAddItem, onClose, onAutoFurnish, roomLabel }: { onAddItem: (item: CatalogItem) => void; onClose: () => void; onAutoFurnish?: () => void; roomLabel?: string }) {
+function FurniturePanel({ onAddItem, onClose, onAutoFurnish, roomLabel, recentFurnitureIds = [] }: { onAddItem: (item: CatalogItem) => void; onClose: () => void; onAutoFurnish?: () => void; roomLabel?: string; recentFurnitureIds?: string[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showHint, setShowHint] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<DesktopCategoryDef | null>(null);
@@ -5123,6 +5216,35 @@ function FurniturePanel({ onAddItem, onClose, onAutoFurnish, roomLabel }: { onAd
                 <p className="font-['Inter',sans-serif] text-[12px] text-[#ABABAB] mt-1">Coming soon</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Recently Used (default view, shown when items exist) ── */}
+        {!isSearching && !selectedCategory && recentFurnitureIds.length > 0 && (
+          <div className="px-5 pb-3">
+            <div className="pb-1.5">
+              <h4 className="font-['Inter',sans-serif] text-[12px] font-bold text-[#71717A] tracking-[0.5px] uppercase">
+                Recently Used
+              </h4>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {recentFurnitureIds.map((fId) => {
+                const item = CATALOG.find((c) => c.id === fId);
+                if (!item) return null;
+                return (
+                  <button
+                    key={`recent-${fId}`}
+                    onClick={() => onAddItem(item)}
+                    className="group flex flex-col items-center cursor-pointer text-center active:scale-95 transition-transform"
+                  >
+                    <FurnitureThumbnail item={item} />
+                    <span className="font-['Inter',sans-serif] text-[10px] text-[#71717A] mt-1 leading-tight line-clamp-1">
+                      {item.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -6043,8 +6165,27 @@ function RadialActionMenu({
 /* ═══════════════════════════════════════════════════════
    Main Editor — Qanvast/Wizlab Layout
    ═══════════════════════════════════════════════════════ */
+/* ═══ EditorProvider wrapper — single source of truth for room state ═══ */
 export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "template" }) {
+  return (
+    <EditorProvider>
+      <FloorPlan3DEditorInner mode={mode} />
+    </EditorProvider>
+  );
+}
+
+function FloorPlan3DEditorInner({ mode = "project" }: { mode?: "project" | "template" }) {
+  // ═══ Editor Store (new single source of truth) ═══
+  const { state: editorState, dispatch: editorDispatch, canUndo: storeCanUndo, canRedo: storeCanRedo } = useEditorStore();
   const isTemplateMode = mode === "template";
+
+  // ═══ MIGRATION SHIM: sync store.roomDefs → legacy module-level globals ═══
+  // Remove these once all code reads from editorState instead of HOUSE_ROOM_DEFS
+  useEffect(() => {
+    HOUSE_ROOM_DEFS = editorState.roomDefs as typeof HOUSE_ROOM_DEFS;
+    ROOMS = editorState.roomDefs.map((d) => d.label);
+    _sharedWallCache = null; // invalidate on any change
+  }, [editorState.roomDefs]);
 
   // ═══ Reset module-level state on each fresh mount ═══
   // Prevents stale HOUSE_ROOM_DEFS / _wasImported from previous SPA navigations
@@ -6125,6 +6266,18 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       return null;
     }
   });
+
+  // ═══ MIGRATION: Sync initial module-level state INTO store (once on mount) ═══
+  // The useState lazy initializers above may have set HOUSE_ROOM_DEFS to imported/scratch data.
+  // Push that into the store so it becomes the source of truth.
+  const initialSyncedRef = useRef(false);
+  useEffect(() => {
+    if (initialSyncedRef.current) return;
+    initialSyncedRef.current = true;
+    editorDispatch({ type: "SET_ROOM_DEFS", defs: HOUSE_ROOM_DEFS as HouseRoomDefNew[] });
+    editorDispatch({ type: "SET_CAMERA", pos: [...HOUSE_CAM_POS] as [number, number, number], target: [...HOUSE_CAM_TARGET] as [number, number, number] });
+    editorDispatch({ type: "SET_DIRTY", dirty: false }); // reset dirty after initial sync
+  }, [editorDispatch]);
 
   const navigate = useNavigate();
   const params = useParams<{ projectId: string; templateId: string }>();
@@ -6360,18 +6513,26 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
     roomClickRef.current?.(roomId);
   }, []);
 
-  // ═══ Opening (door/window) move in 3D — updates HOUSE_ROOM_DEFS, rebuilds 3D, syncs to 2D ═══
+  // ═══ Opening (door/window) move in 3D — updates store + HOUSE_ROOM_DEFS, rebuilds 3D, syncs to 2D ═══
   const [openingsVersion, setOpeningsVersion] = useState(0);
   const handleOpeningMove = useCallback((roomId: string, type: "door" | "window", index: number, newT: number) => {
     const def = HOUSE_ROOM_DEFS.find((r) => r.id === roomId);
     if (!def) return;
 
-    // Update HOUSE_ROOM_DEFS in place
+    // Determine opening ID for store dispatch
+    const opening = type === "door" ? def.doors[index] : (def.windows || [])[index];
+    const openingId = opening?.id || `${type}-idx-${index}`;
+
+    // Update HOUSE_ROOM_DEFS in place (legacy — still needed for 3D rebuild below)
     if (type === "door" && def.doors[index]) {
       def.doors[index] = { ...def.doors[index], t: newT };
     } else if (type === "window" && (def.windows || [])[index]) {
       def.windows[index] = { ...def.windows[index], t: newT };
     }
+
+    // Dispatch to store (canonical source of truth)
+    editorDispatch({ type: "SNAPSHOT" });
+    editorDispatch({ type: "MOVE_OPENING", roomId, openingId, kind: type, newT });
 
     // Rebuild the 3D room openings (walls + doors + windows)
     const s = sceneRefForHotspots.current;
@@ -6379,7 +6540,6 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       const rg = s.houseRoomGroups.get(roomId);
       if (rg) {
         rebuildRoomOpenings(rg, def.bounds, def.doors, def.windows || [], def.wallColor, roomId);
-        // Also rebuild neighbor rooms whose shared walls may have this opening
         const sharedData = getSharedWallData();
         const wd = sharedData.get(roomId);
         if (wd) {
@@ -6398,8 +6558,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
 
     // Bump version to trigger 2D editor re-sync
     setOpeningsVersion((v) => v + 1);
-    setIsDirty(true);
-  }, []);
+  }, [editorDispatch]);
 
   // ═══ Selected Opening State (click popup) ═══
   interface SelectedOpeningInfo {
@@ -6437,22 +6596,44 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
     if (is2DMode) { setSelectedOpening(null); setOpeningDragOverlay(null); }
   }, [is2DMode]);
 
+  // Pause 3D render loop when in 2D mode to save CPU/GPU
+  useEffect(() => {
+    const s = sceneRefForHotspots.current;
+    if (!s) return;
+    s.animRef.paused = is2DMode;
+    // When switching back to 3D, render one frame immediately so the viewport isn't stale
+    if (!is2DMode) {
+      s.renderer.render(s.scene, s.camera);
+      s.css2dRenderer.render(s.scene, s.camera);
+    }
+  }, [is2DMode]);
+
   // Flip opening direction
   const handleFlipOpening = useCallback(() => {
     if (!selectedOpening) return;
     const def = HOUSE_ROOM_DEFS.find((r) => r.id === selectedOpening.roomId);
     if (!def) return;
 
+    const opening = selectedOpening.type === "door"
+      ? def.doors[selectedOpening.index]
+      : (def.windows || [])[selectedOpening.index];
+    if (!opening) return;
+    const openingId = opening.id || `${selectedOpening.type}-idx-${selectedOpening.index}`;
+
     if (selectedOpening.type === "door") {
       const door = def.doors[selectedOpening.index];
       if (!door) return;
-      // Flip = toggle hinge side (left ↔ right) so door swings the other way
       def.doors[selectedOpening.index] = { ...door, flipped: !door.flipped };
+      // Dispatch to store
+      editorDispatch({ type: "SNAPSHOT" });
+      editorDispatch({ type: "FLIP_OPENING", roomId: selectedOpening.roomId, openingId });
     } else {
       const win = (def.windows || [])[selectedOpening.index];
       if (!win) return;
-      // For windows, flip mirrors position on the wall
       def.windows[selectedOpening.index] = { ...win, t: 1 - win.t };
+      // Dispatch to store
+      editorDispatch({ type: "SNAPSHOT" });
+      editorDispatch({ type: "MOVE_OPENING", roomId: selectedOpening.roomId, openingId, kind: "window", newT: 1 - win.t });
     }
 
     // Rebuild 3D
@@ -6477,8 +6658,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       }
     }
     setOpeningsVersion((v) => v + 1);
-    setIsDirty(true);
-  }, [selectedOpening]);
+  }, [selectedOpening, editorDispatch]);
 
   // Delete opening
   const handleDeleteOpening = useCallback(() => {
@@ -6486,11 +6666,20 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
     const def = HOUSE_ROOM_DEFS.find((r) => r.id === selectedOpening.roomId);
     if (!def) return;
 
+    const opening = selectedOpening.type === "door"
+      ? def.doors[selectedOpening.index]
+      : (def.windows || [])[selectedOpening.index];
+    const openingId = opening?.id || `${selectedOpening.type}-idx-${selectedOpening.index}`;
+
     if (selectedOpening.type === "door") {
       def.doors = def.doors.filter((_, i) => i !== selectedOpening.index);
     } else {
       def.windows = (def.windows || []).filter((_, i) => i !== selectedOpening.index);
     }
+
+    // Dispatch to store
+    editorDispatch({ type: "SNAPSHOT" });
+    editorDispatch({ type: "DELETE_OPENING", roomId: selectedOpening.roomId, openingId, kind: selectedOpening.type });
 
     // Rebuild 3D
     const s = sceneRefForHotspots.current;
@@ -6515,7 +6704,6 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
     }
     setSelectedOpening(null);
     setOpeningsVersion((v) => v + 1);
-    setIsDirty(true);
   }, [selectedOpening]);
 
   useThreeScene(viewportRef, placedItems, selectedId, materials, lighting, setSelectedId, handleMoveItem, handleMoveItemToRoom, setIsDragging, setIsOverlapping, sceneRefForHotspots, handleRoomClickIn3D, sceneRebuildKey, !projectDataLoaded, activeEditorRoomId, globalTimeOfDay, handleOpeningMove, handleOpeningSelect, setOpeningDragOverlay, setSelectedOpening);
@@ -6691,7 +6879,8 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
     }
     setPlacedItems((prev) => [...prev, { id, furnitureId: catalogItem.id, name: catalogItem.name, position: [x, 0, z], rotation: 0, dimensions: catalogItem.dimensions, color: catalogItem.color, category: catalogItem.category }]);
     setSelectedId(id);
-  }, [activeEditorRoomId, setPlacedItems]);
+    editorDispatch({ type: "TRACK_RECENT_FURNITURE", furnitureId: catalogItem.id });
+  }, [activeEditorRoomId, setPlacedItems, editorDispatch]);
 
   // Add a room shape from the mobile room picker
   const handleAddRoomShape = useCallback((shape: { id: string; polygon?: [number, number][]; width: number; depth: number }) => {
@@ -7107,6 +7296,8 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
   selectedIdRef.current = selectedId;
   const viewModeRef = useRef(viewMode);
   viewModeRef.current = viewMode;
+  const editorStateRef = useRef(editorState);
+  editorStateRef.current = editorState;
   keyHandlersRef.current = {
     handleUndo, handleRedo, handleSaveProject, handleDuplicateSelected,
     handleDeleteSelected, handleZoomFit, handleMoveItem, handleRotateSelected,
@@ -7135,6 +7326,13 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       if (mod && e.key === "z" && e.shiftKey) { e.preventDefault(); h.handleRedo(); return; }
       if (mod && e.key === "y") { e.preventDefault(); h.handleRedo(); return; }
       if (mod && e.key === "d") { e.preventDefault(); h.handleDuplicateSelected(); return; }
+      if (mod && e.key === "c") { e.preventDefault(); editorDispatch({ type: "COPY_ITEM" }); return; }
+      if (mod && (e.key === "v" || e.key === "V") && editorStateRef.current.clipboard) {
+        e.preventDefault();
+        editorDispatch({ type: "SNAPSHOT" });
+        editorDispatch({ type: "PASTE_ITEM", roomId: editorStateRef.current.activeRoomId });
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedIdRef.current) { e.preventDefault(); h.handleDeleteSelected(); return; }
       }
@@ -7602,7 +7800,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
       const boundsKey = room.bounds.join(",") + (room.polygon ? "|" + room.polygon.map(p => p.join(",")).join(";") : "");
       const prevBK = prevRoomBoundsRef.current.get(room.id);
       const openingsKey = JSON.stringify(
-        room.doors.map(d => ({ s: d.side, t: d.t, w: d.width })).concat(
+        room.doors.map(d => ({ s: d.side, t: d.t, w: d.width, f: d.flipped })).concat(
           room.windows.map(w => ({ s: w.side, t: w.t, w: w.width, h: w.height, sh: w.sillHeight }) as any)
         )
       );
@@ -7653,7 +7851,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
         cameraPos: [cx + maxDim * 0.8, WALL_H * 1.8, cz + maxDim * 0.8],
         cameraTarget: [cx, WALL_H * 0.3, cz],
         svg: { x: room.bounds[0], y: room.bounds[2], w: room.bounds[1] - room.bounds[0], h: room.bounds[3] - room.bounds[2] },
-        doors: room.doors.map(d => ({ side: side2Dto3D(d.side) as any, t: tVal2Dto3D(d.side, d.t), w: d.width })),
+        doors: room.doors.map(d => ({ side: side2Dto3D(d.side) as any, t: tVal2Dto3D(d.side, d.t), w: d.width, flipped: d.flipped })),
         windows: room.windows.map(w => ({ side: side2Dto3D(w.side) as any, t: tVal2Dto3D(w.side, w.t), w: w.width, h: w.height, sillH: w.sillHeight })),
         furniture: [],
         defaultMaterials: { walls: "White Paint", floors: "Engineered Oak", ceiling: "Flat White" },
@@ -7683,6 +7881,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
         side: side2Dto3D(d.side) as any,
         t: tVal2Dto3D(d.side, d.t),
         w: d.width,
+        flipped: d.flipped,
       }));
       def.windows = room.windows.map(w => ({
         side: side2Dto3D(w.side) as any,
@@ -8417,7 +8616,7 @@ export function FloorPlan3DEditor({ mode = "project" }: { mode?: "project" | "te
           >
             <div className="w-full h-full bg-white/95 backdrop-blur-[16.75px] rounded-[17px] shadow-[0_8px_20px_rgba(0,0,0,0.06)] border border-[#F3F4F6] flex flex-col overflow-hidden">
               {leftPanel === "furniture" && (
-                <FurniturePanel onAddItem={handleAddItem} onClose={() => setLeftPanel(null)} onAutoFurnish={handleAutoFurnish} roomLabel={activeDef?.shortLabel || activeDef?.label} />
+                <FurniturePanel onAddItem={handleAddItem} onClose={() => setLeftPanel(null)} onAutoFurnish={handleAutoFurnish} roomLabel={activeDef?.shortLabel || activeDef?.label} recentFurnitureIds={editorState.recentFurniture} />
               )}
               {leftPanel === "customize" && !is2DMode && (
                 <CustomizePanel
