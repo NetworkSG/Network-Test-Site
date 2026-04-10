@@ -1223,28 +1223,9 @@ export function CostGuide() {
       }
       setStep(13);
 
-      // Send to Zapier immediately via server proxy (don't wait for PDF)
+      // Generate PDF in background, then send to Zapier with PDF link
       const fmtK = (n: number) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`;
       const budgetRange = est.isFloor ? "$30K - $35K" : `${fmtK(est.estMin)} - ${fmtK(est.estMax)}`;
-      sendToZapier("cost-guide-lead", {
-        "Email Address": contact.email,
-        "Property Type": propertyType,
-        "Renovation Budget": budgetRange,
-        "First Name": contact.name,
-        "Hook Id": data.qrId || "",
-        "Meeting Preference": meetingPreference,
-        "Lead Form": "Cost Guide Lead Form",
-        "Key Date": timeline,
-        "Contact Phone": contact.whatsapp,
-        "Postal Code": postalCode,
-        "Property Status": propertyStatus,
-        "Lifestyle Preferences": JSON.stringify(lifestyle),
-        "Preferred Themes": preferredThemes.join(", "),
-        "Additional Notes": additionalNotes,
-        "Reference Photos": uploadedPhotos.map((p) => p.url).join(", "),
-      });
-
-      // Generate PDF in background and send update to Zapier with PDF link
       (async () => {
         try {
           const pdfRes = await fetch(`${API_BASE}/cost-guide-pdf`, {
@@ -1264,16 +1245,27 @@ export function CostGuide() {
           const pdfData = await pdfRes.json();
           const pdfUrl = pdfData.pdfUrl || null;
           console.log("PDF generated:", pdfUrl);
-          // Send PDF link update to Zapier
-          if (pdfUrl) {
-            sendToZapier("cost-guide-lead", {
-              "Hook Id": data.qrId || "",
-              "Craftpdf Link": pdfUrl,
-              "Lead Form": "Cost Guide PDF Update",
-            });
-          }
+          // Send to Zapier only after PDF is ready
+          sendToZapier("cost-guide-lead", {
+            "Email Address": contact.email,
+            "Property Type": propertyType,
+            "Renovation Budget": budgetRange,
+            "Craftpdf Link": pdfUrl || "",
+            "First Name": contact.name,
+            "Hook Id": data.qrId || "",
+            "Meeting Preference": meetingPreference,
+            "Lead Form": "Cost Guide Lead Form",
+            "Key Date": timeline,
+            "Contact Phone": contact.whatsapp,
+            "Postal Code": postalCode,
+            "Property Status": propertyStatus,
+            "Lifestyle Preferences": JSON.stringify(lifestyle),
+            "Preferred Themes": preferredThemes.join(", "),
+            "Additional Notes": additionalNotes,
+            "Reference Photos": uploadedPhotos.map((p) => p.url).join(", "),
+          });
         } catch (bgErr) {
-          console.error("Background PDF error:", bgErr);
+          console.error("Background PDF/Zapier error:", bgErr);
         }
       })();
     } catch (err) {
