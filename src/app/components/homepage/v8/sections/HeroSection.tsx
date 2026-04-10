@@ -4,6 +4,7 @@ import { C, serif, sans, FadeIn, TagLabel } from "../primitives";
 import { HERO, QUALIFYING_QUESTIONS, COMPLETION, TESTIMONIALS } from "../../content";
 import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { sendToZapier } from "@/app/utils/zapier";
 
 import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.png";
 import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.png";
@@ -316,22 +317,21 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                     }),
                   }).then(r => { if (!r.ok) console.error("Lead save failed:", r.status); else console.log("Lead saved to homepage_leads"); })
                     .catch(err => console.error("Lead save error:", err));
-                  // Send to Zapier (direct until edge function is redeployed with proxy)
-                  const zapForm = new FormData();
-                  zapForm.append("First Name", form.name);
-                  zapForm.append("Contact Phone", form.phone);
-                  zapForm.append("Email Address", form.email || "");
-                  zapForm.append("Situation", answers.situation || "");
-                  zapForm.append("Key Date", answers.timeline || "");
-                  zapForm.append("Property Type", answers.home_type || "");
-                  zapForm.append("Design Level", answers.design_level || "");
-                  zapForm.append("Renovation Budget", answers.budget_range || "");
-                  zapForm.append("Biggest Concern", answers.biggest_concern || "");
-                  zapForm.append("Decision Maker", answers.is_decision_maker || "");
-                  zapForm.append("Meeting Preference", answers.meeting_preference || "");
-                  zapForm.append("Lead Form", "Homepage Lead Form");
-                  fetch("https://hooks.zapier.com/hooks/catch/20249199/2c5b7ea/", { method: "POST", body: zapForm })
-                    .catch(err => console.error("Zapier error:", err));
+                  // Send to Zapier via server proxy
+                  sendToZapier("hero-lead", {
+                    "First Name": form.name,
+                    "Contact Phone": form.phone,
+                    "Email Address": form.email || "",
+                    "Situation": answers.situation || "",
+                    "Key Date": answers.timeline || "",
+                    "Property Type": answers.home_type || "",
+                    "Design Level": answers.design_level || "",
+                    "Renovation Budget": answers.budget_range || "",
+                    "Biggest Concern": answers.biggest_concern || "",
+                    "Decision Maker": answers.is_decision_maker || "",
+                    "Meeting Preference": answers.meeting_preference || "",
+                    "Lead Form": "Homepage Lead Form",
+                  });
                 }} />
               </motion.div>
             )}

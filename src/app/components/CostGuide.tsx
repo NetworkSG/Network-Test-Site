@@ -5,6 +5,7 @@ import { SiteNav } from "./SiteNav";
 import { motion, AnimatePresence } from "motion/react";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { sendToZapier } from "@/app/utils/zapier";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 // ─── Types ───────────────────────────────────────────────
@@ -1222,7 +1223,28 @@ export function CostGuide() {
       }
       setStep(13);
 
-      // Generate PDF then send to Zapier with PDF URL in background
+      // Send to Zapier immediately via server proxy (don't wait for PDF)
+      const fmtK = (n: number) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`;
+      const budgetRange = est.isFloor ? "$30K - $35K" : `${fmtK(est.estMin)} - ${fmtK(est.estMax)}`;
+      sendToZapier("cost-guide-lead", {
+        "Email Address": contact.email,
+        "Property Type": propertyType,
+        "Renovation Budget": budgetRange,
+        "First Name": contact.name,
+        "Hook Id": data.qrId || "",
+        "Meeting Preference": meetingPreference,
+        "Lead Form": "Cost Guide Lead Form",
+        "Key Date": timeline,
+        "Contact Phone": contact.whatsapp,
+        "Postal Code": postalCode,
+        "Property Status": propertyStatus,
+        "Lifestyle Preferences": JSON.stringify(lifestyle),
+        "Preferred Themes": preferredThemes.join(", "),
+        "Additional Notes": additionalNotes,
+        "Reference Photos": uploadedPhotos.map((p) => p.url).join(", "),
+      });
+
+      // Generate PDF in background and send update to Zapier with PDF link
       (async () => {
         try {
           const pdfRes = await fetch(`${API_BASE}/cost-guide-pdf`, {
@@ -1242,33 +1264,16 @@ export function CostGuide() {
           const pdfData = await pdfRes.json();
           const pdfUrl = pdfData.pdfUrl || null;
           console.log("PDF generated:", pdfUrl);
-
-          // Send to Zapier with all data + PDF URL
-          const fmtK = (n: number) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`;
-          const budgetRange = est.isFloor ? "$30K - $35K" : `${fmtK(est.estMin)} - ${fmtK(est.estMax)}`;
-          const formData = new FormData();
-          formData.append("Email Address", contact.email);
-          formData.append("Property Type", propertyType);
-          formData.append("Renovation Budget", budgetRange);
-          formData.append("Craftpdf Link", pdfUrl || "");
-          formData.append("First Name", contact.name);
-          formData.append("Hook Id", data.qrId || "");
-          formData.append("Meeting Preference", meetingPreference);
-          formData.append("Lead Form", "Cost Guide Lead Form");
-          formData.append("Key Date", timeline);
-          formData.append("Contact Phone", contact.whatsapp);
-          formData.append("Postal Code", postalCode);
-          formData.append("Property Status", propertyStatus);
-          formData.append("Lifestyle Preferences", JSON.stringify(lifestyle));
-          formData.append("Preferred Themes", preferredThemes.join(", "));
-          formData.append("Additional Notes", additionalNotes);
-          formData.append("Reference Photos", uploadedPhotos.map((p) => p.url).join(", "));
-          await fetch("https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/", {
-            method: "POST",
-            body: formData,
-          });
+          // Send PDF link update to Zapier
+          if (pdfUrl) {
+            sendToZapier("cost-guide-lead", {
+              "Hook Id": data.qrId || "",
+              "Craftpdf Link": pdfUrl,
+              "Lead Form": "Cost Guide PDF Update",
+            });
+          }
         } catch (bgErr) {
-          console.error("Background PDF/Zapier error:", bgErr);
+          console.error("Background PDF error:", bgErr);
         }
       })();
     } catch (err) {

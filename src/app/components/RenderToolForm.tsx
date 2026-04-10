@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { sendToZapier } from "@/app/utils/zapier";
 
 import imgBefore from "figma:asset/c280f9f6aaab4ae8bddb90591c886526cb64a9c8.png";
 import imgAfter from "figma:asset/f07ac02def74d08b83946b312fd388bd8374c28c.png";
@@ -754,26 +755,18 @@ function StepThankYou({
         console.error("Error saving render result:", err);
       }
 
-      // Always send to Zapier regardless of Supabase save result
-      try {
-        const formData = new FormData();
-        formData.append("First Name", contact.name);
-        formData.append("Contact Phone", contact.whatsapp);
-        formData.append("Email Address", contact.email);
-        formData.append("Property Type", propertyType);
-        formData.append("Renovation Budget", budget);
-        formData.append("Key Date", timeline);
-        formData.append("Lead Form", "AI 3D Render");
-        formData.append("Hook Id", quoteRequestId || "");
-        formData.append("3D Render Image", imageUrl);
-        await fetch("https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/", {
-          method: "POST",
-          body: formData,
-        });
-        console.log("Zapier notified with render image URL");
-      } catch (err) {
-        console.error("Zapier notification failed:", err);
-      }
+      // Send to Zapier via server proxy
+      sendToZapier("render-lead", {
+        "First Name": contact.name,
+        "Contact Phone": contact.whatsapp,
+        "Email Address": contact.email,
+        "Property Type": propertyType,
+        "Renovation Budget": budget,
+        "Key Date": timeline,
+        "Lead Form": "AI 3D Render",
+        "Hook Id": quoteRequestId || "",
+        "3D Render Image": imageUrl,
+      });
 
       // Everything done — show thank you page
       setShowThankYou(true);

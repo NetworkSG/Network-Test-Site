@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "motion/react";
 import { supabase } from "./supabaseClient";
+import { sendToZapier } from "@/app/utils/zapier";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 const imgHandshakeLogo = "/handshake-logo.webp";
 import { ReactLenis } from "lenis/react";
@@ -883,20 +884,17 @@ function LeadCaptureForm() {
       setSubmitted(true);
       toast.success("We'll be in touch soon!");
 
-      // Send to Zapier webhook in background
-      const zapData = new FormData();
-      zapData.append("Name", form.name);
-      zapData.append("WhatsApp", form.whatsapp);
-      zapData.append("Email", form.email || "");
-      zapData.append("Property Type", form.propertyType || "");
-      zapData.append("Budget", form.budget || "");
-      zapData.append("Timeline", form.timeline || "");
-      zapData.append("Has Designer", form.hasDesigner || "");
-      zapData.append("Lead Form", "Handshake Lead Form");
-      fetch("https://hooks.zapier.com/hooks/catch/20249199/u72cnij/", {
-        method: "POST",
-        body: zapData,
-      }).catch(() => {});
+      // Send to Zapier via server proxy
+      sendToZapier("handshake-lead", {
+        "Name": form.name,
+        "WhatsApp": form.whatsapp,
+        "Email": form.email || "",
+        "Property Type": form.propertyType || "",
+        "Budget": form.budget || "",
+        "Timeline": form.timeline || "",
+        "Has Designer": form.hasDesigner || "",
+        "Lead Form": "Handshake Lead Form",
+      });
     } catch {
       toast.error("Something went wrong. Please try again or WhatsApp us directly.");
     } finally {
