@@ -862,11 +862,18 @@ function LeadCaptureForm() {
   const [form, setForm] = useState({ name: "", whatsapp: "", email: "", propertyType: "", budget: "", timeline: "", hasDesigner: "" });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [whatsappTouched, setWhatsappTouched] = useState(false);
+  const whatsappErr = whatsappTouched && form.whatsapp.length > 0 && form.whatsapp.length < 8;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.whatsapp.trim() || !form.email.trim() || !form.propertyType || !form.budget || !form.timeline || !form.hasDesigner) {
       toast.error("Please fill in all fields before submitting.");
+      return;
+    }
+    if (form.whatsapp.length !== 8) {
+      setWhatsappTouched(true);
+      toast.error("Please enter a valid 8-digit Singapore number.");
       return;
     }
     setLoading(true);
@@ -954,7 +961,35 @@ function LeadCaptureForm() {
                 <div>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <FormField label="Full Name" value={form.name} onChange={(v: string) => setForm({ ...form, name: v })} placeholder="Your full name" required />
-                    <FormField label="WhatsApp Number" value={form.whatsapp} onChange={(v: string) => setForm({ ...form, whatsapp: v })} placeholder="91234567" required />
+                    {/* WhatsApp — Singapore 8-digit validation */}
+                    <div>
+                      <label className="block text-[13px] font-medium text-white/50 mb-1.5">
+                        WhatsApp Number<span className="text-[#FFA929] ml-0.5">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={8}
+                        required
+                        placeholder="91234567"
+                        value={form.whatsapp}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                          setForm({ ...form, whatsapp: val });
+                        }}
+                        onFocus={() => setWhatsappTouched(false)}
+                        onBlur={() => setWhatsappTouched(true)}
+                        className={`w-full h-[46px] px-4 bg-white/[0.06] border text-[14px] text-white placeholder:text-white/20 outline-none transition-colors ${
+                          whatsappErr ? "border-red-400" : "border-white/[0.08] focus:border-white/30"
+                        }`}
+                        style={{ borderRadius: 10 }}
+                      />
+                      {whatsappErr && (
+                        <p className="mt-1 text-[12px] text-red-400">
+                          Please enter a valid 8-digit number
+                        </p>
+                      )}
+                    </div>
                     <FormField label="Email Address" value={form.email} onChange={(v: string) => setForm({ ...form, email: v })} placeholder="you@email.com" type="email" required />
                     <FormSelect label="Property Type" value={form.propertyType} onChange={(v: string) => setForm({ ...form, propertyType: v })}
                       options={["BTO", "HDB", "Condo", "Resale", "Landed"]} required />
