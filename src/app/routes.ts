@@ -20,6 +20,7 @@ const LazyDesignerDashboard = lazy(() => import("./components/DesignerDashboard"
 const LazyHomeownerDashboard = lazy(() => import("./components/HomeownerDashboard").then((m) => ({ default: m.HomeownerDashboard })));
 const LazyExplorePage = lazy(() => import("./components/ExplorePage").then((m) => ({ default: m.ExplorePage })));
 const LazyHandshakeLanding = lazy(() => import("./components/HandshakeLanding").then((m) => ({ default: m.HandshakeLanding })));
+const LazyDesignerProfileEditor = lazy(() => import("./components/DesignerProfileEditor").then((m) => ({ default: m.DesignerProfileEditor })));
 const LazyStyleQuizLanding = lazy(() => import("./components/style-quiz/StyleQuizLanding").then((m) => ({ default: m.StyleQuizLanding })));
 const LazyStyleQuizPage = lazy(() => import("./components/style-quiz/StyleQuizPage").then((m) => ({ default: m.StyleQuizPage })));
 const LazyMoodBoardLanding = lazy(() => import("./components/mood-board/MoodBoardLanding").then((m) => ({ default: m.MoodBoardLanding })));
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
   { path: "/profile", element: createElement(LazyRoute, { component: LazyHomeownerDashboard }) },
   { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
   { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
+  { path: "/edit-profile", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
   // { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   // { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

@@ -42,7 +42,7 @@ import { motion } from "motion/react";
 
 /* ─── PLACEHOLDER IMAGES (neutral, non-Sora) ─── */
 export const PLACEHOLDER_COVER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='500'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23e5e2dc'/%3E%3Cstop offset='100%25' stop-color='%23d8d3c8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='1200' height='500'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='20' fill='%239a9790'%3EUpload your cover image%3C/text%3E%3C/svg%3E";
-export const PLACEHOLDER_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%230f0f0d' width='160' height='160' rx='80'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='36' font-weight='600' fill='white'%3ELogo%3C/text%3E%3C/svg%3E";
+export const PLACEHOLDER_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%230f0f0d' width='160' height='160' rx='80'/%3E%3C/svg%3E";
 export const PLACEHOLDER_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%23f0ede6' width='160' height='160'/%3E%3Ccircle cx='80' cy='62' r='26' fill='%23d8d3c8'/%3E%3Cpath d='M30 140 Q80 90 130 140 Z' fill='%23d8d3c8'/%3E%3C/svg%3E";
 export const PLACEHOLDER_MEDIA = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect fill='%23f0ede6' width='800' height='600'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='18' fill='%239a9790'%3EUpload an image%3C/text%3E%3C/svg%3E";
 
@@ -129,6 +129,7 @@ export function EditableText({
 }) {
   const editCtx = useContext(ProfileEditContext);
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
@@ -145,21 +146,30 @@ export function EditableText({
     return <span className={className} style={style}>{value || placeholder || ""}</span>;
   }
 
-  const commit = () => {
-    if (draft !== value) editCtx.save(path, draft);
+  const commit = async () => {
     setEditing(false);
+    if (draft === value) return;
+    setSaving(true);
+    try { await Promise.resolve(editCtx.save(path, draft)); }
+    finally { setSaving(false); }
   };
   const cancel = () => { setDraft(value); setEditing(false); };
 
   if (!editing) {
     return (
       <span
-        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-        className={`${className} cursor-text rounded-[4px] hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#d8d3c8] hover:outline-offset-2 transition-colors`}
+        onClick={(e) => { if (saving) return; e.stopPropagation(); setEditing(true); }}
+        className={`${className} ${saving ? "cursor-wait opacity-60" : "cursor-text hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#d8d3c8] hover:outline-offset-2"} rounded-[4px] transition-colors inline-flex items-center gap-1.5`}
         style={style}
-        title="Click to edit"
+        title={saving ? "Saving…" : "Click to edit"}
       >
         {value || <span style={{ color: "#a8a8a8" }}>{placeholder || "Click to edit"}</span>}
+        {saving && (
+          <svg className="size-[12px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: "#6b6860" }}>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2.5" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+        )}
       </span>
     );
   }
@@ -233,10 +243,21 @@ export function EditableImage({
         type="button"
         onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
         className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer z-[5]"
-        style={{ background: "rgba(15,15,13,0.45)", color: "#fff", fontFamily: "'DM_Sans', sans-serif", fontSize: "13px", fontWeight: 500 }}
+        style={{ background: "rgba(15,15,13,0.45)", color: "#fff" }}
         title="Click to replace image"
+        aria-label="Click to replace image"
       >
-        {uploading ? "Uploading…" : "Click to replace image"}
+        {uploading ? (
+          <svg className="size-[22px] animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <svg className="size-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+        )}
       </button>
       <input
         ref={fileRef}
@@ -590,6 +611,7 @@ export function HeroSection() {
 /* ─── QUOTE CARD ─── */
 function QuoteCard() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const slug = ctx?.profile?.slug || "";
   const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -626,6 +648,42 @@ function QuoteCard() {
     }
     setSubmitting(false);
   };
+
+  // Editor mode: show dummy placeholder form
+  if (editCtx) {
+    return (
+      <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
+        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-1">Get Your Free Quote</h2>
+        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] mb-5 leading-[22px]">
+          Speak with our designers within 24 hours. No hard sell, just honest advice.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <div className="h-[14px] w-[80px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+          </div>
+          <div>
+            <div className="h-[14px] w-[110px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+          </div>
+          <div>
+            <div className="h-[14px] w-[95px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+          </div>
+          <div>
+            <div className="h-[14px] w-[100px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+          </div>
+          <div className="w-full bg-[#09090b] rounded-[14px] h-[44px] flex items-center justify-center">
+            <span className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-white tracking-[-0.35px]">Get Free Quotes &rarr;</span>
+          </div>
+          <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#ababab] text-center">
+            No spam. No obligation. 100% free consultation.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -716,9 +774,11 @@ export function StatsRow() {
     },
     {
       icon: (
-        <svg className="size-[15px]" viewBox="0 0 15.8865 15.8865" fill="none">
-          <rect height="14.4423" stroke="#FFA929" strokeLinejoin="round" strokeWidth="1.44" width="14.4423" x="0.722" y="0.722" />
-          <path d="M0.722 6.165H15.164" stroke="#FFA929" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.44" />
+        <svg className="size-[15px]" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2.5" width="14" height="12.5" rx="1.5" stroke="#FFA929" strokeWidth="1.4" />
+          <path d="M1 6.5H15" stroke="#FFA929" strokeWidth="1.4" />
+          <path d="M5 1V4" stroke="#FFA929" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M11 1V4" stroke="#FFA929" strokeWidth="1.4" strokeLinecap="round" />
         </svg>
       ),
       label: `${s?.years || "12"} Years`,
@@ -726,8 +786,9 @@ export function StatsRow() {
     },
     {
       icon: (
-        <svg className="size-[15px]" viewBox="0 0 12.9981 15.8889" fill="none">
-          <path d="M6.499 0.722V15.167M0.722 4.165H12.276M0.722 8.165H12.276" stroke="#FFA929" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.44" />
+        <svg className="size-[15px]" viewBox="0 0 16 16" fill="none">
+          <path d="M5.5 8L7.2 9.7L10.5 6.3" stroke="#FFA929" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="1" y="1" width="14" height="14" rx="3" stroke="#FFA929" strokeWidth="1.4" />
         </svg>
       ),
       label: (s?.hdbCert ?? true) ? "HDB Cert." : "Registered",
@@ -965,8 +1026,43 @@ export function TeamAvatars() {
               <div className="rounded-full size-[110px] border-[3px] border-[#0f0f0d] bg-white p-[3px] shadow-lg">
                 <img src={resolveImg(selectedMember.img)} alt={selectedMember.name} className="rounded-full size-full object-cover" />
               </div>
-              <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3">{selectedMember.name}</h3>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5">{"role" in selectedMember ? selectedMember.role : ""}</p>
+              {editCtx ? (
+                <>
+                  <input
+                    className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3 text-center bg-transparent border-b border-dashed border-[#d8d3c8] focus:border-[#0f0f0d] outline-none w-full transition-colors"
+                    value={selectedMember.name}
+                    placeholder="Name"
+                    onChange={(e) => {
+                      const idx = members.findIndex((m: any) => m === selectedMember);
+                      if (idx >= 0) {
+                        const updated = { ...selectedMember, name: e.target.value };
+                        setSelectedMember(updated);
+                        const next = members.map((m: any, i: number) => i === idx ? { ...m, name: e.target.value } : m);
+                        editCtx.saveCollection?.("team", serializeTeam(next));
+                      }
+                    }}
+                  />
+                  <input
+                    className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5 text-center bg-transparent border-b border-dashed border-[#d8d3c8] focus:border-[#0f0f0d] outline-none w-full transition-colors"
+                    value={"role" in selectedMember ? selectedMember.role : ""}
+                    placeholder="Role / Designation"
+                    onChange={(e) => {
+                      const idx = members.findIndex((m: any) => m === selectedMember);
+                      if (idx >= 0) {
+                        const updated = { ...selectedMember, role: e.target.value };
+                        setSelectedMember(updated);
+                        const next = members.map((m: any, i: number) => i === idx ? { ...m, role: e.target.value } : m);
+                        editCtx.saveCollection?.("team", serializeTeam(next));
+                      }
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3">{selectedMember.name}</h3>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5">{"role" in selectedMember ? selectedMember.role : ""}</p>
+                </>
+              )}
               <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860] mt-0.5">{"specialty" in selectedMember ? selectedMember.specialty : ""}</p>
 
               {/* Stats row */}
@@ -1223,6 +1319,7 @@ export function BioText() {
 /* ─── TRUSTED SINCE ─── */
 export function TrustedSince() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const p = ctx?.profile;
   const ts = p?.trustedSince;
   const title = ts?.title || "Trusted Since —";
@@ -1234,6 +1331,15 @@ export function TrustedSince() {
   ];
   const hdbImg = p?.images?.hdbCert ? resolveImg(p.images.hdbCert) : imgHdb;
   const bcaImg = p?.images?.bcaCert ? resolveImg(p.images.bcaCert) : imgBca;
+
+  // Hide on live page when no meaningful data
+  if (!editCtx) {
+    const hasTitle = ts?.title && ts.title !== "Trusted Since —" && ts.title.trim() !== "";
+    const hasDesc = ts?.description && ts.description !== "Add your studio's story here." && ts.description.trim() !== "";
+    const hasBadges = badges.length > 0;
+    const hasCerts = certs.some((c: any) => c.name && c.license);
+    if (!hasTitle && !hasDesc && !hasBadges && !hasCerts) return null;
+  }
 
   const badgeIcons = [
     <svg key="dep" className="size-[15px] shrink-0" viewBox="0 0 13.5 16.5" fill="none"><rect height="15" stroke="#00A63E" strokeLinejoin="round" strokeWidth="1.5" width="12" x="0.75" y="0.75" /><path d="M4.5 8.25L6 9.75L9 6.75" stroke="#00A63E" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" /></svg>,
@@ -1348,6 +1454,8 @@ export function ProjectsSection() {
 
   const handleRemoveProject = async (idx: number) => {
     if (!editCtx?.saveCollection) return;
+    const name = projs[idx]?.name || "this project";
+    if (!window.confirm(`Delete "${name}"? This action cannot be undone.`)) return;
     await editCtx.saveCollection("projects", serializeProjects(projs.filter((_: any, i: number) => i !== idx)));
   };
 
@@ -1535,6 +1643,12 @@ export function TrustCredentials() {
     setCredEditing(false);
   };
 
+  const hasActiveCredentials = credentials.hdb.active || credentials.bca.active || credentials.landedEligible;
+  const hasBusinessInfo = allRows.some((r) => r.value.trim() !== "");
+
+  // Hide entire section on live page when no credentials and no business info
+  if (!editCtx && !hasActiveCredentials && !hasBusinessInfo) return null;
+
   return (
     <section className="bg-[#fafaf8] py-10 md:py-14 px-4 md:px-8">
       <div className="max-w-[1293px] mx-auto">
@@ -1543,9 +1657,9 @@ export function TrustCredentials() {
           <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Verified licences and registrations</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6 lg:gap-8">
-          {/* Left column: Credential cards */}
-          <div className="relative flex flex-col gap-3">
+        <div className={`grid grid-cols-1 ${!editCtx && !hasActiveCredentials ? "" : "lg:grid-cols-[1fr_1fr]"} gap-6 lg:gap-8`}>
+          {/* Left column: Credential cards — hidden on live page when no active credentials */}
+          {(editCtx || hasActiveCredentials) && (<div className="relative flex flex-col gap-3">
             {/* Edit pencil — only when editCtx is present */}
             {editCtx && !credEditing && (
               <button
@@ -1702,14 +1816,15 @@ export function TrustCredentials() {
               </div>
             )}
           </div>
+          )}
 
           {/* Right column: Business info table */}
           <div className="bg-white border border-[#d8d3c8] rounded-[12px] overflow-hidden">
             <div className="border-b border-[#d8d3c8] px-5 py-3.5">
               <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-[#6b6860] tracking-[0.42px] uppercase">Business Information</p>
             </div>
-            {allRows.map((info: any, i: number) => (
-              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < allRows.length - 1 ? "border-b border-[#d8d3c8]" : ""}`}>
+            {(editCtx ? allRows : allRows.filter((r) => r.value.trim() !== "")).map((info: any, i: number, arr: any[]) => (
+              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < arr.length - 1 ? "border-b border-[#d8d3c8]" : ""}`}>
                 <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] w-[160px] md:w-[180px] shrink-0">{info.label}</p>
                 <div className="font-['DM_Sans',sans-serif] font-medium text-[14px] md:text-[15px] text-[#0f0f0d] flex-1 min-w-0">
                   {editCtx ? (
@@ -1844,6 +1959,9 @@ export function CaseStudies() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const phases = ctx?.caseStudyPhases ?? caseStudyPhases;
+
+  // Hide on live page when no phases exist
+  if (!editCtx && !phases.length) return null;
 
   const addPhaseFileRef = useRef<HTMLInputElement>(null);
   const replaceImgRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -2078,8 +2196,13 @@ const reviewTabs = [
 
 export function HomeownersSay() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const rData = ctx?.reviewsData ?? reviewsData;
   const rating = ctx?.profile?.stats?.rating || "4.9";
+
+  // Hide on live page when no reviews exist
+  if (!editCtx && !rData.length) return null;
+
   return (
     <section className="py-10 md:py-16 px-4 md:px-8 border-b border-[#d8d3c8]">
       <div className="max-w-[1293px] mx-auto">
@@ -2270,6 +2393,7 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
 
 export function GoogleReviewCards() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const rvws = ctx?.reviews ?? reviews;
   const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
@@ -2291,6 +2415,9 @@ export function GoogleReviewCards() {
     ro.observe(gridRef.current);
     return () => ro.disconnect();
   }, [rvws.length]);
+
+  // Hide on live page when no reviews exist
+  if (!editCtx && !rvws.length) return null;
 
   const toggle = () => {
     if (expanded) {
@@ -2791,13 +2918,8 @@ export function DesignerProfile() {
             </div>
 
             {/* Trusted Since */}
-            <div className="mt-8 md:mt-12">
+            <div className={`mt-8 md:mt-12${!(ctxValue?.teamMembers?.length) ? " lg:max-w-[768px]" : ""}`}>
               <TrustedSince />
-            </div>
-
-            {/* BTO Package CTA */}
-            <div className="mt-6 md:mt-8">
-              <BtoPackageCta />
             </div>
 
             {/* Projects */}
