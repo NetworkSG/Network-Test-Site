@@ -326,7 +326,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                     "Key Date": answers.timeline || "",
                     "Property Type": answers.home_type || "",
                     "Design Level": answers.design_level || "",
-                    "Renovation Budget": answers.budget_range || "",
+                    "Renovation Budget": (answers.budget_range || "").match(/^\$[\d,]+K?\+?(?:[–\-]+\$[\d,]+K?\+?)?/)?.[0] || answers.budget_range || "",
                     "Biggest Concern": answers.biggest_concern || "",
                     "Decision Maker": answers.is_decision_maker || "",
                     "Meeting Preference": answers.meeting_preference || "",
