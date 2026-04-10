@@ -2928,7 +2928,7 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
       const level = scope?.level;
       const count = scope?.count ?? 1;
       if (!level || !selectedRooms.includes(room)) {
-        return { up: "N/A", price: "N/A", include: "Not selected", count: 0 };
+        return { up: "-", price: "-", include: "No works done here", count: 0 };
       }
       return { up: level, price: computeRoomPrice(room, level, count), include: getRoomIncludes(room, level), count };
     }
