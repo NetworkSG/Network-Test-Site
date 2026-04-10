@@ -1098,7 +1098,7 @@ function FormSelect({ label, value, onChange, options, required }: any) {
 // ═══════════════════════════════════════════════════════════════════
 function AnimatedCounter({ target, suffix = "", prefix = "" }: { target: number; suffix?: string; prefix?: string }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const inView = useInView(ref, { once: true, amount: 0.1 });
   const [count, setCount] = useState(0);
 
   useEffect(() => {

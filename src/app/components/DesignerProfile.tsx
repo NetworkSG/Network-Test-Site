@@ -1,10 +1,14 @@
 import { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams, Link } from "react-router";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { Navbar } from "./Navbar";
 import { DesignerProfileFooter } from "./DesignerProfileFooter";
+import { SiteNav } from "./SiteNav";
+import { FOOTER } from "./homepage/content";
 import { useDesignerData } from "./useDesignerData";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
 // All Figma assets
 import imgCover from "figma:asset/e4acf7c6e5d5f1811aa7429b53350cf1b67c5f4e.png";
@@ -35,6 +39,12 @@ import imgReview5 from "figma:asset/31cc808cd2f94feebf8d6df2be2e78773b23d567.png
 import imgMap from "figma:asset/d920b76cda9183f0e3d76af83d25ee01ebb6afb9.png";
 import svgPaths from "../../imports/svg-73ttrm48v1";
 import { motion } from "motion/react";
+
+/* ─── PLACEHOLDER IMAGES (neutral, non-Sora) ─── */
+export const PLACEHOLDER_COVER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='500'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23e5e2dc'/%3E%3Cstop offset='100%25' stop-color='%23d8d3c8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='1200' height='500'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='20' fill='%239a9790'%3EUpload your cover image%3C/text%3E%3C/svg%3E";
+export const PLACEHOLDER_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%230f0f0d' width='160' height='160' rx='80'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='36' font-weight='600' fill='white'%3ELogo%3C/text%3E%3C/svg%3E";
+export const PLACEHOLDER_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%23f0ede6' width='160' height='160'/%3E%3Ccircle cx='80' cy='62' r='26' fill='%23d8d3c8'/%3E%3Cpath d='M30 140 Q80 90 130 140 Z' fill='%23d8d3c8'/%3E%3C/svg%3E";
+export const PLACEHOLDER_MEDIA = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect fill='%23f0ede6' width='800' height='600'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.35em' font-family='Inter,sans-serif' font-size='18' fill='%239a9790'%3EUpload an image%3C/text%3E%3C/svg%3E";
 
 /* ─── IMAGE MAP: maps KV store figma:asset references → resolved import URLs ─── */
 const IMAGE_MAP: Record<string, string> = {
@@ -68,7 +78,7 @@ const IMAGE_MAP: Record<string, string> = {
 
 /** Resolve a figma:asset reference or pass through URLs */
 import { resolveAsset } from "../utils/resolveAsset";
-function resolveImg(ref: string): string {
+export function resolveImg(ref: string): string {
   return IMAGE_MAP[ref] || resolveAsset(ref) || ref;
 }
 
@@ -84,13 +94,163 @@ interface DesignerCtxType {
   serviceArea: any;
 }
 
-const DesignerDataContext = createContext<DesignerCtxType | null>(null);
+export const DesignerDataContext = createContext<DesignerCtxType | null>(null);
 function useDesignerCtx() {
   return useContext(DesignerDataContext);
 }
 
+/* ─── PROFILE EDIT CONTEXT ───
+ * When provided (by /edit-profile), public sections render text/images via
+ * EditableText / EditableImage helpers that become click-to-edit in place.
+ * Default null = view mode (public profile renders unchanged).
+ */
+export type ProfileEditCtxType = {
+  save: (path: string, value: any) => void | Promise<any>;
+  saveCollection?: (section: string, data: any) => void | Promise<any>;
+  uploadImage?: (file: File) => Promise<string | null>;
+};
+export const ProfileEditContext = createContext<ProfileEditCtxType | null>(null);
+
+/** EditableText: in view mode renders the value; in edit mode is click-to-edit in place. */
+export function EditableText({
+  value,
+  path,
+  placeholder,
+  multiline = false,
+  className = "",
+  style,
+}: {
+  value: string;
+  path: string;
+  placeholder?: string;
+  multiline?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const editCtx = useContext(ProfileEditContext);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      try { (inputRef.current as HTMLInputElement).select?.(); } catch {}
+    }
+  }, [editing]);
+
+  if (!editCtx) {
+    // View mode — just render the text plainly.
+    return <span className={className} style={style}>{value || placeholder || ""}</span>;
+  }
+
+  const commit = () => {
+    if (draft !== value) editCtx.save(path, draft);
+    setEditing(false);
+  };
+  const cancel = () => { setDraft(value); setEditing(false); };
+
+  if (!editing) {
+    return (
+      <span
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        className={`${className} cursor-text rounded-[4px] hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#d8d3c8] hover:outline-offset-2 transition-colors`}
+        style={style}
+        title="Click to edit"
+      >
+        {value || <span style={{ color: "#a8a8a8" }}>{placeholder || "Click to edit"}</span>}
+      </span>
+    );
+  }
+
+  if (multiline) {
+    return (
+      <textarea
+        ref={(el) => { inputRef.current = el; }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Escape") cancel(); if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commit(); }}
+        className={`${className} bg-white border border-[#0f0f0d] rounded-[6px] px-2 py-1 outline-none w-full resize-none`}
+        style={{ ...style, minHeight: "3em" }}
+        rows={3}
+      />
+    );
+  }
+
+  return (
+    <input
+      ref={(el) => { inputRef.current = el; }}
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+      className={`${className} bg-white border border-[#0f0f0d] rounded-[6px] px-2 py-1 outline-none`}
+      style={style}
+    />
+  );
+}
+
+/** EditableImage: in view mode just an <img>; in edit mode shows hover overlay → click → upload. */
+export function EditableImage({
+  src,
+  alt,
+  path,
+  className = "",
+  style,
+}: {
+  src: string;
+  alt: string;
+  path: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const editCtx = useContext(ProfileEditContext);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  if (!editCtx) {
+    return <img src={src} alt={alt} className={className} style={style} />;
+  }
+
+  const handlePick = async (file: File) => {
+    if (!editCtx.uploadImage) return;
+    setUploading(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (url) editCtx.save(path, url);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full group/img">
+      <img src={src} alt={alt} className={className} style={style} />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer z-[5]"
+        style={{ background: "rgba(15,15,13,0.45)", color: "#fff", fontFamily: "'DM_Sans', sans-serif", fontSize: "13px", fontWeight: 500 }}
+        title="Click to replace image"
+      >
+        {uploading ? "Uploading…" : "Click to replace image"}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePick(f); e.currentTarget.value = ""; }}
+      />
+    </div>
+  );
+}
+
 /** Transform raw API data into shapes matching the hardcoded constants */
-function transformApiData(api: any): DesignerCtxType {
+export function transformApiData(api: any): DesignerCtxType {
   return {
     profile: api,
 
@@ -123,175 +283,13 @@ function transformApiData(api: any): DesignerCtxType {
 }
 
 /* ─── DATA ─── */
-const teamMembers = [
-  { name: "Chloe", img: imgChloe, type: "person" as const, role: "Lead Designer", specialty: "Modern Minimalist", projects: 48, experience: "6 years", bio: "Specialises in clean modern aesthetics with functional space planning for HDB & condo units.", designs: [
-    { img: "https://images.unsplash.com/photo-1705321963943-de94bb3f0dd3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwaW50ZXJpb3IlMjBsaXZpbmclMjByb29tfGVufDF8fHx8MTc3MzI3MDkzMnww&ixlib=rb-4.1.0&q=80&w=1080", label: "HDB 4-Room Living" },
-    { img: "https://images.unsplash.com/photo-1714307302586-ad71c859d3ce?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBkaW5pbmclMjByb29tJTIwaW50ZXJpb3IlMjB3aGl0ZXxlbnwxfHx8fDE3NzMyNzA5MzR8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "Condo Dining" },
-  ]},
-  { name: "Aisyah", img: imgMarcus, type: "person" as const, role: "Senior Designer", specialty: "Japandi & Scandinavian", projects: 35, experience: "5 years", bio: "Expert in blending Japanese and Scandinavian design for warm, cosy living spaces.", designs: [
-    { img: "https://images.unsplash.com/photo-1718636268253-d6ad2a0aeee9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxqYXBhbmRpJTIwc2NhbmRpbmF2aWFuJTIwYmVkcm9vbSUyMGRlc2lnbnxlbnwxfHx8fDE3NzMyNzA5MzN8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "Japandi Bedroom" },
-    { img: "https://images.unsplash.com/photo-1753117034598-b7cb94f80d76?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3YXJtJTIwd29vZCUyMGludGVyaW9yJTIwYmF0aHJvb20lMjBzcGF8ZW58MXx8fHwxNzczMjcwOTM1fDA&ixlib=rb-4.1.0&q=80&w=1080", label: "Warm Wood Bath" },
-  ]},
-  { name: "Ethan", img: imgSuLin, type: "person" as const, role: "Design Consultant", specialty: "Contemporary Luxe", projects: 52, experience: "7 years", bio: "Creates luxurious yet liveable interiors with premium material selections and bespoke carpentry.", designs: [
-    { img: "https://images.unsplash.com/photo-1643034738686-d69e7bc047e1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBjb250ZW1wb3JhcnklMjBraXRjaGVuJTIwaW50ZXJpb3J8ZW58MXx8fHwxNzczMjQ5NTMwfDA&ixlib=rb-4.1.0&q=80&w=1080", label: "Luxury Kitchen" },
-    { img: "https://images.unsplash.com/photo-1572742482459-e04d6cfdd6f3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBtYXJibGUlMjBiYXRocm9vbSUyMGludGVyaW9yfGVufDF8fHx8MTc3MzI3MDkzNnww&ixlib=rb-4.1.0&q=80&w=1080", label: "Marble Bathroom" },
-  ]},
-  { name: "Arjun", img: imgHafiz, type: "person" as const, role: "Project Manager", specialty: "Landed Properties", projects: 29, experience: "4 years", bio: "Manages end-to-end renovation projects with a focus on landed and multi-storey homes.", designs: [
-    { img: "https://images.unsplash.com/photo-1632214533040-eb166a3b172d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsYW5kZWQlMjBwcm9wZXJ0eSUyMHJlbm92YXRpb24lMjBpbnRlcmlvcnxlbnwxfHx8fDE3NzMyNzA5MzR8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "Terrace Renovation" },
-    { img: "https://images.unsplash.com/photo-1765766599489-fd53df7f8724?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBlbnRyeXdheSUyMGhhbGx3YXklMjBkZXNpZ258ZW58MXx8fHwxNzczMjcwOTM2fDA&ixlib=rb-4.1.0&q=80&w=1080", label: "Grand Entryway" },
-  ]},
-  { name: "Raj", img: imgAiken, type: "person" as const, role: "3D Visualiser", specialty: "Photorealistic Renders", projects: 60, experience: "5 years", bio: "Brings designs to life with stunning photorealistic 3D renders before renovation begins.", designs: [
-    { img: "https://images.unsplash.com/photo-1642755622834-87749d4581f8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHwzZCUyMHJlbmRlciUyMGludGVyaW9yJTIwdmlzdWFsaXphdGlvbnxlbnwxfHx8fDE3NzMyNzA5MzR8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "3D Living Render" },
-    { img: "https://images.unsplash.com/photo-1608682285597-156feb50eb4e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwaG9tZSUyMG9mZmljZSUyMHdvcmtzcGFjZXxlbnwxfHx8fDE3NzMyNzA5MzV8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "Office Visualisation" },
-  ]},
-  { name: "Priya", img: imgRachel, type: "person" as const, role: "Junior Designer", specialty: "BTO Packages", projects: 18, experience: "2 years", bio: "Passionate about creating beautiful starter homes with smart budget-friendly solutions.", designs: [
-    { img: "https://images.unsplash.com/photo-1745429523615-2a82c60bfc02?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGFwYXJ0bWVudCUyMGNvenklMjBpbnRlcmlvciUyMGRlc2lnbnxlbnwxfHx8fDE3NzMyNzA5MzR8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "BTO 3-Room Cosy" },
-    { img: "https://images.unsplash.com/photo-1608682285597-156feb50eb4e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwaG9tZSUyMG9mZmljZSUyMHdvcmtzcGFjZXxlbnwxfHx8fDE3NzMyNzA5MzV8MA&ixlib=rb-4.1.0&q=80&w=1080", label: "Starter Home Living" },
-  ]},
-  { name: "Jurong", img: imgFelicia, type: "project" as const, reels: [
-    { img: "https://images.unsplash.com/photo-1631152695193-61c709e578f5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxIREIlMjBmbGF0JTIwcmVub3ZhdGlvbiUyMHNpbmdhcG9yZSUyMG1vZGVybnxlbnwxfHx8fDE3NzMyNzEzMDB8MA&ixlib=rb-4.1.0&q=80&w=1080", caption: "HDB 5-Room BTO — Modern Minimalist", location: "Jurong West St 91", likes: 324, comments: 18 },
-    { img: "https://images.unsplash.com/photo-1761123393191-3a8733313ff5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwd2hpdGUlMjBraXRjaGVuJTIwcmVub3ZhdGlvbnxlbnwxfHx8fDE3NzMyNzEzMDF8MA&ixlib=rb-4.1.0&q=80&w=1080", caption: "Kitchen Overhaul — Scandinavian White", location: "Jurong East Ave 1", likes: 287, comments: 12 },
-    { img: "https://images.unsplash.com/photo-1768413292551-10011d6c354e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBiYXRocm9vbSUyMHJlbm92YXRpb24lMjB0aWxlc3xlbnwxfHx8fDE3NzMyNzEzMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080", caption: "Spa-Inspired Bathroom Renovation", location: "Jurong West St 65", likes: 198, comments: 9 },
-    { img: "https://images.unsplash.com/photo-1758548157747-285c7012db5b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxvcGVuJTIwY29uY2VwdCUyMGFwYXJ0bWVudCUyMHJlbm92YXRpb258ZW58MXx8fHwxNzczMjcxMzAyfDA&ixlib=rb-4.1.0&q=80&w=1080", caption: "Open Concept Living — Before & After", location: "Taman Jurong", likes: 412, comments: 27 },
-  ]},
-  { name: "Woodlands", img: imgWoodlands, type: "project" as const, reels: [
-    { img: "https://images.unsplash.com/photo-1757439402190-99b73ac8e807?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjb25kbyUyMGxpdmluZyUyMHJvb20lMjBicmlnaHR8ZW58MXx8fHwxNzczMjcxMzAxfDA&ixlib=rb-4.1.0&q=80&w=1080", caption: "Bright Condo Living Room Makeover", location: "Woodlands Crescent", likes: 356, comments: 21 },
-    { img: "https://images.unsplash.com/photo-1773101883552-1ea68c7b471b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb3p5JTIwYmVkcm9vbSUyMGludGVyaW9yJTIwd2FybSUyMGxpZ2h0aW5nfGVufDB8fHx8MTc3MzI3MTMwMnww&ixlib=rb-4.1.0&q=80&w=1080", caption: "Cosy Master Bedroom — Warm Japandi", location: "Woodlands Ring Rd", likes: 278, comments: 15 },
-    { img: "https://images.unsplash.com/photo-1765810655728-c622e966c6ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cm9waWNhbCUyMG1vZGVybiUyMGJhbGNvbnklMjBvdXRkb29yJTIwbGl2aW5nfGVufDB8fHx8MTc3MzI3MTMwM3ww&ixlib=rb-4.1.0&q=80&w=1080", caption: "Balcony Garden Lounge Setup", location: "Admiralty Drive", likes: 189, comments: 8 },
-    { img: "https://images.unsplash.com/photo-1765279333918-949ddcb655ba?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3YWxrJTIwaW4lMjB3YXJkcm9iZSUyMGNsb3NldCUyMGx1eHVyeXxlbnwxfHx8fDE3NzMyNzEzMDN8MA&ixlib=rb-4.1.0&q=80&w=1080", caption: "Walk-In Wardrobe — Built-In Custom", location: "Woodlands Ave 6", likes: 245, comments: 14 },
-  ]},
-];
+const teamMembers: any[] = [];
 
-const businessInfo = [
-  { label: "ACRA / UEN", value: "201203456R" },
-  { label: "Years in operation", value: "12 years (Est. 2012)" },
-  { label: "Office address", value: "5855 W Century, Ang Mo Kio, Singapore" },
-  { label: "Project types", value: "HDB, Condo, Landed, Commercial" },
-  { label: "Style specialisation", value: "Modern, Japandi, Minimalist" },
-  { label: "Budget range", value: "$30,000 – $120,000" },
-];
+const businessInfo: { label: string; value: string }[] = [];
 
-const caseStudyPhases = [
-  {
-    phase: "PHASE I",
-    title: "Concept & Spatial Planning",
-    desc: "We began by refining spatial flow and aligning the layout with the client's functional requirements. Material selections were curated to establish tonal consistency and long-term durability.",
-    tags: [
-      { label: "Space optimization", bg: "bg-[#e0f2fe]", text: "text-[#0369a1]", iconColor: "#0369A1", icon: "grid" },
-      { label: "Budget alignment", bg: "bg-[#fef3c7]", text: "text-[#d97706]", iconColor: "#D97706", icon: "dollar" },
-      { label: "Material curation", bg: "bg-[#e9d5ff]", text: "text-[#7c3aed]", iconColor: "#7C3AED", icon: "palette" },
-    ],
-    img: imgCaseStudy1,
-  },
-  {
-    phase: "PHASE II",
-    title: "Site Preparation & Technical Alignment",
-    desc: "Pre-construction assessments were conducted to identify structural defects and verify dimensional accuracy. All technical parameters were documented to ensure seamless contractor coordination.",
-    tags: [
-      { label: "Defects inspection", bg: "bg-[#fef3c7]", text: "text-[#d97706]", iconColor: "#D97706", icon: "search" },
-      { label: "On-site measurements", bg: "bg-[#e0f2fe]", text: "text-[#0369a1]", iconColor: "#0369A1", icon: "ruler" },
-      { label: "Technical verification", bg: "bg-[#dcfce7]", text: "text-[#16a34a]", iconColor: "#16A34A", icon: "check" },
-    ],
-    img: imgCaseStudy2,
-  },
-  {
-    phase: "PHASE III",
-    title: "Execution & Supervision",
-    desc: "Weekly progress reviews ensured adherence to technical specifications and timeline commitments. Quality control inspections were conducted at every milestone to maintain precision.",
-    tags: [
-      { label: "Progress monitoring", bg: "bg-[#dcfce7]", text: "text-[#16a34a]", iconColor: "#16A34A", icon: "chart" },
-      { label: "Quality control", bg: "bg-[#fef3c7]", text: "text-[#d97706]", iconColor: "#D97706", icon: "shield" },
-      { label: "Timeline management", bg: "bg-[#e0f2fe]", text: "text-[#0369a1]", iconColor: "#0369A1", icon: "clock" },
-    ],
-    img: imgCaseStudy3,
-  },
-  {
-    phase: "PHASE IV",
-    title: "Final Reveal & Handover",
-    desc: "Final detailing and finishing adjustments were completed with meticulous attention to carpentry precision and lighting calibration. The project was delivered to specification and schedule.",
-    tags: [
-      { label: "Final detailing", bg: "bg-[#fce7f3]", text: "text-[#be185d]", iconColor: "#BE185D", icon: "sparkle" },
-      { label: "Styling & finishing", bg: "bg-[#e9d5ff]", text: "text-[#9333ea]", iconColor: "#9333EA", icon: "palette" },
-      { label: "Client handover", bg: "bg-[#fef3c7]", text: "text-[#ca8a04]", iconColor: "#CA8A04", icon: "key" },
-    ],
-    img: imgCaseStudy4,
-  },
-];
+const caseStudyPhases: any[] = [];
 
-const reviews = [
-  {
-    title: "Highly Responsive and Meticulous Designer",
-    text: "Did a full condo renovation with Sora Studio and had a fantastic experience. Mina and Sana were incredibly responsive and attentive to every detail — from mater...",
-    fullText: "Did a full condo renovation with Sora Studio and had a fantastic experience. Mina and Sana were incredibly responsive and attentive to every detail — from material selection to colour palettes, they guided us patiently through every decision. The 3D renders were spot-on and the final result exceeded our expectations. Communication was always prompt, and they kept us updated at every stage. Highly recommend for anyone looking for a professional yet personal touch!",
-    name: "Emily Chen",
-    date: "March 2024",
-    initial: "E",
-    bgColor: "bg-[#f55]",
-    textColor: "text-white",
-    img: imgReview1,
-    hasVideo: false,
-  },
-  {
-    title: "Professional, creative, and reliable",
-    text: "From the first consultation to handover, the experience was smooth and reassuring. The designer understood our vision immediately and proposed practical solutio...",
-    fullText: "From the first consultation to handover, the experience was smooth and reassuring. The designer understood our vision immediately and proposed practical solutions that were both aesthetic and functional. They managed the contractors efficiently and ensured quality workmanship throughout. The timeline was met with minimal delays, and the budget was respected. We especially appreciated the post-renovation follow-up to ensure everything was in order.",
-    name: "Emily Chen",
-    date: "March 2024",
-    initial: "E",
-    bgColor: "bg-[#f55]",
-    textColor: "text-white",
-    img: imgReview2,
-    hasVideo: false,
-  },
-  {
-    title: "Thoughtful design & smooth execution",
-    text: "We chose Sora Studio after meeting a few firms and felt most comfortable with Mina's practical yet creative design suggestions. The final result looked exactly ...",
-    fullText: "We chose Sora Studio after meeting a few firms and felt most comfortable with Mina's practical yet creative design suggestions. The final result looked exactly like the 3D renders — modern, functional, and beautifully finished. Every corner of the home was thoughtfully designed, from hidden storage solutions to lighting placement. The team was always available to address our concerns, and we never felt rushed. A truly seamless experience from start to finish.",
-    name: "Ryan Teo",
-    date: "February 2024",
-    initial: "R",
-    bgColor: "bg-[#fc5]",
-    textColor: "text-[#282828]",
-    img: imgReview3,
-    hasVideo: true,
-  },
-  {
-    title: "Efficient and caring BTO renovation",
-    text: "Momo from Sora Studio helped me with a partial kitchen and living room revamp. She was cheerful and open to our ideas, offering great budget-friendly alternativ...",
-    fullText: "Momo from Sora Studio helped me with a partial kitchen and living room revamp. She was cheerful and open to our ideas, offering great budget-friendly alternatives without compromising on style. The workmanship was clean and completed ahead of schedule. She even helped coordinate the delivery of our custom furniture. For a first-time homeowner, Momo made the whole renovation journey stress-free and enjoyable. Would definitely work with her again!",
-    name: "Ryan Teo",
-    date: "February 2024",
-    initial: "R",
-    bgColor: "bg-[#fc5]",
-    textColor: "text-[#282828]",
-    img: imgReview4,
-    hasVideo: false,
-  },
-  {
-    title: "Seamless renovation from start to finish",
-    text: "We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the proces...",
-    fullText: "We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the process. From demolition to the final walkthrough, every milestone was communicated clearly. The design choices were elegant yet liveable, perfectly matching our modern minimalist preference. They even handled the tricky hacking works with care and professionalism. Truly a five-star experience.",
-    name: "Alicia Wong",
-    date: "January 2024",
-    initial: "A",
-    bgColor: "bg-[#557fff]",
-    textColor: "text-white",
-    img: imgReview5,
-    hasVideo: false,
-  },
-  {
-    title: "Seamless renovation from start to finish",
-    text: "We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the proces...",
-    fullText: "We engaged Sora Studio for our resale condo and couldn't be happier. The team was patient, transparent with costs, and extremely organized throughout the process. From demolition to the final walkthrough, every milestone was communicated clearly. The design choices were elegant yet liveable, perfectly matching our modern minimalist preference. They even handled the tricky hacking works with care and professionalism. Truly a five-star experience.",
-    name: "Alicia Wong",
-    date: "January 2024",
-    initial: "A",
-    bgColor: "bg-[#557fff]",
-    textColor: "text-white",
-    img: imgReview5,
-    hasVideo: false,
-  },
-];
+const reviews: any[] = [];
 
 /* ─── STAR ICON ─── */
 function StarIcon({ className = "size-[14px]" }: { className?: string }) {
@@ -316,63 +314,208 @@ function Stars({ count = 5, size = "size-[14px]" }: { count?: number; size?: str
 }
 
 /* ─── HERO SECTION ─── */
-function HeroSection() {
+export function HeroSection() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const p = ctx?.profile;
   const cp = p?.coverProject;
-  const coverImg = p?.images?.cover ? resolveImg(p.images.cover) : imgCover;
-  const logoImg = p?.images?.logo ? resolveImg(p.images.logo) : imgLogo;
-  const companyName = p?.name || "Sora Studios";
-  const taglineText = p?.tagline || "Crafting bespoke interiors for HDBs & Condos since 2014. Modern, Japandi, and Minimalist specialists. HDB Registered.";
-  const availText = p?.availability || "Available for Q3 2026";
+  const coverImg = p?.images?.cover ? resolveImg(p.images.cover) : PLACEHOLDER_COVER;
+  const logoImg = p?.images?.logo ? resolveImg(p.images.logo) : PLACEHOLDER_LOGO;
+  const companyName = p?.name || "Input Interior Designer name";
+  const taglineText = p?.tagline || "Add your tagline";
+  const availText = p?.availability || "";
   const locText = p?.location || "Singapore Based";
-  const isVerified = p?.verified ?? true;
-  const coverName = cp?.name || "Serangoon Terrace";
-  const coverCost = cp?.cost || "$128,500";
-  const coverArea = cp?.area || "145m\u00B2";
-  const coverYear = cp?.year || "2024";
-  const coverStyle = cp?.style || "Modern Contemporary Luxe";
+  const isVerified = p?.verified ?? false;
+  const coverName = cp?.name || "Featured project name";
+  const coverCost = cp?.cost || "";
+  const coverArea = cp?.area || "";
+  const coverYear = cp?.year || "";
+  const coverStyle = cp?.style || "";
+
+  // Cover editor state — when in edit mode, the cover image + project metadata
+  // are edited together via a wrapper panel rather than inline.
+  const [coverEditing, setCoverEditing] = useState(false);
+  const [coverDraft, setCoverDraft] = useState({ name: coverName, cost: coverCost, area: coverArea, year: coverYear, style: coverStyle });
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!coverEditing) {
+      setCoverDraft({ name: coverName, cost: coverCost, area: coverArea, year: coverYear, style: coverStyle });
+    }
+  }, [coverName, coverCost, coverArea, coverYear, coverStyle, coverEditing]);
+
+  const handleCoverImagePick = async (file: File) => {
+    if (!editCtx?.uploadImage) return;
+    setCoverUploading(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (url) await editCtx.save("images.cover", url);
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
+  const handleCoverSave = async () => {
+    if (!editCtx) return;
+    if (coverDraft.name !== coverName) await editCtx.save("coverProject.name", coverDraft.name);
+    if (coverDraft.cost !== coverCost) await editCtx.save("coverProject.cost", coverDraft.cost);
+    if (coverDraft.area !== coverArea) await editCtx.save("coverProject.area", coverDraft.area);
+    if (coverDraft.year !== coverYear) await editCtx.save("coverProject.year", coverDraft.year);
+    if (coverDraft.style !== coverStyle) await editCtx.save("coverProject.style", coverDraft.style);
+    setCoverEditing(false);
+  };
 
   return (
     <section className="relative w-full">
       {/* Cover Image */}
-      <div className="group relative w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] overflow-hidden cursor-pointer">
+      <div className="group relative w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] overflow-hidden">
         <img
           src={coverImg}
           alt={`${companyName} project`}
           className="absolute inset-0 w-full h-full object-cover scale-125"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/18 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/18 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out pointer-events-none" />
 
         {/* Project tag */}
         <div className="absolute top-3 md:top-4 left-3 md:left-4 z-10">
-          <span className="font-['Inter',sans-serif] font-semibold text-[13px] md:text-[15px] text-white">
+          <span className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[15px] text-white">
             {coverName}
           </span>
         </div>
+
+        {/* Edit pencil — only when editCtx is present */}
+        {editCtx && !coverEditing && (
+          <button
+            type="button"
+            onClick={() => setCoverEditing(true)}
+            className="absolute top-3 md:top-4 right-3 md:right-4 z-20 flex items-center gap-1.5 bg-white/95 hover:bg-white text-[#0f0f0d] rounded-full px-3 py-1.5 shadow-md transition-colors"
+            title="Edit cover image and project details"
+          >
+            <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+            </svg>
+            <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium uppercase tracking-[0.08em]">Edit cover</span>
+          </button>
+        )}
 
         {/* Project details - desktop left sidebar */}
         <div className="hidden lg:block absolute left-0 top-0 h-full w-[320px] bg-gradient-to-r from-black to-transparent -translate-x-full opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-500 ease-out">
           <div className="p-8 pt-14 space-y-5">
             <div>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#a8a8a8]">Renovation Cost</p>
-              <p className="font-['Inter',sans-serif] font-medium text-[16px] text-white">{coverCost}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Renovation Cost</p>
+              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverCost}</p>
             </div>
             <div>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#a8a8a8]">Area Size</p>
-              <p className="font-['Inter',sans-serif] font-medium text-[16px] text-white">{coverArea}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Area Size</p>
+              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverArea}</p>
             </div>
             <div>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#a8a8a8]">Year of Completion</p>
-              <p className="font-['Inter',sans-serif] font-medium text-[16px] text-white">{coverYear}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Year of Completion</p>
+              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverYear}</p>
             </div>
             <div>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#a8a8a8]">Interior Style</p>
-              <p className="font-['Inter',sans-serif] font-medium text-[16px] text-white">{coverStyle}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Interior Style</p>
+              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverStyle}</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Cover edit panel — opens below the cover image when pencil is clicked */}
+      {editCtx && coverEditing && (
+        <div className="relative z-20 mt-4 mx-2 md:mx-0 lg:mr-[440px] bg-white border border-[#d8d3c8] rounded-[16px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#d8d3c8] bg-[#f0ede6]">
+            <div className="flex items-center gap-2">
+              <svg className="size-[14px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </svg>
+              <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#0f0f0d]">Editing · Cover</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setCoverEditing(false)} className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] hover:text-[#0f0f0d] px-3 py-1.5 rounded-[8px] transition-colors">Cancel</button>
+              <button type="button" onClick={handleCoverSave} className="font-['DM_Sans',sans-serif] text-[13px] font-medium text-white bg-[#0f0f0d] hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
+            </div>
+          </div>
+          <div className="p-6 grid md:grid-cols-[280px_1fr] gap-6">
+            {/* Image upload tile */}
+            <div>
+              <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860] mb-2">Cover photo</p>
+              <button
+                type="button"
+                onClick={() => coverFileRef.current?.click()}
+                className="relative w-full h-[160px] rounded-[12px] overflow-hidden border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] transition-colors group/cover"
+              >
+                <img src={coverImg} alt="Cover preview" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium text-white">{coverUploading ? "Uploading…" : "Click to replace"}</span>
+                </div>
+              </button>
+              <input
+                ref={coverFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCoverImagePick(f); e.currentTarget.value = ""; }}
+              />
+            </div>
+
+            {/* Form fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <label className="col-span-2 block">
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Project name</span>
+                <input
+                  type="text"
+                  value={coverDraft.name}
+                  onChange={(e) => setCoverDraft({ ...coverDraft, name: e.target.value })}
+                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                  placeholder="Serangoon Terrace"
+                />
+              </label>
+              <label className="block">
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Renovation cost</span>
+                <input
+                  type="text"
+                  value={coverDraft.cost}
+                  onChange={(e) => setCoverDraft({ ...coverDraft, cost: e.target.value })}
+                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                  placeholder="$128,500"
+                />
+              </label>
+              <label className="block">
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Area size</span>
+                <input
+                  type="text"
+                  value={coverDraft.area}
+                  onChange={(e) => setCoverDraft({ ...coverDraft, area: e.target.value })}
+                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                  placeholder="145m²"
+                />
+              </label>
+              <label className="block">
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Year completed</span>
+                <input
+                  type="text"
+                  value={coverDraft.year}
+                  onChange={(e) => setCoverDraft({ ...coverDraft, year: e.target.value })}
+                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                  placeholder="2024"
+                />
+              </label>
+              <label className="block">
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Interior style</span>
+                <input
+                  type="text"
+                  value={coverDraft.style}
+                  onChange={(e) => setCoverDraft({ ...coverDraft, style: e.target.value })}
+                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                  placeholder="Modern Contemporary"
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quote Card - desktop right */}
       <div className="hidden lg:block absolute right-6 top-[340px] w-[400px] z-10">
@@ -380,34 +523,36 @@ function HeroSection() {
       </div>
 
       {/* Profile info row */}
-      <div className="relative mt-[-50px] md:mt-[-80px] pl-4 md:pl-8 flex items-start gap-5 md:gap-7">
+      <div className={`relative ${coverEditing ? "mt-6" : "mt-[-50px] md:mt-[-80px]"} pl-4 md:pl-8 flex items-start gap-5 md:gap-7`}>
         {/* Logo */}
         <div className="relative bg-black rounded-full size-[90px] md:size-[160px] border-[3px] md:border-4 border-white shadow-lg shrink-0 overflow-hidden flex items-center justify-center z-[1]">
-          <img src={logoImg} alt={companyName} className="w-[90%] h-[90%] object-cover rounded-full" />
+          <EditableImage src={logoImg} alt={companyName} path="images.logo" className="w-[90%] h-[90%] object-cover rounded-full" />
         </div>
 
         {/* Name + info - desktop */}
         <div className="hidden md:block pt-[90px] lg:max-w-[520px]">
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="font-['Inter',sans-serif] font-bold text-[24px] text-[#101828]">{companyName}</h1>
+            <h1 className="font-['EB_Garamond',Georgia,serif] font-normal text-[24px] text-[#0f0f0d]">
+              <EditableText value={companyName} path="name" placeholder="Studio name" />
+            </h1>
             {isVerified && (
-              <div className="bg-[#2b7fff] rounded-full size-[16px] flex items-center justify-center">
+              <div className="bg-[#0f0f0d] rounded-full size-[16px] flex items-center justify-center">
                 <svg className="size-[10px]" viewBox="0 0 10 7.5" fill="none">
                   <path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
                 </svg>
               </div>
             )}
           </div>
-          <p className="font-['Inter',sans-serif] text-[16px] text-[#4a5565] leading-[24px] mb-2">
-            {taglineText}
+          <p className="font-['DM_Sans',sans-serif] text-[16px] text-[#6b6860] leading-[24px] mb-2">
+            <EditableText value={taglineText} path="tagline" placeholder="Tagline" multiline />
           </p>
-          <div className="flex items-center gap-4 text-[14px] text-[#6a7282] font-['Inter',sans-serif]">
+          <div className="flex items-center gap-4 text-[14px] text-[#6b6860] font-['DM_Sans',sans-serif]">
             <span className="flex items-center gap-1.5">
               <span className="bg-[#00c950] rounded-full size-2 inline-block" />
-              {availText}
+              <EditableText value={availText} path="availability" placeholder="Availability" />
             </span>
             <span>&bull;</span>
-            <span>{locText}</span>
+            <span><EditableText value={locText} path="location" placeholder="Location" /></span>
           </div>
         </div>
       </div>
@@ -415,25 +560,27 @@ function HeroSection() {
       {/* Name + info - mobile */}
       <div className="md:hidden px-2 mt-3">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="font-['Inter',sans-serif] font-bold text-[20px] text-[#101828]">{companyName}</h1>
+          <h1 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#0f0f0d]">
+            <EditableText value={companyName} path="name" placeholder="Studio name" />
+          </h1>
           {isVerified && (
-            <div className="bg-[#2b7fff] rounded-full size-[14px] flex items-center justify-center">
+            <div className="bg-[#0f0f0d] rounded-full size-[14px] flex items-center justify-center">
               <svg className="size-[8px]" viewBox="0 0 10 7.5" fill="none">
                 <path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
               </svg>
             </div>
           )}
         </div>
-        <p className="font-['Inter',sans-serif] text-[14px] text-[#4a5565] leading-[22px] mb-2">
-          {taglineText}
+        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[22px] mb-2">
+          <EditableText value={taglineText} path="tagline" placeholder="Tagline" multiline />
         </p>
-        <div className="flex items-center gap-3 text-[13px] text-[#6a7282] font-['Inter',sans-serif]">
+        <div className="flex items-center gap-3 text-[13px] text-[#6b6860] font-['DM_Sans',sans-serif]">
           <span className="flex items-center gap-1.5">
             <span className="bg-[#00c950] rounded-full size-2 inline-block" />
-            {availText}
+            <EditableText value={availText} path="availability" placeholder="Availability" />
           </span>
           <span>&bull;</span>
-          <span>{locText}</span>
+          <span><EditableText value={locText} path="location" placeholder="Location" /></span>
         </div>
       </div>
     </section>
@@ -482,38 +629,38 @@ function QuoteCard() {
 
   if (submitted) {
     return (
-      <div className="bg-white rounded-[17px] border border-[#f3f4f6] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7 text-center">
+      <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7 text-center">
         <div className="w-14 h-14 bg-[#ECFDF5] rounded-full flex items-center justify-center mx-auto mb-4">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <h2 className="font-['Inter',sans-serif] font-bold text-[20px] text-[#09090b] mb-2">Quote Request Sent!</h2>
-        <p className="font-['Inter',sans-serif] text-[14px] text-[#747474] leading-[22px]">
+        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-2">Quote Request Sent!</h2>
+        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] leading-[22px]">
           Thank you, {form.name.split(" ")[0]}! The team will get back to you within 24 hours.
         </p>
       </div>
     );
   }
 
-  const inputCls = "w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-[14px] px-4 py-2.5 text-[14px] font-['Inter',sans-serif] text-[#09090b] placeholder:text-[#99a1af] outline-none focus:border-[#ffa929] transition-colors";
-  const selectCls = "w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-[14px] px-4 py-2.5 text-[14px] font-['Inter',sans-serif] outline-none focus:border-[#ffa929] transition-colors appearance-none";
+  const inputCls = "w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] text-[#09090b] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors";
+  const selectCls = "w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] outline-none focus:border-[#0f0f0d] transition-colors appearance-none";
 
   return (
-    <div className="bg-white rounded-[17px] border border-[#f3f4f6] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
-      <h2 className="font-['Inter',sans-serif] font-bold text-[20px] text-[#09090b] mb-1">Get Your Free Quote</h2>
-      <p className="font-['Inter',sans-serif] text-[14px] text-[#747474] mb-5 leading-[22px]">
+    <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
+      <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-1">Get Your Free Quote</h2>
+      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] mb-5 leading-[22px]">
         Speak with our designers within 24 hours. No hard sell, just honest advice.
       </p>
       <div className="space-y-4">
         <div>
-          <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Full Name</label>
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Full Name</label>
           <input type="text" required placeholder="e.g. Jing Wei Tan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} />
         </div>
         <div>
-          <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Contact Number</label>
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Contact Number</label>
           <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
         </div>
         <div>
-          <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
           <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
             <option value="">Select Property Type</option>
             <option value="HDB">HDB</option>
@@ -523,7 +670,7 @@ function QuoteCard() {
           </select>
         </div>
         <div>
-          <label className="font-['Inter',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
           <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
             <option value="">Select Budget Range</option>
             <option value="Below $30,000">Below $30,000</option>
@@ -533,11 +680,11 @@ function QuoteCard() {
             <option value="Above $120,000">Above $120,000</option>
           </select>
         </div>
-        {error && <p className="font-['Inter',sans-serif] text-[13px] text-red-500">{error}</p>}
+        {error && <p className="font-['DM_Sans',sans-serif] text-[13px] text-red-500">{error}</p>}
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="w-full bg-[#09090b] text-white font-['Inter',sans-serif] font-semibold text-[14px] rounded-[14px] h-[44px] tracking-[-0.35px] hover:bg-[#1a1a1a] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full bg-[#09090b] text-white font-['DM_Sans',sans-serif] font-semibold text-[14px] rounded-[14px] h-[44px] tracking-[-0.35px] hover:bg-[#1a1a1a] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {submitting ? (
             <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg>
@@ -545,7 +692,7 @@ function QuoteCard() {
             <>Get Free Quotes &rarr;</>
           )}
         </button>
-        <p className="font-['Inter',sans-serif] text-[12px] text-[#ababab] text-center">
+        <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#ababab] text-center">
           No spam. No obligation. 100% free consultation.
         </p>
       </div>
@@ -554,7 +701,7 @@ function QuoteCard() {
 }
 
 /* ─── STATS ROW ─── */
-function StatsRow() {
+export function StatsRow() {
   const ctx = useDesignerCtx();
   const s = ctx?.profile?.stats;
   const stats = [
@@ -591,11 +738,11 @@ function StatsRow() {
   return (
     <div className="grid grid-cols-3 gap-2.5">
       {stats.map((s) => (
-        <div key={s.label} className="bg-[#fafafa] border border-[#f3f4f6] rounded-[17px] flex items-center gap-2.5 px-4 py-3 min-w-0">
+        <div key={s.label} className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] flex items-center gap-2.5 px-4 py-3 min-w-0">
           <div className="shrink-0">{s.icon}</div>
           <div>
-            <p className="font-['Inter',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#101828] leading-tight">{s.label}</p>
-            <p className="font-['Inter',sans-serif] text-[11px] md:text-[12px] text-[#6a7282] tracking-[0.15px]">{s.sub}</p>
+            <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#0f0f0d] leading-tight">{s.label}</p>
+            <p className="font-['DM_Sans',sans-serif] text-[11px] md:text-[12px] text-[#6b6860] tracking-[0.15px]">{s.sub}</p>
           </div>
         </div>
       ))}
@@ -604,8 +751,9 @@ function StatsRow() {
 }
 
 /* ─── TEAM AVATARS ─── */
-function TeamAvatars() {
+export function TeamAvatars() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const members = ctx?.teamMembers ?? teamMembers;
   const [selectedMember, setSelectedMember] = useState<(typeof members)[number] | null>(null);
   const [clickOrigin, setClickOrigin] = useState({ x: 0, y: 0 });
@@ -616,6 +764,56 @@ function TeamAvatars() {
   const [isProjectClosing, setIsProjectClosing] = useState(false);
   const [likedReels, setLikedReels] = useState<Set<string>>(new Set());
   const reelContainerRef = useRef<HTMLDivElement>(null);
+
+  // Edit-mode helpers
+  const addMemberFileRef = useRef<HTMLInputElement>(null);
+  const addStoryFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingMember, setUploadingMember] = useState(false);
+  const [uploadingStory, setUploadingStory] = useState(false);
+
+  // Build the canonical "team" payload to save back to the server: keep all
+  // existing fields, but write `image` (not the resolved `img`) so URLs persist.
+  const serializeTeam = (next: any[]) => next.map(({ img, ...rest }: any) => ({ ...rest, image: rest.image ?? img ?? "" }));
+
+  const handleAddMember = async (file: File) => {
+    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
+    setUploadingMember(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (!url) return;
+      const newMember = { name: "New Member", image: url, type: "person", role: "Designer", specialty: "", projects: 0, experience: "", bio: "", designs: [] };
+      await editCtx.saveCollection("team", serializeTeam([...members, newMember]));
+    } finally { setUploadingMember(false); }
+  };
+
+  const handleAddStory = async (file: File) => {
+    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
+    setUploadingStory(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (!url) return;
+      // Try to find an existing "Stories" project bucket; if absent create one.
+      const existingStories = members.find((m: any) => m.type === "project" && m.name === "Stories");
+      const newReel = { img: url, caption: "New story", location: "", likes: 0, comments: 0 };
+      let next: any[];
+      if (existingStories) {
+        next = members.map((m: any) => m === existingStories ? { ...m, reels: [...((m as any).reels || []), newReel] } : m);
+      } else {
+        next = [...members, { name: "Stories", image: url, type: "project", reels: [newReel] }];
+      }
+      await editCtx.saveCollection("team", serializeTeam(next));
+    } finally { setUploadingStory(false); }
+  };
+
+  const handleRemoveMember = async (idx: number) => {
+    if (!editCtx?.saveCollection) return;
+    await editCtx.saveCollection("team", serializeTeam(members.filter((_: any, i: number) => i !== idx)));
+  };
+
+  const handleRenameMember = async (idx: number, name: string) => {
+    if (!editCtx?.saveCollection) return;
+    await editCtx.saveCollection("team", serializeTeam(members.map((m: any, i: number) => i === idx ? { ...m, name } : m)));
+  };
 
   const handleProjectClose = () => {
     setIsProjectClosing(true);
@@ -653,22 +851,93 @@ function TeamAvatars() {
   return (
     <>
       <div className="flex gap-5 overflow-x-auto pb-2 scrollbar-hide">
-        {members.map((m) => (
+        {members.map((m, idx) => (
           <div
-            key={m.name}
-            className="flex flex-col items-center gap-2 shrink-0 cursor-pointer"
+            key={`${m.name}-${idx}`}
+            className="relative flex flex-col items-center gap-2 shrink-0 cursor-pointer group/avatar"
             onClick={(e) => handleAvatarClick(m, e)}
           >
-            <div className={`rounded-full size-[74px] md:size-[80px] border-[3px] ${m.type === "project" ? "border-[#2b7fff]" : "border-[#ffa929]"} bg-white p-[3px] transition-transform duration-200 hover:scale-110`}>
+            <div className={`rounded-full size-[74px] md:size-[80px] border-[3px] ${m.type === "project" ? "border-[#0f0f0d]" : "border-[#0f0f0d]"} bg-white p-[3px] transition-transform duration-200 hover:scale-110`}>
               <img src={resolveImg(m.img)} alt={m.name} className="rounded-full size-full object-cover" />
             </div>
-            <span className="font-['Inter',sans-serif] text-[12px] text-[#101828]">{m.name}</span>
+            <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#0f0f0d]">{m.name}</span>
+            {editCtx && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleRemoveMember(idx); }}
+                className="absolute -top-1 -right-1 size-[22px] rounded-full bg-white border border-[#d8d3c8] shadow-sm flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] z-10"
+                title="Remove"
+              >
+                <svg className="size-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            )}
           </div>
         ))}
+
+        {/* Edit-mode "+" buttons */}
+        {editCtx && (
+          <>
+            {/* Add Member */}
+            <div
+              className="flex flex-col items-center gap-2 shrink-0 cursor-pointer"
+              onClick={() => addMemberFileRef.current?.click()}
+              title="Add a team member"
+            >
+              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#d8d3c8] bg-[#f0ede6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
+                {uploadingMember ? (
+                  <svg className="size-5 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg className="size-7 text-[#6b6860]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                )}
+              </div>
+              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Add member</span>
+              <input
+                ref={addMemberFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddMember(f); e.currentTarget.value = ""; }}
+              />
+            </div>
+
+            {/* Add Story / Reel */}
+            <div
+              className="flex flex-col items-center gap-2 shrink-0 cursor-pointer"
+              onClick={() => addStoryFileRef.current?.click()}
+              title="Upload a story / reel"
+            >
+              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#d8d3c8] bg-[#f0ede6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
+                {uploadingStory ? (
+                  <svg className="size-5 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                    <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg className="size-7 text-[#6b6860]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M16 3v6M8 3v6" />
+                  </svg>
+                )}
+              </div>
+              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Add story</span>
+              <input
+                ref={addStoryFileRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddStory(f); e.currentTarget.value = ""; }}
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Instagram-style popup overlay */}
-      {selectedMember && selectedMember.type === "person" && (
+      {/* Instagram-style popup overlay — portaled to body to escape transformed ancestors */}
+      {selectedMember && selectedMember.type === "person" && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={handleClose}
@@ -693,37 +962,37 @@ function TeamAvatars() {
 
             {/* Profile header — no gradient */}
             <div className="pt-7 pb-4 px-6 flex flex-col items-center text-center">
-              <div className="rounded-full size-[110px] border-[3px] border-[#ffa929] bg-white p-[3px] shadow-lg">
+              <div className="rounded-full size-[110px] border-[3px] border-[#0f0f0d] bg-white p-[3px] shadow-lg">
                 <img src={resolveImg(selectedMember.img)} alt={selectedMember.name} className="rounded-full size-full object-cover" />
               </div>
-              <h3 className="font-['Inter',sans-serif] font-bold text-[18px] text-[#101828] mt-3">{selectedMember.name}</h3>
-              <p className="font-['Inter',sans-serif] text-[13px] text-[#2b7fff] font-medium mt-0.5">{"role" in selectedMember ? selectedMember.role : ""}</p>
-              <p className="font-['Inter',sans-serif] text-[12px] text-[#6a7282] mt-0.5">{"specialty" in selectedMember ? selectedMember.specialty : ""}</p>
+              <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3">{selectedMember.name}</h3>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5">{"role" in selectedMember ? selectedMember.role : ""}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860] mt-0.5">{"specialty" in selectedMember ? selectedMember.specialty : ""}</p>
 
               {/* Stats row */}
               <div className="flex justify-center gap-5 mt-4 w-full">
                 <div className="text-center flex-1">
-                  <p className="font-['Inter',sans-serif] font-bold text-[17px] text-[#101828]">{"projects" in selectedMember ? selectedMember.projects : 0}</p>
-                  <p className="font-['Inter',sans-serif] text-[11px] text-[#6a7282]">Projects</p>
+                  <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"projects" in selectedMember ? selectedMember.projects : 0}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Projects</p>
                 </div>
-                <div className="w-px bg-[#e5e7eb]" />
+                <div className="w-px bg-[#d8d3c8]" />
                 <div className="text-center flex-1">
-                  <p className="font-['Inter',sans-serif] font-bold text-[17px] text-[#101828]">{"experience" in selectedMember ? selectedMember.experience : ""}</p>
-                  <p className="font-['Inter',sans-serif] text-[11px] text-[#6a7282]">Experience</p>
+                  <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"experience" in selectedMember ? selectedMember.experience : ""}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Experience</p>
                 </div>
-                <div className="w-px bg-[#e5e7eb]" />
+                <div className="w-px bg-[#d8d3c8]" />
                 <div className="text-center flex-1">
-                  <p className="font-['Inter',sans-serif] font-bold text-[17px] text-[#101828]">
-                    <svg className="inline size-[13px] text-[#ffa929] mr-0.5 -mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                  <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">
+                    <svg className="inline size-[13px] text-[#0f0f0d] mr-0.5 -mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                     4.9
                   </p>
-                  <p className="font-['Inter',sans-serif] text-[11px] text-[#6a7282]">Rating</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Rating</p>
                 </div>
               </div>
             </div>
 
             {/* Divider */}
-            <div className="h-px bg-[#e5e7eb] mx-4" />
+            <div className="h-px bg-[#d8d3c8] mx-4" />
 
             {/* Designs grid */}
             {"designs" in selectedMember && selectedMember.designs && (
@@ -732,20 +1001,21 @@ function TeamAvatars() {
                   <div key={d.label} className="relative rounded-[12px] overflow-hidden aspect-square group/design">
                     <img src={resolveImg(d.img)} alt={d.label} className="size-full object-cover transition-transform duration-300 group-hover/design:scale-110" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/design:opacity-100 transition-opacity duration-300 flex items-end p-2.5">
-                      <span className="font-['Inter',sans-serif] text-[11px] font-medium text-white">{d.label}</span>
+                      <span className="font-['DM_Sans',sans-serif] text-[11px] font-medium text-white">{d.label}</span>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Instagram Reels-style popup for projects */}
+      {/* Instagram Reels-style popup for projects — portaled to body to escape transformed ancestors */}
       {selectedProject && "reels" in selectedProject && selectedProject.reels && (() => {
         const reels = selectedProject.reels as { img: string; caption: string; location: string; likes: number; comments: number }[];
-        return (
+        return createPortal(
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
             onClick={handleProjectClose}
@@ -795,8 +1065,8 @@ function TeamAvatars() {
                         <img src={resolveImg(selectedProject.img)} alt={selectedProject.name} className="size-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-['Inter',sans-serif] font-semibold text-[13px] text-white leading-tight truncate">{selectedProject.name} Projects</p>
-                        <p className="font-['Inter',sans-serif] text-[11px] text-white/70 leading-tight truncate">{reel.location}</p>
+                        <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-tight truncate">{selectedProject.name} Projects</p>
+                        <p className="font-['DM_Sans',sans-serif] text-[11px] text-white/70 leading-tight truncate">{reel.location}</p>
                       </div>
                     </div>
 
@@ -815,17 +1085,17 @@ function TeamAvatars() {
                         }}
                       >
                         <svg className={`size-7 transition-colors ${likedReels.has(reel.caption) ? "text-red-500 fill-red-500" : "text-white"}`} viewBox="0 0 24 24" fill={likedReels.has(reel.caption) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>
-                        <span className="font-['Inter',sans-serif] text-[11px] text-white font-medium">{likedReels.has(reel.caption) ? reel.likes + 1 : reel.likes}</span>
+                        <span className="font-['DM_Sans',sans-serif] text-[11px] text-white font-medium">{likedReels.has(reel.caption) ? reel.likes + 1 : reel.likes}</span>
                       </button>
 
                     </div>
 
                     {/* Bottom caption area */}
                     <div className="absolute bottom-0 left-0 right-14 p-4">
-                      <p className="font-['Inter',sans-serif] font-semibold text-[14px] text-white leading-snug mb-1">{reel.caption}</p>
+                      <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-white leading-snug mb-1">{reel.caption}</p>
                       <div className="flex items-center gap-1.5">
                         <svg className="size-[12px] text-white/70 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" /></svg>
-                        <span className="font-['Inter',sans-serif] text-[12px] text-white/70">{reel.location}</span>
+                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-white/70">{reel.location}</span>
                       </div>
                     </div>
                   </div>
@@ -847,7 +1117,8 @@ function TeamAvatars() {
                 ))}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
@@ -918,35 +1189,48 @@ function TeamAvatars() {
 }
 
 /* ─── BIO TEXT ─── */
-function BioText() {
+export function BioText() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const bio = ctx?.profile?.bio;
+  // In edit mode, always render an EditableText so the field is clickable even if currently empty.
+  if (editCtx) {
+    return (
+      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
+        <EditableText
+          value={bio || ""}
+          path="bio"
+          placeholder="Add a short description about your studio."
+          multiline
+        />
+      </p>
+    );
+  }
   if (bio) {
     return (
-      <p className="font-['Inter',sans-serif] text-[15px] md:text-[16px] text-[#6a7282] leading-[26px] tracking-[-0.09px]">
+      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
         {bio}
       </p>
     );
   }
   return (
-    <p className="font-['Inter',sans-serif] text-[15px] md:text-[16px] text-[#6a7282] leading-[26px] tracking-[-0.09px]">
-      Full home renovation specialists for HDB, Condo &amp; Landed properties in Singapore. Modern, Japandi &amp; Minimalist styles. Budgets from{" "}
-      <span className="font-bold text-[#364153]">$30K &ndash; $120K</span>.
+    <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
+      Add a short description about your studio.
     </p>
   );
 }
 
 /* ─── TRUSTED SINCE ─── */
-function TrustedSince() {
+export function TrustedSince() {
   const ctx = useDesignerCtx();
   const p = ctx?.profile;
   const ts = p?.trustedSince;
-  const title = ts?.title || "Trusted Since 2014";
-  const desc = ts?.description || "Founded by Marcus Tan, Sora Studios has transformed over 300+ homes across Singapore. We believe in transparent pricing and timelines you can trust. No hidden costs, just honest design work.";
-  const badges = ts?.badges ?? ["100% Deposit Guarantee", "On-Time Completion", "Award Winning Design"];
+  const title = ts?.title || "Trusted Since —";
+  const desc = ts?.description || "Add your studio's story here.";
+  const badges = ts?.badges ?? [];
   const certs = ts?.certifications ?? [
-    { name: "HDB Registered Contractor", license: "Lic. HB-09-4421A" },
-    { name: "BCA Licensed Builder", license: "Lic. HB-09-4421A" },
+    { name: "HDB Registered Contractor", license: "" },
+    { name: "BCA Licensed Builder", license: "" },
   ];
   const hdbImg = p?.images?.hdbCert ? resolveImg(p.images.hdbCert) : imgHdb;
   const bcaImg = p?.images?.bcaCert ? resolveImg(p.images.bcaCert) : imgBca;
@@ -958,16 +1242,16 @@ function TrustedSince() {
   ];
 
   return (
-    <div className="bg-[#f9fafb] border-y border-[#f3f4f6] rounded-[17px] px-6 md:px-12 lg:px-16 py-10 md:py-12">
+    <div className="bg-[#e8e4db] border-y border-[#d8d3c8] rounded-[12px] px-6 md:px-12 lg:px-16 py-10 md:py-12">
       <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 lg:gap-10">
         <div className="flex-1">
-          <h2 className="font-['Inter',sans-serif] font-bold text-[22px] md:text-[24px] text-[#101828] tracking-[-0.6px] mb-3">{title}</h2>
-          <p className="font-['Inter',sans-serif] text-[15px] md:text-[16px] text-[#4a5565] leading-[26px] mb-4">
+          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-3">{title}</h2>
+          <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] mb-4">
             {desc}
           </p>
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             {badges.map((badge: string, i: number) => (
-              <span key={badge} className="flex items-center gap-2 font-['Inter',sans-serif] font-medium text-[14px] text-[#364153]">
+              <span key={badge} className="flex items-center gap-2 font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#364153]">
                 {badgeIcons[i % badgeIcons.length]}
                 {badge}
               </span>
@@ -976,15 +1260,15 @@ function TrustedSince() {
         </div>
 
         {/* Certification logos */}
-        <div className="bg-white border border-[#f3f4f6] rounded-[14px] shadow-sm flex items-center gap-8 p-6 shrink-0">
+        <div className="bg-white border border-[#d8d3c8] rounded-[14px] shadow-sm flex items-center gap-8 p-6 shrink-0">
           <div className="flex flex-col items-center gap-2">
             <img src={hdbImg} alt={certs[0]?.name || "HDB Registered"} className="h-[45px] w-[170px] object-contain" />
-            <span className="font-['Inter',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[0]?.license || "Lic. HB-09-4421A"}</span>
+            <span className="font-['DM_Sans',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[0]?.license || "Lic. HB-09-4421A"}</span>
           </div>
           {certs.length > 1 && (
             <div className="flex flex-col items-center gap-2">
               <img src={bcaImg} alt={certs[1]?.name || "BCA Licensed"} className="h-[45px] w-[170px] object-contain" />
-              <span className="font-['Inter',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[1]?.license || "Lic. HB-09-4421A"}</span>
+              <span className="font-['DM_Sans',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[1]?.license || "Lic. HB-09-4421A"}</span>
             </div>
           )}
         </div>
@@ -994,12 +1278,12 @@ function TrustedSince() {
 }
 
 /* ─── BTO PACKAGE CTA ─── */
-function BtoPackageCta() {
+export function BtoPackageCta() {
   const ctx = useDesignerCtx();
   const bto = ctx?.profile?.btoPackage;
-  const btoTitle = bto?.title || "All-Inclusive BTO Packages";
-  const btoDesc = bto?.description || "Starting from $28,888 for 3-Room BTO. Includes masonry, plumbing, electrical & carpentry.";
-  const btoTags = bto?.tags ?? ["0% Interest Installments", "No Hidden Costs"];
+  const btoTitle = bto?.title || "Add a package title";
+  const btoDesc = bto?.description || "Add a short description of your package.";
+  const btoTags = bto?.tags ?? [];
   const tagColors = [
     "bg-[#dbeafe] text-[#1447e6]",
     "bg-[#dcfce7] text-[#008236]",
@@ -1016,18 +1300,18 @@ function BtoPackageCta() {
           </svg>
         </div>
         <div>
-          <h3 className="font-['Inter',sans-serif] font-semibold text-[17px] md:text-[18px] text-[#101828] mb-1">{btoTitle}</h3>
-          <p className="font-['Inter',sans-serif] text-[13px] md:text-[14px] text-[#4a5565] leading-[20px]">
+          <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[17px] md:text-[18px] text-[#0f0f0d] mb-1">{btoTitle}</h3>
+          <p className="font-['DM_Sans',sans-serif] text-[13px] md:text-[14px] text-[#6b6860] leading-[20px]">
             {btoDesc}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
             {btoTags.map((tag: string, i: number) => (
-              <span key={tag} className={`${tagColors[i % tagColors.length]} font-['Inter',sans-serif] font-medium text-[10px] px-2.5 py-1 rounded-full`}>{tag}</span>
+              <span key={tag} className={`${tagColors[i % tagColors.length]} font-['DM_Sans',sans-serif] font-medium text-[10px] px-2.5 py-1 rounded-full`}>{tag}</span>
             ))}
           </div>
         </div>
       </div>
-      <button className="bg-[#155dfc] text-white font-['Inter',sans-serif] font-medium text-[14px] rounded-[10px] shadow-md px-5 py-2.5 whitespace-nowrap hover:bg-[#1247d6] transition-colors cursor-pointer flex items-center gap-2">
+      <button className="bg-[#0f0f0d] text-white font-['DM_Sans',sans-serif] font-medium text-[14px] rounded-[10px] shadow-md px-5 py-2.5 whitespace-nowrap hover:bg-[#2b2b2b] transition-colors cursor-pointer flex items-center gap-2">
         View Packages
         <svg className="size-[16px]" viewBox="0 0 16 16" fill="none">
           <path d="M3.33 8H12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" />
@@ -1039,93 +1323,405 @@ function BtoPackageCta() {
 }
 
 /* ─── PROJECTS SECTION ─── */
-function ProjectsSection() {
+export function ProjectsSection() {
   const ctx = useDesignerCtx();
-  const projs = ctx?.projects ?? [
-    { img: imgProject1, name: "Tiong Bahru Condo", meta: "HDB \u00b7 $87,460 \u00b7 2024" },
-    { img: imgProject2, name: "Buona Vista Loft", meta: "HDB \u00b7 $276,540 \u00b7 2024" },
-  ];
+  const editCtx = useContext(ProfileEditContext);
+  const projs = ctx?.projects ?? [];
+
+  const addProjectFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingProject, setUploadingProject] = useState(false);
+
+  const serializeProjects = (next: any[]) => next.map(({ img, ...rest }: any) => ({ ...rest, image: rest.image ?? img ?? "" }));
+
+  const handleAddProject = async (file: File) => {
+    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
+    setUploadingProject(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (!url) return;
+      const newProject = { name: "New Project", meta: "HDB · $0 · 2026", image: url };
+      await editCtx.saveCollection("projects", serializeProjects([...projs, newProject]));
+    } finally {
+      setUploadingProject(false);
+    }
+  };
+
+  const handleRemoveProject = async (idx: number) => {
+    if (!editCtx?.saveCollection) return;
+    await editCtx.saveCollection("projects", serializeProjects(projs.filter((_: any, i: number) => i !== idx)));
+  };
+
   return (
     <section>
       <div className="mb-4">
-        <h2 className="font-['Inter',sans-serif] font-semibold text-[19px] md:text-[20px] text-[#101828] tracking-[-0.88px]">Projects</h2>
-        <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#6a7282]">Recent completed renovations</p>
+        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px]">Projects</h2>
+        <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Recent completed renovations</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {projs.map((p: any) => (
-          <div key={p.name} className="relative rounded-[17px] overflow-hidden h-[280px] md:h-[507px] group cursor-pointer">
+        {projs.map((p: any, idx: number) => (
+          <div key={`${p.name}-${idx}`} className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] group cursor-pointer">
             <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
             <Link to={`/designer/${window.location.pathname.split('/designer/')[1]?.split('/')[0] || 'studio'}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 bg-gradient-to-t from-black/42 to-transparent to-[55%] z-[1]" />
             <div className="absolute bottom-4 left-5">
-              <p className="font-['Inter',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
-              <p className="font-['Inter',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
+              <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
             </div>
+            {editCtx && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveProject(idx); }}
+                className="absolute top-3 right-3 z-10 size-[28px] rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center text-[#0f0f0d] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                title="Remove project"
+              >
+                <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            )}
           </div>
         ))}
+
+        {/* Add project tile (edit mode only) */}
+        {editCtx && (
+          <button
+            type="button"
+            onClick={() => addProjectFileRef.current?.click()}
+            className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] hover:bg-white transition-colors flex flex-col items-center justify-center gap-3 group/add"
+            title="Add a project"
+          >
+            {uploadingProject ? (
+              <svg className="size-9 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <>
+                <div className="size-[64px] rounded-full border-2 border-dashed border-[#d8d3c8] bg-white flex items-center justify-center group-hover/add:border-[#0f0f0d] transition-colors">
+                  <svg className="size-8 text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                </div>
+                <span className="font-['DM_Sans',sans-serif] text-[14px] font-medium text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors">Add a project</span>
+                <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#99a1af]">Click to upload an image</span>
+              </>
+            )}
+            <input
+              ref={addProjectFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddProject(f); e.currentTarget.value = ""; }}
+            />
+          </button>
+        )}
       </div>
-      <p className="text-center font-['Inter',sans-serif] text-[13px] text-[#99a1af] tracking-[0.08px] mt-4">
-        Tap a project to see details &middot; <span className="text-[#ffa929]">View all 40+ projects &rarr;</span>
-      </p>
     </section>
   );
 }
 
-/* ─── TRUST & CREDENTIALS ─── */
-function TrustCredentials() {
-  const ctx = useDesignerCtx();
-  const bInfo = ctx?.businessInfo ?? businessInfo;
+/* ─── BUSINESS INFO INLINE CELL ─── */
+function BusinessInfoCell({ value, placeholder, onSave }: { value: string; placeholder: string; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [dirty, setDirty] = useState(false);
+
+  // Sync draft when external value changes (e.g. after save round-trip)
+  useEffect(() => { setDraft(value); setDirty(false); }, [value]);
+
+  const commit = () => {
+    if (draft !== value) onSave(draft);
+    setDirty(false);
+  };
+
   return (
-    <section className="bg-[#fafafa] py-10 md:py-14 px-4 md:px-8">
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => { setDraft(e.target.value); setDirty(true); }}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); if (e.key === "Escape") { setDraft(value); setDirty(false); (e.currentTarget as HTMLInputElement).blur(); } }}
+      placeholder={placeholder}
+      className="bg-transparent border-0 rounded-[6px] px-2 py-1 outline-none w-full text-[14px] md:text-[15px] font-medium text-[#0f0f0d] focus:bg-white focus:ring-1 focus:ring-[#d8d3c8] transition-colors placeholder:text-[#a8a8a8] placeholder:font-normal"
+    />
+  );
+}
+
+/* ─── TRUST & CREDENTIALS ─── */
+const DEFAULT_BUSINESS_LABELS = [
+  "ACRA / UEN",
+  "Years in operation",
+  "Office address",
+  "Project types",
+  "Style specialisation",
+  "Budget range",
+];
+
+export function TrustCredentials() {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const rawBInfo = ctx?.businessInfo ?? businessInfo;
+
+  // Always render the default labels; merge in saved values where available.
+  const bInfo = DEFAULT_BUSINESS_LABELS.map((label) => {
+    const found = rawBInfo.find((r: any) => r.label === label);
+    return { label, value: found?.value ?? "" };
+  });
+  // Append any custom rows that aren't in the default list (preserve user data).
+  const extras = rawBInfo.filter((r: any) => !DEFAULT_BUSINESS_LABELS.includes(r.label));
+  const allRows = [...bInfo, ...extras];
+
+  const handleBusinessSave = (label: string, value: string) => {
+    if (!editCtx) return;
+    const next = [...allRows];
+    const idx = next.findIndex((r) => r.label === label);
+    if (idx >= 0) next[idx] = { label, value };
+    else next.push({ label, value });
+    // Strip empty default rows so we don't persist noise.
+    const cleaned = next.filter((r) => r.value !== "" || extras.some((e: any) => e.label === r.label));
+    editCtx.save("businessInfo", cleaned);
+  };
+
+  // Credentials data — read from profile with hardcoded fallback
+  // Note: descriptions are always the static defaults below (not user-editable)
+  const HDB_DESC = "Authorised to carry out renovation works in HDB flats across Singapore.";
+  const BCA_DESC = "Building & Construction Authority licensed contractor for structural and A&A works.";
+  const parseSub = (sub: string | undefined, defaultReg: string) => {
+    if (!sub) return { firm: "", reg: "" };
+    const parts = sub.split(" \u00b7 ");
+    if (parts.length >= 2) return { firm: parts[0], reg: parts.slice(1).join(" \u00b7 ") };
+    return { firm: sub, reg: defaultReg };
+  };
+  const savedCreds = ctx?.profile?.credentials;
+  const hdbParsed = parseSub(savedCreds?.hdb?.sub, "");
+  const bcaParsed = parseSub(savedCreds?.bca?.sub, "");
+  const credentials = {
+    hdb: {
+      active: savedCreds?.hdb?.active ?? true,
+      title: savedCreds?.hdb?.title || "HDB Registered Contractor",
+      firm: savedCreds?.hdb?.firm || hdbParsed.firm,
+      reg: savedCreds?.hdb?.reg || hdbParsed.reg,
+      desc: HDB_DESC,
+    },
+    bca: {
+      active: savedCreds?.bca?.active ?? true,
+      title: savedCreds?.bca?.title || "BCA Licensed Builder",
+      firm: savedCreds?.bca?.firm || bcaParsed.firm,
+      reg: savedCreds?.bca?.reg || bcaParsed.reg,
+      desc: BCA_DESC,
+    },
+    landedEligible: savedCreds?.landedEligible ?? true,
+  };
+
+  const [credEditing, setCredEditing] = useState(false);
+  const [credDraft, setCredDraft] = useState(credentials);
+
+  useEffect(() => { if (!credEditing) setCredDraft(credentials); }, [savedCreds, credEditing]);
+
+  const handleCredSave = async () => {
+    if (!editCtx) return;
+    const payload = {
+      hdb: {
+        active: credDraft.hdb.active,
+        title: credDraft.hdb.title,
+        firm: credDraft.hdb.firm,
+        reg: credDraft.hdb.reg,
+        sub: `${credDraft.hdb.firm} \u00b7 ${credDraft.hdb.reg}`,
+      },
+      bca: {
+        active: credDraft.bca.active,
+        title: credDraft.bca.title,
+        firm: credDraft.bca.firm,
+        reg: credDraft.bca.reg,
+        sub: `${credDraft.bca.firm} \u00b7 ${credDraft.bca.reg}`,
+      },
+      landedEligible: credDraft.landedEligible,
+    };
+    await editCtx.save("credentials", payload);
+    setCredEditing(false);
+  };
+
+  return (
+    <section className="bg-[#fafaf8] py-10 md:py-14 px-4 md:px-8">
       <div className="max-w-[1293px] mx-auto">
         <div className="mb-5">
-          <h2 className="font-['Inter',sans-serif] font-semibold text-[19px] md:text-[20px] text-[#101828] tracking-[-0.88px]">Trust &amp; Credentials</h2>
-          <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#6a7282]">Verified licences and registrations</p>
+          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px]">Trust &amp; Credentials</h2>
+          <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Verified licences and registrations</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6 lg:gap-8">
           {/* Left column: Credential cards */}
-          <div className="flex flex-col gap-3">
-            {[
-              { img: imgHdb, title: "HDB Registered Contractor", sub: "Sora Studios Pte Ltd \u00b7 Registered 2014", desc: "Authorised to carry out renovation works in HDB flats across Singapore." },
-              { img: imgBca, title: "BCA Licensed Builder", sub: "Sora Studios Pte Ltd \u00b7 Licensed since 2015", desc: "Building & Construction Authority licensed contractor for structural and A&A works." },
-            ].map((c) => (
-              <div key={c.title} className="bg-white border border-[#e5e7eb] rounded-[17px] p-5 flex gap-4">
+          <div className="relative flex flex-col gap-3">
+            {/* Edit pencil — only when editCtx is present */}
+            {editCtx && !credEditing && (
+              <button
+                type="button"
+                onClick={() => setCredEditing(true)}
+                className="absolute -top-2 -right-2 z-10 flex items-center gap-1.5 bg-white hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] border border-[#d8d3c8] rounded-full px-3 py-1.5 shadow-sm transition-colors"
+                title="Edit credentials"
+              >
+                <svg className="size-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                </svg>
+                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.08em]">Edit</span>
+              </button>
+            )}
+
+            {!credEditing && [
+              { img: imgHdb, ...credentials.hdb },
+              { img: imgBca, ...credentials.bca },
+            ].filter((c) => c.active).map((c) => (
+              <div key={c.title} className="bg-white border border-[#d8d3c8] rounded-[12px] p-5 flex gap-4">
                 <div className="bg-[#f8fafc] rounded-[12px] size-[69px] shrink-0 flex items-center justify-center">
                   <img src={resolveImg(c.img)} alt={c.title} className="h-[44px] w-[50px] object-contain" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-['Inter',sans-serif] font-semibold text-[15px] md:text-[16px] text-[#101828] tracking-[-0.09px]">{c.title}</p>
-                    <span className="bg-[rgba(22,163,74,0.08)] text-[#16a34a] font-['Inter',sans-serif] font-medium text-[12px] px-2.5 py-0.5 rounded-full">Active</span>
+                    <p className="font-['DM_Sans',sans-serif] font-semibold text-[15px] md:text-[16px] text-[#0f0f0d] tracking-[-0.09px]">{c.title}</p>
+                    <span className="bg-[rgba(22,163,74,0.08)] text-[#16a34a] font-['DM_Sans',sans-serif] font-medium text-[12px] px-2.5 py-0.5 rounded-full">Active</span>
                   </div>
-                  <p className="font-['Inter',sans-serif] text-[13px] text-[#6a7282] tracking-[0.08px]">{c.sub}</p>
-                  <p className="font-['Inter',sans-serif] text-[13px] text-[#99a1af] tracking-[0.08px] mt-1">{c.desc}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] tracking-[0.08px]">{c.firm} &middot; {c.reg}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] tracking-[0.08px] mt-1">{c.desc}</p>
                 </div>
               </div>
             ))}
 
             {/* Landed renovations badge */}
-            <div className="bg-[rgba(255,169,41,0.06)] border border-[rgba(255,169,41,0.27)] rounded-[17px] px-5 py-4 flex items-center gap-4">
-              <svg className="size-[17px] shrink-0" viewBox="0 0 18.156 18.156" fill="none">
-                <rect height="16.5" stroke="#FFA929" strokeLinejoin="round" strokeWidth="1.65" width="16.5" x="0.825" y="0.825" />
-                <path d="M5 9L8 12L14 6" stroke="#FFA929" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.65" />
-              </svg>
-              <div>
-                <p className="font-['Inter',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#101828]">Eligible for Landed Home Renovations</p>
-                <p className="font-['Inter',sans-serif] text-[13px] text-[#6a7282] tracking-[0.08px]">Certified to undertake full A&amp;A works on landed properties</p>
+            {!credEditing && credentials.landedEligible && (
+              <div className="bg-[rgba(255,169,41,0.06)] border border-[rgba(255,169,41,0.27)] rounded-[12px] px-5 py-4 flex items-center gap-4">
+                <svg className="size-[17px] shrink-0" viewBox="0 0 18.156 18.156" fill="none">
+                  <rect height="16.5" stroke="#FFA929" strokeLinejoin="round" strokeWidth="1.65" width="16.5" x="0.825" y="0.825" />
+                  <path d="M5 9L8 12L14 6" stroke="#FFA929" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.65" />
+                </svg>
+                <div>
+                  <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#0f0f0d]">Eligible for Landed Home Renovations</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] tracking-[0.08px]">Certified to undertake full A&amp;A works on landed properties</p>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Credential edit panel */}
+            {editCtx && credEditing && (
+              <div className="bg-white border border-[#d8d3c8] rounded-[16px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[#d8d3c8] bg-[#f0ede6]">
+                  <div className="flex items-center gap-2">
+                    <svg className="size-[14px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    </svg>
+                    <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#0f0f0d]">Editing · Credentials</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setCredEditing(false)} className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] hover:text-[#0f0f0d] px-3 py-1.5 rounded-[8px] transition-colors">Cancel</button>
+                    <button type="button" onClick={handleCredSave} className="font-['DM_Sans',sans-serif] text-[13px] font-medium text-white bg-[#0f0f0d] hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
+                  </div>
+                </div>
+                <div className="p-5 space-y-6">
+                  {/* HDB */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">HDB Registered Contractor</p>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={credDraft.hdb.active}
+                          onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, active: e.target.checked } })}
+                          className="size-[16px] accent-[#0f0f0d] cursor-pointer"
+                        />
+                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Show this credential</span>
+                      </label>
+                    </div>
+                    <div className={`space-y-3 ${credDraft.hdb.active ? "" : "opacity-50 pointer-events-none"}`}>
+                      <input
+                        type="text"
+                        value={credDraft.hdb.title}
+                        onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, title: e.target.value } })}
+                        placeholder="Title"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                      <input
+                        type="text"
+                        value={credDraft.hdb.firm}
+                        onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, firm: e.target.value } })}
+                        placeholder="ID firm (e.g. Your Studio Pte Ltd)"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                      <input
+                        type="text"
+                        value={credDraft.hdb.reg}
+                        onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, reg: e.target.value } })}
+                        placeholder="Registration date (e.g. Registered 2014)"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* BCA */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">BCA Licensed Builder</p>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={credDraft.bca.active}
+                          onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, active: e.target.checked } })}
+                          className="size-[16px] accent-[#0f0f0d] cursor-pointer"
+                        />
+                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Show this credential</span>
+                      </label>
+                    </div>
+                    <div className={`space-y-3 ${credDraft.bca.active ? "" : "opacity-50 pointer-events-none"}`}>
+                      <input
+                        type="text"
+                        value={credDraft.bca.title}
+                        onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, title: e.target.value } })}
+                        placeholder="Title"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                      <input
+                        type="text"
+                        value={credDraft.bca.firm}
+                        onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, firm: e.target.value } })}
+                        placeholder="ID firm (e.g. Your Studio Pte Ltd)"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                      <input
+                        type="text"
+                        value={credDraft.bca.reg}
+                        onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, reg: e.target.value } })}
+                        placeholder="Registration date (e.g. Licensed since 2015)"
+                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Landed eligibility toggle */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={credDraft.landedEligible}
+                      onChange={(e) => setCredDraft({ ...credDraft, landedEligible: e.target.checked })}
+                      className="size-[18px] accent-[#0f0f0d] cursor-pointer"
+                    />
+                    <span className="font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d]">Show "Eligible for Landed Home Renovations" badge</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right column: Business info table */}
-          <div className="bg-white border border-[#e5e7eb] rounded-[17px] overflow-hidden">
-            <div className="border-b border-[#f3f4f6] px-5 py-3.5">
-              <p className="font-['Inter',sans-serif] font-semibold text-[13px] text-[#6a7282] tracking-[0.42px] uppercase">Business Information</p>
+          <div className="bg-white border border-[#d8d3c8] rounded-[12px] overflow-hidden">
+            <div className="border-b border-[#d8d3c8] px-5 py-3.5">
+              <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-[#6b6860] tracking-[0.42px] uppercase">Business Information</p>
             </div>
-            {bInfo.map((info: any, i: number) => (
-              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < bInfo.length - 1 ? "border-b border-[#f3f4f6]" : ""}`}>
-                <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#6a7282] w-[160px] md:w-[180px] shrink-0">{info.label}</p>
-                <p className="font-['Inter',sans-serif] font-medium text-[14px] md:text-[15px] text-[#101828]">{info.value}</p>
+            {allRows.map((info: any, i: number) => (
+              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < allRows.length - 1 ? "border-b border-[#d8d3c8]" : ""}`}>
+                <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] w-[160px] md:w-[180px] shrink-0">{info.label}</p>
+                <div className="font-['DM_Sans',sans-serif] font-medium text-[14px] md:text-[15px] text-[#0f0f0d] flex-1 min-w-0">
+                  {editCtx ? (
+                    <BusinessInfoCell
+                      value={info.value}
+                      placeholder={`Add ${info.label.toLowerCase()}`}
+                      onSave={(v) => handleBusinessSave(info.label, v)}
+                    />
+                  ) : (
+                    <span>{info.value}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1226,18 +1822,79 @@ function TagIcon({ icon, color }: { icon: string; color: string }) {
 }
 
 /* ─── CASE STUDIES ─── */
-function CaseStudies() {
+function PhaseTextField({ value, placeholder, multiline, onSave, className, style }: { value: string; placeholder: string; multiline?: boolean; onSave: (v: string) => void; className?: string; style?: React.CSSProperties }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  const commit = () => { if (draft !== value) onSave(draft); };
+  const common = {
+    value: draft,
+    onChange: (e: any) => setDraft(e.target.value),
+    onBlur: commit,
+    placeholder,
+    className: `${className || ""} bg-transparent border-0 outline-none w-full rounded-[6px] px-2 -mx-2 focus:bg-white focus:ring-1 focus:ring-[#d8d3c8] transition-colors placeholder:text-[#a8a8a8]`,
+    style,
+  };
+  if (multiline) {
+    return <textarea {...(common as any)} rows={3} onKeyDown={(e: any) => { if (e.key === "Escape") { setDraft(value); e.currentTarget.blur(); } }} />;
+  }
+  return <input type="text" {...(common as any)} onKeyDown={(e: any) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value); e.currentTarget.blur(); } }} />;
+}
+
+export function CaseStudies() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const phases = ctx?.caseStudyPhases ?? caseStudyPhases;
+
+  const addPhaseFileRef = useRef<HTMLInputElement>(null);
+  const replaceImgRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [uploadingPhase, setUploadingPhase] = useState(false);
+  const [replacingIdx, setReplacingIdx] = useState<number | null>(null);
+
+  const serializePhases = (next: any[]) => next.map(({ img, ...rest }: any) => ({ ...rest, image: rest.image ?? img ?? "" }));
+
+  const handleAddPhase = async (file: File) => {
+    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
+    setUploadingPhase(true);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (!url) return;
+      const nextNum = phases.length + 1;
+      const newPhase = { phase: `Phase ${nextNum}`, title: "New Phase", desc: "Description", image: url, tags: [] };
+      await editCtx.saveCollection("casestudies", serializePhases([...phases, newPhase]));
+    } finally { setUploadingPhase(false); }
+  };
+
+  const handleRemovePhase = async (idx: number) => {
+    if (!editCtx?.saveCollection) return;
+    await editCtx.saveCollection("casestudies", serializePhases(phases.filter((_: any, i: number) => i !== idx)));
+  };
+
+  const handleUpdatePhase = async (idx: number, field: string, value: string) => {
+    if (!editCtx?.saveCollection) return;
+    const next = phases.map((p: any, i: number) => i === idx ? { ...p, [field]: value } : p);
+    await editCtx.saveCollection("casestudies", serializePhases(next));
+  };
+
+  const handleReplacePhaseImage = async (idx: number, file: File) => {
+    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
+    setReplacingIdx(idx);
+    try {
+      const url = await editCtx.uploadImage(file);
+      if (!url) return;
+      const next = phases.map((p: any, i: number) => i === idx ? { ...p, image: url, img: url } : p);
+      await editCtx.saveCollection("casestudies", serializePhases(next));
+    } finally { setReplacingIdx(null); }
+  };
+
   return (
-    <section className="bg-[#fafafa] py-10 md:py-14 px-4 md:px-8 overflow-hidden">
+    <section className="bg-[#fafaf8] py-10 md:py-14 px-4 md:px-8 overflow-hidden">
       <div className="max-w-[1293px] mx-auto">
         {/* Left-aligned header */}
         <div className="mb-8 md:mb-12">
-          <h2 className="font-['Inter',sans-serif] font-semibold text-[19px] md:text-[20px] text-[#101828] tracking-[-0.88px] leading-[48px]">
+          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px] leading-[48px]">
             Case Study: From Blueprint to Completion
           </h2>
-          <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] max-w-[684px] leading-[26px]">
+          <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] max-w-[684px] leading-[26px]">
             A structured overview of how this residence progressed from concept planning to final handover.
           </p>
         </div>
@@ -1247,15 +1904,44 @@ function CaseStudies() {
           {/* Vertical connecting line between dots */}
           <div className="hidden lg:block absolute left-1/2 -translate-x-1/2 top-[11px] bottom-[11px] w-[2px] bg-[#e5e5e5] pointer-events-none" />
 
-          {phases.map((phase: any) => (
+          {phases.map((phase: any, idx: number) => (
             <div
-              key={phase.phase}
-              className="flex flex-col lg:flex-row items-start lg:items-stretch relative"
+              key={`${phase.phase}-${idx}`}
+              className="flex flex-col lg:flex-row items-start lg:items-stretch relative group/phase"
             >
               {/* Image – left column */}
               <div className="w-full lg:w-[38%] shrink-0">
-                <div className="rounded-[10px] overflow-hidden shadow-[0px_10px_30px_0px_rgba(0,0,0,0.04)] h-[220px] md:h-[335px]">
+                <div className="relative rounded-[10px] overflow-hidden shadow-[0px_10px_30px_0px_rgba(0,0,0,0.04)] h-[220px] md:h-[335px]">
                   <img src={resolveImg(phase.img)} alt={phase.title} className="w-full h-full object-cover" />
+                  {editCtx && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => replaceImgRefs.current[idx]?.click()}
+                        className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100"
+                        title="Replace image"
+                      >
+                        {replacingIdx === idx ? (
+                          <svg className="size-9 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                          </svg>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-white">
+                            <svg className="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+                            <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium">Replace image</span>
+                          </div>
+                        )}
+                      </button>
+                      <input
+                        ref={(el) => { replaceImgRefs.current[idx] = el; }}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleReplacePhaseImage(idx, f); e.currentTarget.value = ""; }}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1267,16 +1953,52 @@ function CaseStudies() {
               </div>
 
               {/* Content card – right column */}
-              <div className="w-full lg:flex-1 mt-4 lg:mt-0">
-                <div className="bg-white border border-[#e5e7eb] rounded-[17px] h-full p-6 flex flex-col justify-center max-w-[495px] ml-auto">
-                  <p className="font-['Inter',sans-serif] font-bold text-[12px] text-[#ffa929] tracking-[1.44px] leading-[18px] mb-2">{phase.phase}</p>
-                  <h3 className="font-['Inter',sans-serif] font-semibold text-[18px] md:text-[20px] text-[#101828] leading-[40px] mb-1">{phase.title}</h3>
-                  <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] leading-[27px] mb-5 max-w-[405px]">{phase.desc}</p>
+              <div className="w-full lg:flex-1 mt-4 lg:mt-0 relative">
+                {editCtx && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhase(idx)}
+                    className="absolute -top-2 -right-2 z-10 size-[28px] rounded-full bg-white hover:bg-[#0f0f0d] text-[#0f0f0d] hover:text-white border border-[#d8d3c8] shadow-sm flex items-center justify-center opacity-0 group-hover/phase:opacity-100 transition-all"
+                    title="Remove phase"
+                  >
+                    <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                )}
+                <div className="bg-white border border-[#d8d3c8] rounded-[12px] h-full p-6 flex flex-col justify-center max-w-[495px] ml-auto">
+                  {editCtx ? (
+                    <>
+                      <PhaseTextField
+                        value={phase.phase}
+                        placeholder="Phase 1"
+                        onSave={(v) => handleUpdatePhase(idx, "phase", v)}
+                        className="font-['DM_Sans',sans-serif] font-bold text-[12px] text-[#0f0f0d] tracking-[1.44px] leading-[18px] mb-2 uppercase"
+                      />
+                      <PhaseTextField
+                        value={phase.title}
+                        placeholder="Title"
+                        onSave={(v) => handleUpdatePhase(idx, "title", v)}
+                        className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] md:text-[20px] text-[#0f0f0d] leading-[40px] mb-1"
+                      />
+                      <PhaseTextField
+                        value={phase.desc}
+                        placeholder="Description"
+                        multiline
+                        onSave={(v) => handleUpdatePhase(idx, "desc", v)}
+                        className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] leading-[27px] mb-5 resize-none"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-['DM_Sans',sans-serif] font-bold text-[12px] text-[#0f0f0d] tracking-[1.44px] leading-[18px] mb-2">{phase.phase}</p>
+                      <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] md:text-[20px] text-[#0f0f0d] leading-[40px] mb-1">{phase.title}</h3>
+                      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] leading-[27px] mb-5 max-w-[405px]">{phase.desc}</p>
+                    </>
+                  )}
                   <div className="flex flex-wrap gap-2">
-                    {phase.tags.map((t) => (
+                    {(phase.tags || []).map((t: any) => (
                       <span
                         key={t.label}
-                        className={`${t.bg} ${t.text} font-['Inter',sans-serif] font-medium text-[12px] leading-[18px] pl-[10px] pr-3 py-1 rounded-full inline-flex items-center gap-[4px]`}
+                        className={`${t.bg} ${t.text} font-['DM_Sans',sans-serif] font-medium text-[12px] leading-[18px] pl-[10px] pr-3 py-1 rounded-full inline-flex items-center gap-[4px]`}
                       >
                         <TagIcon icon={t.icon} color={t.iconColor} />
                         {t.label}
@@ -1287,6 +2009,47 @@ function CaseStudies() {
               </div>
             </div>
           ))}
+
+          {/* Add phase tile (edit mode only) */}
+          {editCtx && (
+            <div className="flex flex-col lg:flex-row items-start lg:items-stretch relative">
+              <div className="w-full lg:w-[38%] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => addPhaseFileRef.current?.click()}
+                  className="w-full rounded-[10px] h-[220px] md:h-[335px] border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] hover:bg-white transition-colors flex flex-col items-center justify-center gap-3 group/add"
+                  title="Add phase"
+                >
+                  {uploadingPhase ? (
+                    <svg className="size-9 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <>
+                      <div className="size-[64px] rounded-full border-2 border-dashed border-[#d8d3c8] bg-white flex items-center justify-center group-hover/add:border-[#0f0f0d] transition-colors">
+                        <svg className="size-8 text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                      </div>
+                      <span className="font-['DM_Sans',sans-serif] text-[14px] font-medium text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors">Add phase</span>
+                      <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#99a1af]">Click to upload an image</span>
+                    </>
+                  )}
+                </button>
+                <input
+                  ref={addPhaseFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddPhase(f); e.currentTarget.value = ""; }}
+                />
+              </div>
+              <div className="w-full lg:flex-1 mt-4 lg:mt-0">
+                <div className="border-2 border-dashed border-[#d8d3c8] rounded-[12px] h-full p-6 flex items-center justify-center max-w-[495px] ml-auto bg-[#f0ede6]/40">
+                  <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] text-center">Upload an image to start a new phase. Title and description appear here.</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -1305,26 +2068,7 @@ function GoogleIcon({ className = "size-[17px]" }: { className?: string }) {
   );
 }
 
-const reviewsData = [
-  {
-    name: "Alex Goh",
-    initial: "A",
-    time: "2 months ago",
-    text: "\"Sora Studios managed our HDB resale renovation flawlessly. Marcus was responsive even on weekends and the carpentry quality is top notch. Highly recommended!\"",
-  },
-  {
-    name: "Sarah Lim",
-    initial: "S",
-    time: "1 week ago",
-    text: "\"Loved the Japandi design proposal. They really listened to our needs for storage. The timeline was slightly delayed but they made up for it with excellent workmanship.\"",
-  },
-  {
-    name: "Jasmine Tan",
-    initial: "J",
-    time: "3 months ago",
-    text: "\"Transparent pricing from the start. No hidden variation orders. Very happy with our new kitchen!\"",
-  },
-];
+const reviewsData: { name: string; initial: string; time: string; text: string }[] = [];
 
 const reviewTabs = [
   { label: "Network Reviews" },
@@ -1332,21 +2076,21 @@ const reviewTabs = [
   { label: "Google Reviews" },
 ];
 
-function HomeownersSay() {
+export function HomeownersSay() {
   const ctx = useDesignerCtx();
   const rData = ctx?.reviewsData ?? reviewsData;
   const rating = ctx?.profile?.stats?.rating || "4.9";
   return (
-    <section className="py-10 md:py-16 px-4 md:px-8 border-b border-[#f3f4f6]">
+    <section className="py-10 md:py-16 px-4 md:px-8 border-b border-[#d8d3c8]">
       <div className="max-w-[1293px] mx-auto">
         {/* Centered header */}
         <div className="flex flex-col items-center mb-10 md:mb-12">
-          <h2 className="font-['Inter',sans-serif] font-bold text-[24px] text-[#101828] tracking-[-0.6px] leading-[32px] text-center">
+          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[24px] text-[#0f0f0d] tracking-[-0.6px] leading-[32px] text-center">
             What Homeowners Say
           </h2>
           <div className="flex items-center gap-2 mt-2">
             <Stars count={5} size="size-[16px]" />
-            <span className="font-['Inter',sans-serif] font-medium text-[16px] text-[#4a5565]">{rating}/5 Average Rating</span>
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-[#6b6860]">{rating}/5 Average Rating</span>
           </div>
         </div>
 
@@ -1354,7 +2098,7 @@ function HomeownersSay() {
         <div className="flex flex-col lg:flex-row gap-10 lg:gap-[38px]">
           {/* LEFT: Latest Reviews */}
           <div className="w-full lg:flex-[1_1_0]">
-            <h3 className="font-['Inter',sans-serif] font-semibold text-[18px] text-[#101828] leading-[28px] mb-4">
+            <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] leading-[28px] mb-4">
               Latest Reviews
             </h3>
 
@@ -1363,10 +2107,10 @@ function HomeownersSay() {
               {reviewTabs.map((tab) => (
                 <button
                   key={tab.label}
-                  className="bg-[#f8fafc] border border-[#e5e7eb] rounded-full px-[14px] py-[8px] flex items-center gap-[7px] cursor-pointer hover:bg-[#f1f3f5] transition-colors"
+                  className="bg-[#f8fafc] border border-[#d8d3c8] rounded-full px-[14px] py-[8px] flex items-center gap-[7px] cursor-pointer hover:bg-[#f1f3f5] transition-colors"
                 >
                   <GoogleIcon className="size-[17px] shrink-0" />
-                  <span className="font-['Inter',sans-serif] font-medium text-[13.6px] text-[#364153] tracking-[0.08px] whitespace-nowrap">{tab.label}</span>
+                  <span className="font-['DM_Sans',sans-serif] font-medium text-[13.6px] text-[#364153] tracking-[0.08px] whitespace-nowrap">{tab.label}</span>
                 </button>
               ))}
             </div>
@@ -1376,17 +2120,17 @@ function HomeownersSay() {
               {rData.map((r: any, i: number) => (
                 <div
                   key={`latest-${i}`}
-                  className="bg-white border border-[#f3f4f6] rounded-[14px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] p-[21px]"
+                  className="bg-white border border-[#d8d3c8] rounded-[14px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] p-[21px]"
                 >
                   {/* Header: avatar + name/time */}
                   <div className="flex items-center justify-between mb-[15px]">
                     <div className="flex items-center gap-2">
                       <div className="bg-[#ffedd4] rounded-full size-[32px] flex items-center justify-center shrink-0">
-                        <span className="font-['Inter',sans-serif] font-bold text-[12px] text-[#f54900]">{r.initial}</span>
+                        <span className="font-['DM_Sans',sans-serif] font-bold text-[12px] text-[#f54900]">{r.initial}</span>
                       </div>
                       <div>
-                        <p className="font-['Inter',sans-serif] font-semibold text-[14px] text-[#101828] leading-[20px]">{r.name}</p>
-                        <p className="font-['Inter',sans-serif] text-[12px] text-[#99a1af] leading-[16px]">{r.time}</p>
+                        <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-[#0f0f0d] leading-[20px]">{r.name}</p>
+                        <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#99a1af] leading-[16px]">{r.time}</p>
                       </div>
                     </div>
                   </div>
@@ -1401,7 +2145,7 @@ function HomeownersSay() {
                   </div>
 
                   {/* Review text */}
-                  <p className="font-['Inter',sans-serif] text-[14px] text-[#4a5565] leading-[22.75px]">{r.text}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[22.75px]">{r.text}</p>
                 </div>
               ))}
             </div>
@@ -1409,15 +2153,12 @@ function HomeownersSay() {
 
           {/* RIGHT: Video Tours & Stories */}
           <div className="w-full lg:w-[544px] shrink-0">
-            <h3 className="font-['Inter',sans-serif] font-semibold text-[18px] text-[#101828] leading-[28px] mb-4">
+            <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] leading-[28px] mb-4">
               Video Tours &amp; Stories
             </h3>
 
             <div className="flex flex-col gap-6">
-              {[
-                { img: imgVideo, title: "How we transformed a 3-Room HDB", time: "2:45" },
-                { img: imgProject2, title: "Client Interview: The Wongs", time: "4:12" },
-              ].map((v) => (
+              {([] as { img: string; title: string; time: string }[]).map((v) => (
                 <div key={v.title} className="relative rounded-[14px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] h-[240px] md:h-[306px] cursor-pointer group">
                   <img src={resolveImg(v.img)} alt={v.title} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
@@ -1428,8 +2169,8 @@ function HomeownersSay() {
                     </div>
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-16">
-                    <p className="font-['Inter',sans-serif] font-medium text-[16px] text-white leading-[24px]">{v.title}</p>
-                    <span className="bg-black/50 text-[#d1d5dc] font-['Inter',sans-serif] text-[12px] px-2 py-0.5 rounded-[4px] mt-1 inline-block leading-[16px]">{v.time}</span>
+                    <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white leading-[24px]">{v.title}</p>
+                    <span className="bg-black/50 text-[#d1d5dc] font-['DM_Sans',sans-serif] text-[12px] px-2 py-0.5 rounded-[4px] mt-1 inline-block leading-[16px]">{v.time}</span>
                   </div>
                 </div>
               ))}
@@ -1447,7 +2188,7 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
   const contentRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="bg-white border border-[#f3f4f6] rounded-[16px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+    <div className="bg-white border border-[#d8d3c8] rounded-[16px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
       {/* Image */}
       <div className={`relative w-full overflow-hidden ${review.hasVideo ? "h-[253px]" : "h-[160px]"}`}>
         <img
@@ -1480,12 +2221,12 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
           </div>
           <div className="flex items-center gap-[6px]">
             <img src={imgGoogle} alt="Google" className="size-[16px] object-contain" />
-            <span className="font-['Inter',sans-serif] font-medium text-[12px] text-[#34a42f] leading-[16px]">Verified</span>
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[12px] text-[#34a42f] leading-[16px]">Verified</span>
           </div>
         </div>
 
         {/* Title */}
-        <h4 className="font-['Inter',sans-serif] font-semibold text-[16px] text-[#242424] leading-[22px] mt-1.5 mb-2">
+        <h4 className="font-['DM_Sans',sans-serif] font-semibold text-[16px] text-[#242424] leading-[22px] mt-1.5 mb-2">
           {review.title}
         </h4>
 
@@ -1498,28 +2239,28 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
             className="overflow-hidden relative"
             ref={contentRef}
           >
-            <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#4a4a4a] leading-[22.75px]">
+            <p className="font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#4a4a4a] leading-[22.75px]">
               {expanded ? review.fullText : review.text}
             </p>
           </motion.div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="font-['Inter',sans-serif] font-medium text-[14px] text-[#ffa929] mt-1 cursor-pointer hover:underline"
+            className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] mt-1 cursor-pointer hover:underline"
           >
             {expanded ? "Read less" : "Read more"}
           </button>
         </div>
 
         {/* Divider + Reviewer */}
-        <div className="border-t border-[#f9fafb] pt-3 flex items-center gap-[10px]">
+        <div className="border-t border-[#e8e4db] pt-3 flex items-center gap-[10px]">
           <div className={`${review.bgColor} rounded-full size-[36px] flex items-center justify-center shrink-0`}>
-            <span className={`font-['Inter',sans-serif] font-semibold text-[14px] ${review.textColor} leading-[20px]`}>
+            <span className={`font-['DM_Sans',sans-serif] font-semibold text-[14px] ${review.textColor} leading-[20px]`}>
               {review.initial}
             </span>
           </div>
           <div>
-            <p className="font-['Inter',sans-serif] font-medium text-[14px] text-[#1f1f1f] leading-[20px]">{review.name}</p>
-            <p className="font-['Inter',sans-serif] font-normal text-[12px] text-[#9a9a9a] leading-[16px]">{review.date}</p>
+            <p className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#1f1f1f] leading-[20px]">{review.name}</p>
+            <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9a9a] leading-[16px]">{review.date}</p>
           </div>
         </div>
       </div>
@@ -1527,7 +2268,7 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
   );
 }
 
-function GoogleReviewCards() {
+export function GoogleReviewCards() {
   const ctx = useDesignerCtx();
   const rvws = ctx?.reviews ?? reviews;
   const [expanded, setExpanded] = useState(false);
@@ -1564,7 +2305,7 @@ function GoogleReviewCards() {
   };
 
   return (
-    <section ref={sectionRef} className="py-10 md:py-16 px-4 md:px-8 border-b border-[#f3f4f6] scroll-mt-[80px]">
+    <section ref={sectionRef} className="py-10 md:py-16 px-4 md:px-8 border-b border-[#d8d3c8] scroll-mt-[80px]">
       <div className="max-w-[1293px] mx-auto">
 
         {/* ── Reviews container with animated max-height ── */}
@@ -1610,7 +2351,7 @@ function GoogleReviewCards() {
           <div
             className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[2]"
             style={{
-              background: "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,1) 100%)",
+              background: "linear-gradient(to bottom, rgba(240,237,230,0) 0%, rgba(240,237,230,0.85) 50%, rgba(240,237,230,1) 100%)",
               opacity: expanded ? 0 : 1,
               transition: "opacity 0.5s ease",
             }}
@@ -1622,7 +2363,7 @@ function GoogleReviewCards() {
           onClick={toggle}
           className="flex flex-col items-center gap-[8px] mx-auto mt-7 cursor-pointer border-none bg-transparent p-2 group"
         >
-          <span className="font-['Inter',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
+          <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
             {expanded ? "View Less" : "View More"}
           </span>
           <div
@@ -1652,7 +2393,7 @@ const SG_ROUTES = [
   "via Orchard Road",
   "via Bukit Timah Road",
 ];
-const DEST_LABEL = "33 Ubi Ave 3, Singapore 408868";
+const DEST_LABEL = "Singapore";
 
 // Ubi HQ coordinates
 const HQ_LAT = 1.3271;
@@ -1696,15 +2437,15 @@ function isValidSGPostal(v: string) {
   return prefix >= 1 && prefix <= 82;
 }
 
-function ServiceArea() {
+export function ServiceArea() {
   const ctx = useDesignerCtx();
   const sa = ctx?.serviceArea;
   const hqLat = sa?.hqLat || HQ_LAT;
   const hqLng = sa?.hqLng || HQ_LNG;
   const destLabel = sa?.hqAddress || DEST_LABEL;
-  const saDesc = sa?.description || "Based in Ubi, we cover all HDB estates and private properties across Singapore.";
+  const saDesc = sa?.description || "Add your service coverage description.";
   const mapUrl = sa?.mapEmbedUrl || "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d996.4!2d103.8918!3d1.3271!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31da181f5dc73855%3A0x0!2s33+Ubi+Ave+3%2C+Singapore+408868!5e0!3m2!1sen!2ssg!4v1700000000000!5m2!1sen!2ssg";
-  const companyName = ctx?.profile?.name || "Sora Studios";
+  const companyName = ctx?.profile?.name || "Your Studio";
 
   const [postalCode, setPostalCode] = useState("");
   const [error, setError] = useState("");
@@ -1768,11 +2509,11 @@ function ServiceArea() {
     : null;
 
   return (
-    <section className="bg-[#f9fafb] border-t border-[#f3f4f6] rounded-[17px] py-10 md:py-14 px-4 md:px-8">
+    <section className="bg-[#e8e4db] border-t border-[#d8d3c8] rounded-[12px] py-10 md:py-14 px-4 md:px-8">
       <div className="max-w-[1293px] mx-auto">
         <div className="text-center mb-8">
-          <h2 className="font-['DM_Sans',sans-serif] font-bold text-[22px] md:text-[24px] text-[#101828] tracking-[-0.6px] mb-2">Our Service Area</h2>
-          <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6a7282] max-w-[464px] mx-auto leading-[24px]">
+          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-2">Our Service Area</h2>
+          <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] max-w-[464px] mx-auto leading-[24px]">
             {saDesc}
           </p>
         </div>
@@ -1953,40 +2694,40 @@ function MobileQuoteSection() {
 }
 
 /* ─── LOADING SKELETON ─── */
-function ProfileLoadingSkeleton() {
+export function ProfileLoadingSkeleton() {
   return (
-    <div className="bg-white min-h-screen font-['Inter',sans-serif]">
-      <Navbar />
-      <main className="pt-[130px] md:pt-[150px]">
+    <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]">
+      <SiteNav logoImg={logoMarkImg} />
+      <main className="pt-[24px] md:pt-[40px]">
         <div className="max-w-[1293px] mx-auto px-4 md:px-8">
           {/* Cover shimmer */}
-          <div className="w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] bg-[#f3f4f6] animate-pulse" />
+          <div className="w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] bg-[#d8d3c8] animate-pulse" />
           {/* Profile row shimmer */}
           <div className="flex items-start gap-5 md:gap-7 mt-[-50px] md:mt-[-80px] pl-4 md:pl-8">
-            <div className="size-[90px] md:size-[160px] rounded-full bg-[#e5e7eb] animate-pulse border-4 border-white shrink-0" />
+            <div className="size-[90px] md:size-[160px] rounded-full bg-[#d8d3c8] animate-pulse border-4 border-white shrink-0" />
             <div className="hidden md:block pt-[90px] space-y-3 flex-1 max-w-[520px]">
-              <div className="h-7 w-[200px] bg-[#e5e7eb] rounded-lg animate-pulse" />
-              <div className="h-5 w-[360px] bg-[#f3f4f6] rounded-lg animate-pulse" />
-              <div className="h-4 w-[240px] bg-[#f3f4f6] rounded-lg animate-pulse" />
+              <div className="h-7 w-[200px] bg-[#d8d3c8] rounded-lg animate-pulse" />
+              <div className="h-5 w-[360px] bg-[#d8d3c8] rounded-lg animate-pulse" />
+              <div className="h-4 w-[240px] bg-[#d8d3c8] rounded-lg animate-pulse" />
             </div>
           </div>
           {/* Stats shimmer */}
           <div className="mt-6 md:mt-8 grid grid-cols-3 gap-2.5 max-w-[790px]">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-[60px] bg-[#f3f4f6] rounded-[17px] animate-pulse" />
+              <div key={i} className="h-[60px] bg-[#d8d3c8] rounded-[12px] animate-pulse" />
             ))}
           </div>
           {/* Bio shimmer */}
           <div className="mt-6 max-w-[768px] space-y-2">
-            <div className="h-4 w-full bg-[#f3f4f6] rounded animate-pulse" />
-            <div className="h-4 w-[80%] bg-[#f3f4f6] rounded animate-pulse" />
+            <div className="h-4 w-full bg-[#d8d3c8] rounded animate-pulse" />
+            <div className="h-4 w-[80%] bg-[#d8d3c8] rounded animate-pulse" />
           </div>
           {/* Team shimmer */}
           <div className="mt-6 flex gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="flex flex-col items-center gap-2">
-                <div className="size-[74px] md:size-[80px] rounded-full bg-[#e5e7eb] animate-pulse" />
-                <div className="h-3 w-12 bg-[#f3f4f6] rounded animate-pulse" />
+                <div className="size-[74px] md:size-[80px] rounded-full bg-[#d8d3c8] animate-pulse" />
+                <div className="h-3 w-12 bg-[#d8d3c8] rounded animate-pulse" />
               </div>
             ))}
           </div>
@@ -2021,10 +2762,10 @@ export function DesignerProfile() {
 
   return (
     <DesignerDataContext.Provider value={ctxValue}>
-      <div className="bg-white min-h-screen font-['Inter',sans-serif]">
-        <Navbar />
+      <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]">
+        <SiteNav logoImg={logoMarkImg} />
 
-        <main className="pt-[130px] md:pt-[150px]">
+        <main className="pt-[24px] md:pt-[40px]">
           <div className="max-w-[1293px] mx-auto px-4 md:px-8">
             {/* Hero + Profile */}
             <HeroSection />
@@ -2091,10 +2832,31 @@ export function DesignerProfile() {
           </div>
         </main>
 
-        {/* Footer */}
-        <div className="w-full px-3 md:px-4">
-          <DesignerProfileFooter />
-        </div>
+        {/* Footer (homepage style) */}
+        <footer className="px-6 md:px-10 py-10 md:py-14 mt-12 md:mt-16">
+          <div className="max-w-[1280px] mx-auto">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+                <a href="/" className="block shrink-0" style={{
+                  width: "110px", height: "23px", background: "#0f0f0d",
+                  maskImage: `url('${logoMarkImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
+                  WebkitMaskImage: `url('${logoMarkImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
+                }} />
+                <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
+                  {FOOTER.links.map((link: { label: string; href: string }) => (
+                    <a key={link.label} href={link.href}
+                      className="text-[13px] font-normal hover:opacity-60 cursor-pointer no-underline font-['DM_Sans',sans-serif]"
+                      style={{ color: "#9a9790", transition: "all 0.15s" }}
+                    >{link.label}</a>
+                  ))}
+                </div>
+              </div>
+              <span className="text-[12px] font-normal font-['DM_Sans',sans-serif]" style={{ color: "#9a9790" }}>
+                {FOOTER.copyright}
+              </span>
+            </div>
+          </div>
+        </footer>
       </div>
     </DesignerDataContext.Provider>
   );

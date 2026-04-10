@@ -1099,7 +1099,14 @@ app.post("/make-server-4808de5e/render-upload", async (c) => {
   }
 });
 
-// Upload designer profile image (public bucket)
+// Upload designer profile image or video (public bucket)
+// Accepts multipart/form-data (preferred) OR JSON base64 (legacy)
+const ALLOWED_DESIGNER_MEDIA_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "video/mp4", "video/quicktime", "video/webm",
+];
+const MAX_DESIGNER_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+
 app.post("/make-server-4808de5e/designer-upload", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
@@ -1107,36 +1114,59 @@ app.post("/make-server-4808de5e/designer-upload", async (c) => {
     const rl = checkRateLimit(ip, "designer-upload");
     if (!rl.allowed) return c.json({ error: "Too many upload requests. Please try again later.", retryAfterMs: rl.retryAfterMs }, 429);
 
-    const body = await c.req.json();
-    const { imageBase64, fileName, contentType } = body;
-    if (!imageBase64 || !fileName || !contentType) return c.json({ error: "imageBase64, fileName, and contentType are required" }, 400);
-    if (!ALLOWED_IMAGE_TYPES.includes(contentType)) return c.json({ error: `Invalid image type. Allowed: ${ALLOWED_IMAGE_TYPES.join(", ")}` }, 400);
-
-    const cleanFileName = sanitizeString(fileName, MAX_FILENAME_LENGTH).replace(/[^a-zA-Z0-9._-]/g, "_");
-    if (!cleanFileName) return c.json({ error: "Invalid file name" }, 400);
-
-    const estimatedSize = Math.ceil(imageBase64.length * 0.75);
-    if (estimatedSize > MAX_IMAGE_SIZE_BYTES) return c.json({ error: `Image too large. Maximum size is ${MAX_IMAGE_SIZE_BYTES / (1024 * 1024)}MB` }, 400);
-
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const imageData = base64Decode(imageBase64);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const ct = c.req.header("content-type") || "";
+
+    let fileBytes: Uint8Array;
+    let fileName: string;
+    let contentType: string;
+
+    if (ct.includes("multipart/form-data")) {
+      const formData = await c.req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) return c.json({ error: "No file provided" }, 400);
+      contentType = file.type;
+      fileName = file.name;
+      if (!ALLOWED_DESIGNER_MEDIA_TYPES.includes(contentType)) {
+        return c.json({ error: `Invalid file type. Allowed: ${ALLOWED_DESIGNER_MEDIA_TYPES.join(", ")}` }, 400);
+      }
+      const isVideo = contentType.startsWith("video/");
+      const maxSize = isVideo ? MAX_DESIGNER_VIDEO_SIZE : MAX_IMAGE_SIZE_BYTES;
+      if (file.size > maxSize) {
+        return c.json({ error: `File too large. Max ${maxSize / (1024 * 1024)}MB` }, 400);
+      }
+      fileBytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      // Legacy JSON base64 path
+      const body = await c.req.json();
+      const { imageBase64 } = body;
+      fileName = body.fileName;
+      contentType = body.contentType;
+      if (!imageBase64 || !fileName || !contentType) return c.json({ error: "imageBase64, fileName, and contentType are required" }, 400);
+      if (!ALLOWED_DESIGNER_MEDIA_TYPES.includes(contentType)) return c.json({ error: `Invalid file type. Allowed: ${ALLOWED_DESIGNER_MEDIA_TYPES.join(", ")}` }, 400);
+      const estimatedSize = Math.ceil(imageBase64.length * 0.75);
+      const isVideo = contentType.startsWith("video/");
+      const maxSize = isVideo ? MAX_DESIGNER_VIDEO_SIZE : MAX_IMAGE_SIZE_BYTES;
+      if (estimatedSize > maxSize) return c.json({ error: `File too large. Max ${maxSize / (1024 * 1024)}MB` }, 400);
+      fileBytes = base64Decode(imageBase64);
+    }
+
+    const cleanFileName = sanitizeString(fileName, MAX_FILENAME_LENGTH).replace(/[^a-zA-Z0-9._-]/g, "_") || "upload";
     const filePath = `uploads/${crypto.randomUUID()}-${cleanFileName}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(DESIGNER_BUCKET_NAME)
-      .upload(filePath, imageData, { contentType, upsert: true });
+      .upload(filePath, fileBytes, { contentType, upsert: true });
 
     if (uploadError) {
-      console.log("Designer image upload error:", uploadError);
+      console.log("Designer media upload error:", uploadError);
       return c.json({ error: `Upload failed: ${uploadError.message}` }, 500);
     }
 
-    // Public bucket — construct public URL directly
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const publicUrl = `${supabaseUrl}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
-
-    console.log("Designer image uploaded successfully:", filePath);
-    return c.json({ success: true, url: publicUrl, filePath });
+    console.log("Designer media uploaded successfully:", filePath);
+    return c.json({ success: true, url: publicUrl, filePath, contentType });
   } catch (err) {
     console.log("Unexpected error in /designer-upload:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -3961,6 +3991,270 @@ app.delete("/make-server-4808de5e/fp3d/renders/:renderId", async (c) => {
   } catch (err) {
     console.log("Error in DELETE /fp3d/renders:", err);
     return c.json({ error: "Server error" }, 500);
+  }
+});
+
+// =============================================
+// PORTAL AUTH (ons-portal portal_accounts)
+// =============================================
+
+app.post("/make-server-4808de5e/portal-login", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+
+    // Brute force protection
+    const lockout = checkLoginLockout(ip);
+    if (lockout.locked) {
+      securityLog("portal_login_lockout", "warn", ip, "/portal-login");
+      return c.json({ error: `Too many failed attempts. Try again in ${Math.ceil(lockout.remainingMs! / 60000)} minutes.` }, 429);
+    }
+
+    const body = await c.req.json();
+    const username = sanitizeString(body.username || "", 100).toLowerCase().trim();
+    const password = body.password || "";
+
+    if (!username || !password) return c.json({ error: "Username and password are required" }, 400);
+
+    // Connect to ons-portal Supabase
+    const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+    const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+    if (!portalUrl || !portalKey) {
+      console.log("ONS_PORTAL_URL or ONS_PORTAL_SERVICE_ROLE_KEY not configured");
+      return c.json({ error: "Portal auth not configured" }, 500);
+    }
+
+    const portalClient = createClient(portalUrl, portalKey);
+
+    // Try username first, then email if not found
+    let accounts: any[] | null = null;
+    let portalErr: any = null;
+
+    const res1 = await portalClient.from("portal_accounts").select("*").eq("username", username).eq("active", true).limit(1);
+    accounts = res1.data;
+    portalErr = res1.error;
+
+    if ((!accounts || accounts.length === 0) && !portalErr) {
+      // Try matching by email (case-insensitive)
+      const res2 = await portalClient.from("portal_accounts").select("*").ilike("email", username).eq("active", true).limit(1);
+      accounts = res2.data;
+      portalErr = res2.error;
+    }
+
+    if (portalErr || !accounts || accounts.length === 0) {
+      recordFailedLogin(ip);
+      console.log(`Portal login failed for: ${username} — ${portalErr?.message || "not found"}`);
+      return c.json({ error: "Invalid username or password" }, 401);
+    }
+
+    const account = accounts[0];
+
+    // Plaintext password comparison (matching portal_accounts schema)
+    if (account.password !== password) {
+      recordFailedLogin(ip);
+      console.log(`Portal login failed for: ${username} — wrong password`);
+      return c.json({ error: "Invalid username or password" }, 401);
+    }
+
+    // Use the actual username from portal_accounts as the slug (not the login input which could be email)
+    const accountSlug = account.username;
+
+    // Create session in KV store
+    const sessionToken = crypto.randomUUID();
+
+    await kv.set(`designer-session:${sessionToken}`, {
+      slug: accountSlug,
+      email: account.email,
+      firmName: account.firm_name,
+      createdAt: new Date().toISOString(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
+
+    clearFailedLogins(ip);
+    console.log(`Portal login success: ${accountSlug} (${account.firm_name})`);
+    return c.json({
+      success: true,
+      token: sessionToken,
+      slug: accountSlug,
+      profile: { firmName: account.firm_name, email: account.email, avatar: account.avatar },
+    });
+  } catch (err) {
+    console.log("Unexpected error in POST /portal-login:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+app.get("/make-server-4808de5e/portal-session", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Designer-Token");
+    if (!token || !isValidToken(token)) return c.json({ error: "No session token" }, 401);
+
+    // Check KV first (fast path, compatible with existing auth)
+    const kvSession = await kv.get(`designer-session:${token}`);
+    if (kvSession && kvSession.slug) {
+      // Check expiry
+      if (kvSession.expiresAt && kvSession.expiresAt < Date.now()) {
+        await kv.del(`designer-session:${token}`);
+        return c.json({ error: "Session expired" }, 401);
+      }
+      // Fetch designer profile from designers table
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: designer } = await supabase
+        .from("designers")
+        .select("slug, name, data")
+        .eq("slug", kvSession.slug)
+        .single();
+
+      return c.json({
+        valid: true,
+        slug: kvSession.slug,
+        email: kvSession.email,
+        firmName: kvSession.firmName,
+        profile: designer ? { name: designer.name, data: designer.data } : null,
+      });
+    }
+
+    return c.json({ error: "Invalid session" }, 401);
+  } catch (err) {
+    console.log("Unexpected error in GET /portal-session:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/portal-logout", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Designer-Token");
+    if (token) {
+      await kv.del(`designer-session:${token}`);
+    }
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Unexpected error in POST /portal-logout:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// ── Profile Editor: Save to designers + designer_sections tables ──
+
+app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Designer-Token");
+    if (!token) return c.json({ error: "Auth required" }, 401);
+    const session = await kv.get(`designer-session:${token}`);
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const [designerRes, sectionsRes] = await Promise.all([
+      supabase.from("designers").select("*").eq("slug", slug).single(),
+      supabase.from("designer_sections").select("*").eq("slug", slug),
+    ]);
+
+    const designer = designerRes.data;
+    const sections = sectionsRes.data || [];
+
+    // Build response matching the shape expected by DesignerProfile
+    const sectionMap: Record<string, any> = {};
+    for (const s of sections) {
+      sectionMap[s.section] = s.data;
+    }
+
+    return c.json({
+      data: {
+        ...(designer?.data || {}),
+        team: sectionMap.team || [],
+        projects: sectionMap.projects || [],
+        caseStudies: sectionMap.casestudies || [],
+        reviews: sectionMap.reviews || [],
+        latestReviews: sectionMap.latestreviews || [],
+        serviceArea: sectionMap.servicearea || {},
+        businessInfo: sectionMap.businessinfo || [],
+      },
+    });
+  } catch (err) {
+    console.log("Unexpected error in GET /designer-profile-data:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+app.put("/make-server-4808de5e/designer-profile-data/:slug/:section", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const token = c.req.header("X-Designer-Token");
+    if (!token) return c.json({ error: "Auth required" }, 401);
+    const session = await kv.get(`designer-session:${token}`);
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+
+    const section = c.req.param("section");
+    const allowedSections = ["profile", "team", "projects", "casestudies", "reviews", "latestreviews", "servicearea", "businessinfo"];
+    if (!allowedSections.includes(section)) return c.json({ error: "Invalid section" }, 400);
+
+    const body = await c.req.json();
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    if (section === "profile") {
+      // Upsert designers table main data column
+      const { data: existing } = await supabase.from("designers").select("data, name").eq("slug", slug).maybeSingle();
+      const mergedData: any = { ...(existing?.data || {}) };
+      // Deep-merge top-level objects (images, stats, coverProject, btoPackage, trustedSince, etc.)
+      for (const [key, val] of Object.entries(body.data || {})) {
+        if (val && typeof val === "object" && !Array.isArray(val)) {
+          mergedData[key] = { ...(mergedData[key] || {}), ...(val as any) };
+        } else {
+          mergedData[key] = val;
+        }
+      }
+      mergedData.slug = slug;
+      mergedData.updatedAt = new Date().toISOString();
+      const resolvedName = body.data?.name || existing?.name || existing?.data?.name || slug;
+      const { error: upsertError } = await supabase
+        .from("designers")
+        .upsert(
+          { slug, name: resolvedName, data: mergedData, updated_at: new Date().toISOString() },
+          { onConflict: "slug" },
+        );
+      if (upsertError) {
+        console.log("Designer profile upsert error:", upsertError);
+        return c.json({ error: upsertError.message }, 500);
+      }
+
+      // Also sync to KV for backward compat with public profile GET
+      await kv.set(`designer:${slug}`, mergedData);
+    } else {
+      // Upsert into designer_sections table
+      const { data: existingSection } = await supabase
+        .from("designer_sections")
+        .select("id")
+        .eq("slug", slug)
+        .eq("section", section)
+        .single();
+
+      if (existingSection) {
+        await supabase
+          .from("designer_sections")
+          .update({ data: body.data, updated_at: new Date().toISOString() })
+          .eq("slug", slug)
+          .eq("section", section);
+      } else {
+        await supabase
+          .from("designer_sections")
+          .insert({ slug, section, data: body.data });
+      }
+
+      // Also sync to KV for backward compat
+      await kv.set(`designer:${slug}:${section}`, body.data);
+    }
+
+    console.log(`Updated designer profile data: ${slug}/${section}`);
+    return c.json({ success: true, slug, section });
+  } catch (err) {
+    console.log("Unexpected error in PUT /designer-profile-data:", err);
+    return c.json({ error: "Internal server error" }, 500);
   }
 });
 
