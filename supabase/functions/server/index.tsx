@@ -699,6 +699,8 @@ app.use("*", async (c, next) => {
 const ALLOWED_ORIGINS = [
   "https://www.orangenetworkstudios.com",
   "https://orangenetworkstudios.com",
+  "https://test-site.networksg.net",
+  "https://www.test-site.networksg.net",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
@@ -2711,6 +2713,234 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
     });
   } catch (err) {
     console.log("Unexpected error in GET /designers/:slug:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// GOOGLE REVIEWS — cached in KV, refreshed monthly
+// ═══════════════════════════════════════════════════════
+// Strategy:
+//   • Per-designer cache key: `google-reviews:${slug}`
+//   • TTL: 30 days. Reads return cached payload until expiry.
+//   • Source: Google Place Details API (when GOOGLE_PLACES_API_KEY env var is
+//     set AND the designer profile has a `googlePlaceId`). Otherwise we serve
+//     a mock/empty payload so the UI can render without billing us anything.
+//   • Force refresh:
+//       - POST /google-reviews/:slug/refresh   (admin or cron secret)
+//       - POST /google-reviews/cron-refresh-all (monthly cron, secret-protected)
+//   • To wire monthly refresh: schedule a cron (Supabase pg_cron, Vercel cron,
+//     GitHub Actions, etc.) to POST to /cron-refresh-all with header
+//     `x-cron-secret: $CRON_SECRET`.
+
+const GOOGLE_REVIEWS_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+type CachedGoogleReview = {
+  author: string;
+  initial: string;
+  rating: number;
+  text: string;
+  relativeTime: string;
+  profilePhoto: string | null;
+  time: number;
+};
+
+type CachedGoogleReviews = {
+  source: "google" | "mock" | "empty";
+  placeId: string | null;
+  rating: number;
+  totalRatings: number;
+  reviews: CachedGoogleReview[];
+  fetchedAt: string;
+  expiresAt: string;
+};
+
+function emptyGoogleReviewsPayload(placeId: string | null): CachedGoogleReviews {
+  const now = Date.now();
+  return {
+    source: placeId ? "mock" : "empty",
+    placeId,
+    rating: 0,
+    totalRatings: 0,
+    reviews: [],
+    fetchedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + GOOGLE_REVIEWS_TTL_MS).toISOString(),
+  };
+}
+
+async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleReviews | null> {
+  const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+  if (!apiKey || !placeId) return null;
+  try {
+    const url =
+      `https://maps.googleapis.com/maps/api/place/details/json` +
+      `?place_id=${encodeURIComponent(placeId)}` +
+      `&fields=name,rating,user_ratings_total,reviews` +
+      `&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log(`Google Places fetch failed: HTTP ${res.status}`);
+      return null;
+    }
+    const json: any = await res.json();
+    if (json.status !== "OK") {
+      console.log(`Google Places API status: ${json.status} ${json.error_message || ""}`);
+      return null;
+    }
+    const r = json.result || {};
+    const now = Date.now();
+    return {
+      source: "google",
+      placeId,
+      rating: typeof r.rating === "number" ? r.rating : 0,
+      totalRatings: typeof r.user_ratings_total === "number" ? r.user_ratings_total : 0,
+      reviews: (r.reviews || []).map((rv: any): CachedGoogleReview => ({
+        author: rv.author_name || "Anonymous",
+        initial: ((rv.author_name || "?").trim().charAt(0) || "?").toUpperCase(),
+        rating: typeof rv.rating === "number" ? rv.rating : 5,
+        text: rv.text || "",
+        relativeTime: rv.relative_time_description || "",
+        profilePhoto: rv.profile_photo_url || null,
+        time: typeof rv.time === "number" ? rv.time : 0,
+      })),
+      fetchedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + GOOGLE_REVIEWS_TTL_MS).toISOString(),
+    };
+  } catch (e) {
+    console.log("Google Places fetch error:", e);
+    return null;
+  }
+}
+
+async function getOrRefreshGoogleReviews(
+  slug: string,
+  opts: { forceRefresh?: boolean } = {},
+): Promise<CachedGoogleReviews> {
+  const cacheKey = `google-reviews:${slug}`;
+
+  if (!opts.forceRefresh) {
+    const cached = (await kv.get(cacheKey)) as CachedGoogleReviews | null;
+    if (cached && cached.expiresAt && new Date(cached.expiresAt).getTime() > Date.now()) {
+      return cached;
+    }
+  }
+
+  // Cache stale or missing — try Google API
+  const profile = await kv.get(`designer:${slug}`);
+  const placeId: string | null = profile?.googlePlaceId || null;
+
+  let fresh: CachedGoogleReviews | null = null;
+  if (placeId) {
+    fresh = await fetchFromGooglePlaces(placeId);
+  }
+
+  if (!fresh) {
+    // No API key, no place id, or fetch failed — serve a placeholder so the UI
+    // can still render. Reuse the previous cache shape if we have one so we
+    // don't lose old reviews when the API is temporarily down.
+    const cached = (await kv.get(cacheKey)) as CachedGoogleReviews | null;
+    if (cached && Array.isArray(cached.reviews) && cached.reviews.length > 0) {
+      const now = Date.now();
+      fresh = {
+        ...cached,
+        fetchedAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + GOOGLE_REVIEWS_TTL_MS).toISOString(),
+      };
+    } else {
+      fresh = emptyGoogleReviewsPayload(placeId);
+    }
+  }
+
+  await kv.set(cacheKey, fresh);
+  return fresh;
+}
+
+// GET cached Google reviews for a designer (read-through cache)
+app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests" }, 429);
+    }
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+
+    const data = await getOrRefreshGoogleReviews(slug);
+    return c.json({ data });
+  } catch (err) {
+    console.log("Error in GET /google-reviews/:slug:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// POST force-refresh a single designer's Google reviews
+app.post("/make-server-4808de5e/google-reviews/:slug/refresh", async (c) => {
+  try {
+    const cronSecret = c.req.header("x-cron-secret");
+    const expected = Deno.env.get("CRON_SECRET");
+    const isCron = !!(cronSecret && expected && cronSecret === expected);
+    if (!isCron && !(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const data = await getOrRefreshGoogleReviews(slug, { forceRefresh: true });
+    console.log(`Google reviews refreshed for ${slug} (source=${data.source}, count=${data.reviews.length})`);
+    return c.json({ success: true, data });
+  } catch (err) {
+    console.log("Error in POST /google-reviews/:slug/refresh:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// POST refresh ALL designers — wire to a monthly cron
+//   curl -X POST -H "x-cron-secret: $CRON_SECRET" \
+//     https://<project>.supabase.co/functions/v1/make-server-4808de5e/google-reviews/cron-refresh-all
+app.post("/make-server-4808de5e/google-reviews/cron-refresh-all", async (c) => {
+  try {
+    const cronSecret = c.req.header("x-cron-secret");
+    const expected = Deno.env.get("CRON_SECRET");
+    const isCron = !!(cronSecret && expected && cronSecret === expected);
+    if (!isCron && !(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data, error } = await supabase
+      .from("kv_store_4808de5e")
+      .select("key, value")
+      .like("key", "designer:%")
+      .not("key", "like", "%:%:%");
+
+    if (error) {
+      console.log("cron-refresh-all: failed to list designers:", error);
+      return c.json({ error: "Failed to list designers" }, 500);
+    }
+
+    const slugs: string[] = (data || [])
+      .map((d: any) => d.value?.slug)
+      .filter((s: any): s is string => typeof s === "string" && s.length > 0);
+
+    const results: Record<string, string> = {};
+    for (const slug of slugs) {
+      try {
+        const refreshed = await getOrRefreshGoogleReviews(slug, { forceRefresh: true });
+        results[slug] = `${refreshed.source}:${refreshed.reviews.length}`;
+      } catch (e) {
+        results[slug] = `error: ${(e as Error).message}`;
+      }
+    }
+    console.log(`Google reviews cron-refresh-all: refreshed ${Object.keys(results).length} designers`);
+    return c.json({ success: true, count: Object.keys(results).length, results });
+  } catch (err) {
+    console.log("Error in POST /google-reviews/cron-refresh-all:", err);
     return c.json({ error: "Internal server error" }, 500);
   }
 });
