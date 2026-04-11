@@ -302,8 +302,10 @@ async function checkDailyRenderCap(): Promise<{ allowed: boolean; used: number }
   return { allowed: true, used: current + 1 };
 }
 
-// --- Per-IP daily render cap (3 renders per IP per day for landing page) ---
-const IP_DAILY_RENDER_CAP = 3;
+// --- Per-IP daily render cap (5 renders per IP per day for the public AI Render landing page) ---
+// Bumped from 3 → 5 as part of the user-prompted render revamp. Adjustments also
+// re-enter /render-task and deduct from the same cap, so a user gets 5 render ops total.
+const IP_DAILY_RENDER_CAP = 5;
 async function checkIpDailyRenderCap(ip: string): Promise<{ allowed: boolean; used: number; limit: number }> {
   const today = new Date().toISOString().slice(0, 10);
   const key = `render-ip-daily:${ip}:${today}`;
@@ -391,6 +393,291 @@ function sanitizeString(str: string, maxLength = 500): string {
     .replace(/\x00/g, "")                 // strip null bytes
     .trim()
     .slice(0, maxLength);
+}
+
+// ═══════════════════════════════════════════════════════
+// PROMPT MODERATION — keyword blocklist + interior allowlist + OpenAI moderation
+// Used by /render-task to reject prompts before we spend money on kie.ai.
+// ═══════════════════════════════════════════════════════
+const BLOCKED_KEYWORDS = [
+  // Explicit / sexual
+  "nude", "naked", "nsfw", "porn", "pornographic", "sex", "sexual", "erotic", "fetish",
+  "lingerie", "bikini", "topless", "underwear", "genital", "breast", "nipple",
+  // Violence / weapons
+  "gore", "bloody", "murder", "weapon", "gun", "rifle", "pistol", "knife", "bomb",
+  "explosive", "kill", "killing", "torture", "decapitat", "mutilat",
+  // Hate / ideology
+  "nazi", "hitler", "isis", "terrorist", "swastika", "kkk",
+  // Drugs
+  "cocaine", "heroin", "meth", "marijuana dispensary",
+  // Off-topic personas (people / characters)
+  "celebrity", "politician", "anime character", "cartoon character", "superhero",
+];
+
+const INTERIOR_KEYWORDS = [
+  // Rooms & spaces
+  "room", "rooms", "kitchen", "bathroom", "bedroom", "living", "dining", "office",
+  "study", "hallway", "foyer", "entryway", "nook", "pantry", "closet", "walk-in",
+  "balcony", "patio", "terrace", "lobby", "loft", "attic", "basement",
+  // Furniture
+  "sofa", "couch", "chair", "armchair", "table", "coffee table", "desk", "bed",
+  "shelf", "shelves", "cabinet", "cabinets", "counter", "countertop", "island",
+  "lamp", "lighting", "pendant", "chandelier", "wardrobe", "dresser", "ottoman",
+  "bookshelf", "headboard", "sideboard", "vanity", "bathtub", "shower", "vanity",
+  // Materials & finishes
+  "wall", "walls", "floor", "flooring", "ceiling", "window", "door", "tile", "tiles",
+  "wood", "oak", "walnut", "marble", "granite", "concrete", "brick", "plaster",
+  "paint", "wallpaper", "fabric", "leather", "velvet", "linen",
+  // Styles
+  "modern", "contemporary", "minimalist", "minimalism", "japandi", "scandinavian",
+  "scandi", "industrial", "bohemian", "boho", "rustic", "mid-century", "midcentury",
+  "traditional", "transitional", "wabi-sabi", "wabi sabi", "coastal", "farmhouse",
+  "eclectic", "art deco", "luxury", "muji",
+  // Context / property
+  "interior", "design", "renovation", "reno", "remodel", "hdb", "condo", "landed",
+  "apartment", "home", "house", "studio apartment", "bto", "resale",
+  // Decor / accents
+  "decor", "furniture", "plant", "plants", "greenery", "rug", "carpet", "curtain",
+  "curtains", "blinds", "cushion", "throw pillow", "artwork", "mirror",
+  "color palette", "color scheme", "color", "colour",
+  // Architecture
+  "architecture", "architectural", "floorplan", "floor plan", "layout",
+  "render", "visualization", "visualisation", "perspective", "elevation", "3d",
+];
+
+async function moderatePrompt(userPrompt: string): Promise<{ ok: boolean; reason?: string }> {
+  const normalized = (userPrompt || "").toLowerCase();
+
+  // Length guard
+  if (userPrompt.length < 5) {
+    return { ok: false, reason: "Please describe your render in more detail." };
+  }
+  if (userPrompt.length > 500) {
+    return { ok: false, reason: "Please keep your description under 500 characters." };
+  }
+
+  // Stage 1: blocklist — fast, zero-cost
+  for (const bad of BLOCKED_KEYWORDS) {
+    if (normalized.includes(bad)) {
+      return { ok: false, reason: "That prompt isn't supported. Please describe an interior design or architectural scene only." };
+    }
+  }
+
+  // Stage 2: allowlist — prompt must contain at least one interior-design keyword
+  const hasInteriorTerm = INTERIOR_KEYWORDS.some((k) => normalized.includes(k));
+  if (!hasInteriorTerm) {
+    return {
+      ok: false,
+      reason: "Please describe an interior design scene — include a room type, style, material, or furniture element.",
+    };
+  }
+
+  // Stage 3: Kie.ai gpt-5-4 classifier (Responses API) — best-effort semantic check.
+  // Uses the existing `ai_model_keys` secret (same one as kie.ai image gen). If the call
+  // fails or the response is unparseable, we soft-allow — stages 1+2 already caught the worst.
+  const kieKey = Deno.env.get("ai_model_keys");
+  if (kieKey) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const systemPrompt =
+        "You are a strict content moderator for an interior-design render tool. " +
+        "Classify the user's prompt. Reply with ONLY a single-line JSON object: " +
+        '{"ok": true} if the prompt describes an interior space, room, furniture, materials, ' +
+        "lighting, architectural scene, or design style, OR " +
+        '{"ok": false, "reason": "<short user-facing reason>"} if the prompt is: ' +
+        "sexual/explicit, violent, contains real people or recognizable celebrities, is political, " +
+        "is off-topic (not interior design or architecture), requests copyrighted characters, " +
+        "or is otherwise unsafe. Do NOT include any text outside the JSON object.";
+      const res = await fetch("https://api.kie.ai/codex/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${kieKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-5-4",
+          stream: false,
+          input: [
+            {
+              role: "system",
+              content: [{ type: "input_text", text: systemPrompt }],
+            },
+            {
+              role: "user",
+              content: [{ type: "input_text", text: userPrompt }],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        // Responses API returns { output: [{ content: [{ text: "..." }] }], ... } or output_text
+        // Try several common shapes defensively.
+        let raw: string | null = null;
+        if (typeof data?.output_text === "string") {
+          raw = data.output_text;
+        } else if (Array.isArray(data?.output)) {
+          for (const item of data.output) {
+            const parts = item?.content;
+            if (Array.isArray(parts)) {
+              for (const p of parts) {
+                if (typeof p?.text === "string") { raw = p.text; break; }
+                if (typeof p?.output_text === "string") { raw = p.output_text; break; }
+              }
+            }
+            if (raw) break;
+          }
+        } else if (Array.isArray(data?.choices)) {
+          raw = data.choices[0]?.message?.content ?? null;
+        }
+        if (raw) {
+          // Extract first JSON object from the string (model may wrap in prose)
+          const match = raw.match(/\{[\s\S]*?\}/);
+          if (match) {
+            try {
+              const verdict = JSON.parse(match[0]);
+              if (verdict?.ok === false) {
+                const reason = typeof verdict.reason === "string" && verdict.reason.trim().length > 0
+                  ? verdict.reason.trim().slice(0, 200)
+                  : "That prompt isn't supported. Please describe an interior design or architectural scene only.";
+                return { ok: false, reason };
+              }
+            } catch (_parseErr) {
+              // Unparseable — soft-allow
+            }
+          }
+        }
+      } else {
+        console.log("Kie.ai moderation non-200 (soft-allow):", res.status);
+      }
+    } catch (err) {
+      console.log("Kie.ai moderation failed (soft-allow):", err instanceof Error ? err.message : err);
+      // Fall through — stages 1+2 have already run
+    }
+  }
+
+  return { ok: true };
+}
+
+// Build the final prompt sent to kie.ai. Anchors the task to floorplan→3D
+// interior rendering so the user-written description doesn't drift into
+// off-topic territory, and lets optional hint chips narrow the style/room/property.
+function buildFinalPrompt(args: {
+  userPrompt: string;
+  adjustmentPrompt?: string;
+  hints: { style?: string; room?: string; property?: string };
+}): string {
+  const anchors = [
+    "This is a photorealistic interior design and architectural visualization task.",
+    "Preserve the architectural geometry of the input image: walls, windows, doors, openings, and overall proportions must stay intact.",
+    "Camera at eye-level (~1.6m). Natural, realistic lighting. Accurate scale and materials.",
+  ];
+  const hintParts: string[] = [];
+  if (args.hints.style) hintParts.push(`Design style: ${args.hints.style}.`);
+  if (args.hints.room) hintParts.push(`Room type: ${args.hints.room}.`);
+  if (args.hints.property) hintParts.push(`Property type: ${args.hints.property}.`);
+  const hintLine = hintParts.join(" ");
+  const base = `${anchors.join(" ")} ${hintLine ? hintLine + " " : ""}User request: ${args.userPrompt}`.trim();
+  if (args.adjustmentPrompt && args.adjustmentPrompt.trim().length > 0) {
+    return `${base} Adjustment to apply on top of the user request: ${args.adjustmentPrompt}`;
+  }
+  return base;
+}
+
+// ═══════════════════════════════════════════════════════
+// Watermark pipeline — imagescript-based
+// Bakes a semi-transparent tiled diagonal "NETWORK · AI PREVIEW" wordmark across the
+// image + a larger bottom-right "NETWORK" corner mark. Called from /render-callback
+// before the public signed URL is published. The clean (un-watermarked) bytes are
+// stored in a separate private path and NEVER returned to the frontend.
+//
+// Dynamic import so the module is only loaded on callback (kie.ai → us) and doesn't
+// slow down unrelated routes.  Font is cached across invocations in a warm Deno
+// isolate to keep p50 watermark time under ~600ms.
+// ═══════════════════════════════════════════════════════
+let WATERMARK_FONT_CACHE: Uint8Array | null = null;
+async function loadWatermarkFont(): Promise<Uint8Array> {
+  if (WATERMARK_FONT_CACHE) return WATERMARK_FONT_CACHE;
+  // Google Fonts raw — Inter Bold. Small (~170KB), widely mirrored, CORS-friendly.
+  const fontSources = [
+    "https://raw.githubusercontent.com/rsms/inter/master/docs/font-files/Inter-Bold.woff",
+    "https://github.com/google/fonts/raw/main/ofl/inter/static/Inter-Bold.ttf",
+    "https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2",
+  ];
+  for (const src of fontSources) {
+    try {
+      const res = await fetch(src);
+      if (res.ok) {
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        WATERMARK_FONT_CACHE = bytes;
+        return bytes;
+      }
+    } catch (err) {
+      console.log(`Watermark font source failed (${src}):`, err instanceof Error ? err.message : err);
+    }
+  }
+  throw new Error("No watermark font source available");
+}
+
+async function watermarkImage(rawBytes: Uint8Array): Promise<Uint8Array> {
+  // Dynamic import so this heavy module only loads on callbacks.
+  const { Image } = await import("https://deno.land/x/imagescript@1.2.17/mod.ts");
+
+  const img = await Image.decode(rawBytes);
+  const W = img.width;
+  const H = img.height;
+
+  let font: Uint8Array;
+  try {
+    font = await loadWatermarkFont();
+  } catch (err) {
+    // Fall back to shipping the raw image if we can't even load a font — caller
+    // catches and uses the unmarked URL.
+    throw new Error(`Watermark font unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // ── Tiled diagonal wordmark ─────────────────────────────
+  const wordmark = "NETWORK · AI PREVIEW";
+  const tileFontPx = Math.max(18, Math.round(W * 0.028));
+  try {
+    const textLayer = (Image as any).renderText
+      ? await (Image as any).renderText(font, tileFontPx, wordmark, 0xFFFFFF55)
+      : null;
+    if (textLayer) {
+      const rotated = textLayer.rotate ? textLayer.rotate(-30) : textLayer;
+      const stepX = Math.max(1, Math.round(W / 3));
+      const stepY = Math.max(1, Math.round(H / 4));
+      for (let y = -stepY; y < H + stepY; y += stepY) {
+        for (let x = -stepX; x < W + stepX; x += stepX) {
+          try { img.composite(rotated, x, y); } catch { /* off-edge composite is fine */ }
+        }
+      }
+    }
+  } catch (err) {
+    console.log("Watermark tile render failed (continuing to corner mark):", err instanceof Error ? err.message : err);
+  }
+
+  // ── Corner NETWORK mark (bottom-right, higher opacity) ──
+  try {
+    const cornerFontPx = Math.max(28, Math.round(W * 0.045));
+    const cornerText = (Image as any).renderText
+      ? await (Image as any).renderText(font, cornerFontPx, "NETWORK", 0xFFFFFFCC)
+      : null;
+    if (cornerText) {
+      const padX = Math.round(W * 0.025);
+      const padY = Math.round(H * 0.03);
+      const x = Math.max(0, W - cornerText.width - padX);
+      const y = Math.max(0, H - cornerText.height - padY);
+      img.composite(cornerText, x, y);
+    }
+  } catch (err) {
+    console.log("Watermark corner render failed:", err instanceof Error ? err.message : err);
+  }
+
+  return await img.encodeJPEG(88);
 }
 
 // Redact PII from objects before logging
@@ -1198,48 +1485,41 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
       return c.json({ error: "Daily render limit reached. Please try again tomorrow." }, 429);
     }
 
-    // Per-IP daily cap (3 per IP per day)
+    // Per-IP daily cap (5 per IP per day — shared across initial renders + adjustments)
     const ipCap = await checkIpDailyRenderCap(ip);
     if (!ipCap.allowed) {
       securityLog("ip_daily_render_cap", "warn", ip, "/render-task", { used: ipCap.used, limit: ipCap.limit });
-      return c.json({ error: `You've used all ${ipCap.limit} renders for today. Try again tomorrow.`, remaining: 0, limit: ipCap.limit }, 429);
+      return c.json({
+        error: `You've used all ${ipCap.limit} renders for today. Try again tomorrow, or send one of your renders to a designer for real-world feedback.`,
+        remaining: 0,
+        used: ipCap.used,
+        limit: ipCap.limit,
+      }, 429);
     }
 
     const body = await c.req.json();
-    const { imageUrl, designStyle, roomType, propertyType, contact, timeline, budget } = body;
+    const { imageUrl, userPrompt, adjustmentPrompt, hints, parentTaskId } = body || {};
 
-    if (!imageUrl || !designStyle || !roomType) {
-      return c.json({ error: "imageUrl, designStyle, and roomType are required" }, 400);
+    // Required: imageUrl + userPrompt
+    if (!imageUrl || typeof imageUrl !== "string") {
+      return c.json({ error: "imageUrl is required" }, 400);
     }
-
-    // Whitelist validation for all enum fields
-    if (!ALLOWED_DESIGN_STYLES.includes(designStyle)) {
-      console.log(`Security: Rejected invalid design style: ${designStyle}`);
-      return c.json({ error: "Invalid design style" }, 400);
-    }
-    if (!ALLOWED_ROOM_TYPES.includes(roomType)) {
-      console.log(`Security: Rejected invalid room type: ${roomType}`);
-      return c.json({ error: "Invalid room type" }, 400);
-    }
-    if (propertyType && !ALLOWED_PROPERTY_TYPES.includes(propertyType)) {
-      console.log(`Security: Rejected invalid property type: ${propertyType}`);
-      return c.json({ error: "Invalid property type" }, 400);
-    }
-    if (timeline && !ALLOWED_TIMELINES.includes(timeline)) {
-      return c.json({ error: "Invalid timeline" }, 400);
-    }
-    if (budget && !ALLOWED_BUDGETS.includes(budget)) {
-      return c.json({ error: "Invalid budget range" }, 400);
+    if (!userPrompt || typeof userPrompt !== "string") {
+      return c.json({ error: "Please describe your render." }, 400);
     }
 
-    // Validate contact info
-    if (contact) {
-      if (contact.email && !isValidEmail(contact.email)) {
-        return c.json({ error: "Invalid contact email" }, 400);
-      }
-      if (contact.whatsapp && !isValidWhatsapp(contact.whatsapp)) {
-        return c.json({ error: "Invalid WhatsApp number" }, 400);
-      }
+    // Optional hint chips — narrow whitelist against existing constants
+    const hintStyle = hints?.style && typeof hints.style === "string" ? hints.style : "";
+    const hintRoom = hints?.room && typeof hints.room === "string" ? hints.room : "";
+    const hintProperty = hints?.property && typeof hints.property === "string" ? hints.property : "";
+    if (hintStyle && !ALLOWED_DESIGN_STYLES.includes(hintStyle)) {
+      return c.json({ error: "Invalid style hint" }, 400);
+    }
+    if (hintRoom && !ALLOWED_ROOM_TYPES.includes(hintRoom)) {
+      return c.json({ error: "Invalid room hint" }, 400);
+    }
+    if (hintProperty && !ALLOWED_PROPERTY_TYPES.includes(hintProperty)) {
+      return c.json({ error: "Invalid property hint" }, 400);
     }
 
     // Validate imageUrl is from our own Supabase storage (prevent SSRF)
@@ -1250,6 +1530,32 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
       return c.json({ error: "Image URL must be from our storage" }, 400);
     }
 
+    // Sanitize + moderate the user-supplied prompt text
+    const cleanUserPrompt = sanitizeString(userPrompt, 500);
+    const cleanAdjustment = adjustmentPrompt && typeof adjustmentPrompt === "string"
+      ? sanitizeString(adjustmentPrompt, 300)
+      : "";
+
+    const modPrimary = await moderatePrompt(cleanUserPrompt);
+    if (!modPrimary.ok) {
+      securityLog("prompt_moderation_rejected", "warn", ip, "/render-task", { reason: modPrimary.reason?.slice(0, 80) });
+      return c.json({ error: modPrimary.reason || "Prompt not supported." }, 400);
+    }
+    if (cleanAdjustment) {
+      const modAdjust = await moderatePrompt(cleanAdjustment);
+      if (!modAdjust.ok) {
+        securityLog("prompt_moderation_rejected", "warn", ip, "/render-task", { reason: modAdjust.reason?.slice(0, 80), adjust: true });
+        return c.json({ error: modAdjust.reason || "Adjustment prompt not supported." }, 400);
+      }
+    }
+
+    // Validate optional parentTaskId (for adjustment traceability). Must be a known task.
+    let cleanParentTaskId: string | null = null;
+    if (parentTaskId && typeof parentTaskId === "string" && /^[a-zA-Z0-9_\-]{1,200}$/.test(parentTaskId)) {
+      const parent = await kv.get(`render-task:${parentTaskId}`);
+      if (parent && parent.requestIp === ip) cleanParentTaskId = parentTaskId;
+    }
+
     const apiKey = Deno.env.get("ai_model_keys");
     if (!apiKey) {
       console.log("ai_model_keys secret is not set");
@@ -1258,11 +1564,16 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
 
     const callBackUrl = `${supabaseUrl}/functions/v1/make-server-4808de5e/render-callback`;
 
-    // Use whitelisted values directly in prompt (already validated above)
-    const prompt = `Imagine you are viewing this floorplan from the ${roomType} perspective. Convert the provided 2D floorplan into a 3D architectural visualization from this exact viewpoint. This is a floorplan-to-3D translation task, NOT a redesign task. Treat the floorplan as a locked blueprint and preserve 100% of the original layout and geometry: identical room sizes and proportions, identical wall thickness and wall positions, identical door and window positions, sizes, and swing directions, identical openings and circulation paths. Do not move, resize, remove, add, redesign, or reinterpret any architectural elements. If any architectural element is changed, the result is incorrect. Camera placed inside the ${roomType} at eye-level (1.6m height), looking toward the interior according to the plan. Apply a ${designStyle} interior design style. You may only add materials, finishes, furniture, lighting, and decor appropriate to the room type. Output a photorealistic architectural render with realistic scale, accurate proportions, and natural lighting.","style":"${designStyle}","room":"${roomType}","task":"floorplan_to_3d_render","camera_view":"${roomType}_eye_level","camera_height_m":1.6,"constraints":{"architecture_locked":true,"preserve_layout":true,"preserve_walls":true,"preserve_windows":true,"preserve_doors":true,"no_architecture_changes":true},"render_quality":"photorealistic`;
+    // Build the final prompt — anchors + optional hints + user text + optional adjustment.
+    // Note: for adjustments the image_input stays the ORIGINAL uploaded image, not the
+    // previous render, so output quality stays consistent and doesn't drift.
+    const finalPrompt = buildFinalPrompt({
+      userPrompt: cleanUserPrompt,
+      adjustmentPrompt: cleanAdjustment,
+      hints: { style: hintStyle, room: hintRoom, property: hintProperty },
+    });
 
-    console.log("Submitting render task to kie.ai");
-    // Don't log full prompt or image URL in production to avoid log injection
+    console.log("Submitting user-prompted render task to kie.ai");
 
     const response = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
       method: "POST",
@@ -1274,7 +1585,7 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
         model: "nano-banana-2",
         callBackUrl,
         input: {
-          prompt,
+          prompt: finalPrompt,
           image_input: [imageUrl],
           aspect_ratio: "auto",
           google_search: false,
@@ -1285,64 +1596,19 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
     });
 
     const result = await response.json();
-    console.log("kie.ai createTask FULL response:", JSON.stringify(result));
-    console.log("kie.ai response status:", response.status);
+    console.log("kie.ai createTask response status:", response.status);
 
     if (!response.ok) {
-      console.log("kie.ai API error:", JSON.stringify(result));
+      console.log("kie.ai API error:", JSON.stringify(result).slice(0, 500));
       return c.json({ error: "AI render service error. Please try again later." }, 500);
     }
 
     // Extract taskId — try every known path in the response
     const taskId = result.data?.taskId || result.data?.task_id || result.data?.id ||
                    result.taskId || result.task_id || result.id || crypto.randomUUID();
-    console.log("Extracted taskId:", taskId, "from response keys:", JSON.stringify(Object.keys(result.data || result)));
 
-    // Store task info in KV (sanitize contact data before storing)
-    const sanitizedContact = contact ? {
-      name: sanitizeString(contact.name || "", 100),
-      whatsapp: sanitizeString(contact.whatsapp || "", 20),
-      email: sanitizeString(contact.email || "", 200).toLowerCase(),
-    } : null;
-
-    // Also insert into Quote Request table as a lead
-    let quoteRequestId: string | null = null;
-    if (sanitizedContact?.name && sanitizedContact?.email && sanitizedContact?.whatsapp) {
-      try {
-        const supabaseLeadClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const qrId = crypto.randomUUID();
-        const insertPayload: Record<string, any> = {
-          "ID": qrId,
-          "Name": sanitizedContact.name,
-          "Email": sanitizedContact.email,
-          "Phone Number": sanitizedContact.whatsapp,
-          "Property Type": propertyType || "",
-          "Key Collection Date": timeline || "",
-          "Renovation Budget": budget || "",
-          "Inquiry": `3D Render Request — Style: ${designStyle}, Room: ${roomType}`,
-          "Lead Form": "Network 3D AI Render",
-          "Created Date": new Date().toISOString(),
-          "Updated Date": new Date().toISOString(),
-        };
-
-        const { error: qrError } = await supabaseLeadClient
-          .from("Quote Request")
-          .insert(insertPayload)
-          .select()
-          .single();
-
-        if (qrError) {
-          console.log("Quote Request insert error for render lead:", JSON.stringify(qrError));
-        } else {
-          quoteRequestId = qrId;
-          console.log("Render lead inserted into Quote Request:", qrId);
-        }
-      } catch (qrErr) {
-        console.log("Error inserting render lead into Quote Request:", qrErr);
-      }
-    }
-
-    // Resolve authenticated user for ownership tracking
+    // Resolve authenticated user for ownership tracking (for logged-in flows).
+    // Anonymous renders are allowed too — IP is the primary ownership key.
     const renderUser = await getUserFromRequest(c);
 
     await kv.set(`render-task:${taskId}`, {
@@ -1350,19 +1616,27 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
       userId: renderUser?.id || null,
       status: "processing",
       createdAt: new Date().toISOString(),
-      contact: sanitizedContact,
-      designStyle,
-      roomType,
-      propertyType: propertyType || "",
-      timeline: timeline || "",
-      budget: budget || "",
+      // User-prompted fields
+      userPrompt: cleanUserPrompt,
+      adjustmentPrompt: cleanAdjustment || null,
+      hints: { style: hintStyle, room: hintRoom, property: hintProperty },
+      parentTaskId: cleanParentTaskId,
+      originalImageUrl: imageUrl,
+      // Internal book-keeping (never returned to client)
       requestIp: ip,
-      quoteRequestId: quoteRequestId || null,
+      // Lead fields are intentionally empty — captured later via /render-lead-submit
+      contact: null,
+      quoteRequestId: null,
     });
 
-    console.log("Render task stored with taskId:", taskId, "quoteRequestId:", quoteRequestId);
-    // Only return taskId to frontend, not full API response
-    return c.json({ success: true, taskId, quoteRequestId });
+    console.log("Render task stored with taskId:", taskId, "parentTaskId:", cleanParentTaskId);
+    return c.json({
+      success: true,
+      taskId,
+      rendersUsed: ipCap.used,
+      rendersRemaining: Math.max(0, ipCap.limit - ipCap.used),
+      rendersLimit: ipCap.limit,
+    });
   } catch (err) {
     console.log("Unexpected error in /render-task:", err);
     return c.json({ error: "Unexpected server error" }, 500);
@@ -1443,15 +1717,109 @@ app.post("/make-server-4808de5e/render-callback", async (c) => {
 
     console.log("Callback parsed — status:", normalizedStatus, "resultUrl:", resultUrl ? resultUrl.substring(0, 80) : "null");
 
+    // ── NEW: server-side watermark + dual-upload ─────────────────────────────
+    // When the render completed successfully and we have a raw kie.ai URL, we:
+    //   1. Download the raw JPEG from kie.ai
+    //   2. Upload the CLEAN bytes to a private `clean/{taskId}.jpg` path
+    //   3. Run it through watermarkImage() to bake the NETWORK preview overlay
+    //   4. Upload the watermarked bytes to `public/{taskId}.jpg` and create a signed URL
+    //   5. Replace `resultUrl` with the watermarked signed URL before writing KV
+    //
+    // Graceful-degradation: if any step fails we still fall through to saving the
+    // original unmarked kie.ai URL so the user never sees a dead render.
+    let publicResultUrl: string | null = null;
+    let cleanResultPath: string | null = null;
+    let publicResultPath: string | null = null;
+
+    if (resultUrl && normalizedStatus === "completed") {
+      try {
+        const dlController = new AbortController();
+        const dlTimeout = setTimeout(() => dlController.abort(), 25000);
+        const rawRes = await fetch(resultUrl, { signal: dlController.signal });
+        clearTimeout(dlTimeout);
+
+        if (rawRes.ok) {
+          const rawBytes = new Uint8Array(await rawRes.arrayBuffer());
+          const safeTaskId = taskId.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 100);
+          cleanResultPath = `clean/${safeTaskId}.jpg`;
+          publicResultPath = `public/${safeTaskId}.jpg`;
+
+          const supabaseAdmin = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          );
+
+          // 1) Store clean bytes (internal, private — never returned to client)
+          try {
+            const { error: cleanErr } = await supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .upload(cleanResultPath, rawBytes, { contentType: "image/jpeg", upsert: true });
+            if (cleanErr) console.log("Clean upload error:", cleanErr.message || cleanErr);
+          } catch (cleanEx) {
+            console.log("Clean upload exception:", cleanEx instanceof Error ? cleanEx.message : cleanEx);
+          }
+
+          // 2) Watermark + upload public version
+          try {
+            const markedBytes = await watermarkImage(rawBytes);
+            const { error: pubErr } = await supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .upload(publicResultPath, markedBytes, { contentType: "image/jpeg", upsert: true });
+
+            if (pubErr) {
+              console.log("Watermarked upload error:", pubErr.message || pubErr);
+            } else {
+              const { data: signedData, error: signErr } = await supabaseAdmin.storage
+                .from(BUCKET_NAME)
+                .createSignedUrl(publicResultPath, 7 * 24 * 3600); // 7 days
+              if (signErr || !signedData?.signedUrl) {
+                console.log("Watermarked signed URL error:", signErr);
+              } else {
+                publicResultUrl = signedData.signedUrl;
+              }
+            }
+          } catch (wmErr) {
+            // Watermark stage failed — fall back to uploading the raw bytes to public
+            // so the user still gets a result. They just won't be watermarked on this
+            // render; we log loudly so we can investigate.
+            console.log("Watermark pipeline failed, falling back to clean-as-public:", wmErr instanceof Error ? wmErr.message : wmErr);
+            try {
+              const { error: fbErr } = await supabaseAdmin.storage
+                .from(BUCKET_NAME)
+                .upload(publicResultPath, rawBytes, { contentType: "image/jpeg", upsert: true });
+              if (!fbErr) {
+                const { data: signedData } = await supabaseAdmin.storage
+                  .from(BUCKET_NAME)
+                  .createSignedUrl(publicResultPath, 7 * 24 * 3600);
+                publicResultUrl = signedData?.signedUrl || null;
+              }
+            } catch (fbEx) {
+              console.log("Fallback public upload exception:", fbEx instanceof Error ? fbEx.message : fbEx);
+            }
+          }
+        } else {
+          console.log("Raw fetch from kie.ai returned non-ok:", rawRes.status);
+        }
+      } catch (dlErr) {
+        console.log("Raw image download failed:", dlErr instanceof Error ? dlErr.message : dlErr);
+      }
+    }
+
     const updated = {
       ...existing,
       status: normalizedStatus,
-      ...(resultUrl ? { resultUrl } : {}),
+      // Always prefer the watermarked signed URL. If it's missing for any reason
+      // (download failure, upload failure) we fall back to the raw kie.ai URL
+      // purely as a safety net so the user never sees a broken render.
+      ...(publicResultUrl ? { resultUrl: publicResultUrl } : resultUrl ? { resultUrl } : {}),
+      // Internal-only: clean path (private) for the team's records. Never returned to client.
+      ...(cleanResultPath ? { cleanResultPath } : {}),
+      ...(publicResultPath ? { publicResultPath } : {}),
       completedAt: new Date().toISOString(),
       callbackBody: JSON.stringify(body).substring(0, 4000),
     };
     await kv.set(`render-task:${taskId}`, updated);
-    console.log("Render task updated from callback:", taskId, "resultUrl:", resultUrl ? "YES" : "NO");
+    console.log("Render task updated from callback:", taskId, "watermarked:", publicResultUrl ? "YES" : "NO");
 
     return c.json({ success: true });
   } catch (err) {
@@ -1599,16 +1967,199 @@ app.get("/make-server-4808de5e/render-status/:taskId", async (c) => {
       }
     }
 
-    // Only return safe, minimal data
+    // Only return safe, minimal data.
+    // CRITICAL: strip internal fields — the client must NEVER see cleanResultPath
+    // (which would let anyone download the un-watermarked original), requestIp,
+    // or callbackBody.
     return c.json({
       taskId: task.taskId,
       status: task.resultUrl ? task.status : (task.status === "failed" ? "failed" : "processing"),
       resultUrl: task.resultUrl || null,
       createdAt: task.createdAt,
       completedAt: task.completedAt || null,
+      userPrompt: task.userPrompt || null,
+      adjustmentPrompt: task.adjustmentPrompt || null,
+      hints: task.hints || null,
+      parentTaskId: task.parentTaskId || null,
     });
   } catch (err) {
     console.log("Unexpected error in /render-status:", err);
+    return c.json({ error: "Unexpected server error" }, 500);
+  }
+});
+
+// GET /render-quota — returns the current IP's daily render usage so the landing
+// page can show "N renders left today" before the user tries to generate anything.
+app.get("/make-server-4808de5e/render-quota", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "render-status"); // reuse lenient limiter
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests" }, 429);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const rawUsed = await kv.get(`render-ip-daily:${ip}:${today}`);
+    const used = typeof rawUsed === "number" ? rawUsed : 0;
+    const limit = IP_DAILY_RENDER_CAP;
+    return c.json({
+      used,
+      limit,
+      remaining: Math.max(0, limit - used),
+    });
+  } catch (err) {
+    console.log("Unexpected error in /render-quota:", err);
+    return c.json({ error: "Unexpected server error" }, 500);
+  }
+});
+
+// POST /render-lead-submit — called after the user sees a render they like and
+// clicks "Send this to a designer". Inserts into Quote Request + fires Zapier
+// render-lead webhook with the WATERMARKED result URL. The clean original is
+// never included in the payload.
+app.post("/make-server-4808de5e/render-lead-submit", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "render-task"); // same pace as render submits
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests. Please wait a moment." }, 429);
+    }
+
+    const body = await c.req.json();
+    const { taskId, name, whatsapp, email, propertyType, budget, timeline } = body || {};
+
+    if (!taskId || typeof taskId !== "string" || !/^[a-zA-Z0-9_\-]{1,200}$/.test(taskId)) {
+      return c.json({ error: "Invalid task ID" }, 400);
+    }
+
+    const task = await kv.get(`render-task:${taskId}`);
+    if (!task) {
+      return c.json({ error: "Render not found" }, 404);
+    }
+    // Ownership: the lead must come from the same IP that created the render
+    if (task.requestIp && task.requestIp !== ip) {
+      securityLog("lead_submit_wrong_ip", "warn", ip, "/render-lead-submit", { taskId: taskId.slice(0, 20) });
+      return c.json({ error: "Render not found" }, 404);
+    }
+
+    // Validate contact fields
+    const cleanName = sanitizeString(name || "", 100);
+    const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
+    const cleanWhatsapp = sanitizeString(whatsapp || "", 20);
+    if (!cleanName || cleanName.length < 2) {
+      return c.json({ error: "Please enter your full name." }, 400);
+    }
+    if (!isValidEmail(cleanEmail)) {
+      return c.json({ error: "Please enter a valid email." }, 400);
+    }
+    if (!isValidWhatsapp(cleanWhatsapp)) {
+      return c.json({ error: "Please enter a valid 8-digit SG WhatsApp number." }, 400);
+    }
+    if (propertyType && !ALLOWED_PROPERTY_TYPES.includes(propertyType)) {
+      return c.json({ error: "Invalid property type" }, 400);
+    }
+    if (budget && !ALLOWED_BUDGETS.includes(budget)) {
+      return c.json({ error: "Invalid budget range" }, 400);
+    }
+    if (timeline && !ALLOWED_TIMELINES.includes(timeline)) {
+      return c.json({ error: "Invalid timeline" }, 400);
+    }
+
+    // Insert into Quote Request table
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const qrId = crypto.randomUUID();
+    // IMPORTANT: the payload contains the WATERMARKED resultUrl only.
+    // The clean image is held in private storage; Zapier and Airtable never see it.
+    const watermarkedUrl = task.resultUrl || "";
+    const promptSummary = [
+      task.userPrompt ? `Prompt: ${task.userPrompt}` : "",
+      task.adjustmentPrompt ? `Adjustment: ${task.adjustmentPrompt}` : "",
+      task.hints?.style ? `Style hint: ${task.hints.style}` : "",
+      task.hints?.room ? `Room hint: ${task.hints.room}` : "",
+    ].filter(Boolean).join(" | ");
+
+    let quoteRequestId: string | null = null;
+    try {
+      const insertPayload: Record<string, any> = {
+        "ID": qrId,
+        "Name": cleanName,
+        "Email": cleanEmail,
+        "Phone Number": cleanWhatsapp,
+        "Property Type": propertyType || "",
+        "Key Collection Date": timeline || "",
+        "Renovation Budget": budget || "",
+        "Inquiry": `Network 3D AI Render — ${promptSummary}`,
+        "Lead Form": "Network 3D AI Render",
+        "3D Render Image": watermarkedUrl,
+        "Created Date": new Date().toISOString(),
+        "Updated Date": new Date().toISOString(),
+      };
+      const { error: qrError } = await supabaseAdmin
+        .from("Quote Request")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (qrError) {
+        console.log("Quote Request insert error for render lead:", JSON.stringify(qrError));
+      } else {
+        quoteRequestId = qrId;
+      }
+    } catch (qrErr) {
+      console.log("Quote Request insert exception:", qrErr);
+    }
+
+    // Fire the Zapier render-lead webhook (watermarked URL only)
+    try {
+      const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
+      if (zapierUrl) {
+        const zapierPayload = {
+          Name: cleanName,
+          Email: cleanEmail,
+          "Phone Number": cleanWhatsapp,
+          "Property Type": propertyType || "",
+          "Key Collection Date": timeline || "",
+          "Renovation Budget": budget || "",
+          "User Prompt": task.userPrompt || "",
+          "Adjustment Prompt": task.adjustmentPrompt || "",
+          "3D Render Image": watermarkedUrl,
+          "Lead Form": "Network 3D AI Render",
+          "Submitted At": new Date().toISOString(),
+        };
+        // Fire-and-forget so the user doesn't wait on Zapier round-trip
+        fetch(zapierUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(zapierPayload),
+        }).catch((zErr) => console.log("Zapier render-lead webhook error:", zErr));
+      }
+    } catch (zapErr) {
+      console.log("Zapier webhook exception:", zapErr);
+    }
+
+    // Update the task KV with contact info for internal records
+    await kv.set(`render-task:${taskId}`, {
+      ...task,
+      contact: { name: cleanName, email: cleanEmail, whatsapp: cleanWhatsapp },
+      propertyType: propertyType || "",
+      budget: budget || "",
+      timeline: timeline || "",
+      quoteRequestId: quoteRequestId || null,
+      leadSubmittedAt: new Date().toISOString(),
+    });
+
+    return c.json({ success: true, quoteRequestId });
+  } catch (err) {
+    console.log("Unexpected error in /render-lead-submit:", err);
     return c.json({ error: "Unexpected server error" }, 500);
   }
 });

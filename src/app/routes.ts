@@ -7,7 +7,7 @@ import { AdminGuard } from "./components/AdminGuard";
 // ── Lazy-loaded routes (code-split per page) ──────────────────────
 const LazyHomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const LazyGetMatchedForm = lazy(() => import("./components/GetMatchedForm").then((m) => ({ default: m.GetMatchedForm })));
-const LazyRenderToolForm = lazy(() => import("./components/RenderToolForm").then((m) => ({ default: m.RenderToolForm })));
+const LazyRenderLanding = lazy(() => import("./components/RenderLanding").then((m) => ({ default: m.RenderLanding })));
 const LazyDesignerProfile = lazy(() => import("./components/DesignerProfile").then((m) => ({ default: m.DesignerProfile })));
 const LazyAdminDashboard = lazy(() => import("./components/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
 const LazyCostGuide = lazy(() => import("./components/CostGuide").then((m) => ({ default: m.CostGuide })));
@@ -86,7 +86,7 @@ export const router = createBrowserRouter([
   { path: "/", Component: HomepageV8 },
   { path: "/old-homepage", element: createElement(LazyRoute, { component: LazyHomePage }) },
   { path: "/get-matched", element: createElement(LazyRoute, { component: LazyGetMatchedForm }) },
-  { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderToolForm }) },
+  { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderLanding }) },
   { path: "/cost-guide", element: createElement(LazyRoute, { component: LazyCostGuide }) },
   { path: "/designers", element: createElement(LazyRoute, { component: LazyDesignersDirectory }) },
   { path: "/designer/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfile }) },
