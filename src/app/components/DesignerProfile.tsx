@@ -613,14 +613,14 @@ function QuoteCard() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const slug = ctx?.profile?.slug || "";
-  const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", message: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.phone.trim()) {
-      setError("Please fill in your name and contact number.");
+    if (!form.name.trim() || !form.phone.trim() || !form.propertyType || !form.budget || !form.keyCollection) {
+      setError("Please fill in all required fields.");
       return;
     }
     if (!slug) { setError("Designer not found."); return; }
@@ -636,6 +636,7 @@ function QuoteCard() {
           email: sanitizeEmail(form.email),
           propertyType: form.propertyType,
           budget: form.budget,
+          keyCollection: form.keyCollection,
           message: sanitizeInput(form.message, 2000),
           timeline: "",
         }),
@@ -666,12 +667,18 @@ function QuoteCard() {
             <div className="h-[14px] w-[110px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
             <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
           </div>
-          <div>
-            <div className="h-[14px] w-[95px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="h-[14px] w-[80px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+              <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+            </div>
+            <div>
+              <div className="h-[14px] w-[85px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+              <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+            </div>
           </div>
           <div>
-            <div className="h-[14px] w-[100px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
+            <div className="h-[14px] w-[120px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
             <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
           </div>
           <div className="w-full bg-[#09090b] rounded-[14px] h-[44px] flex items-center justify-center">
@@ -699,8 +706,8 @@ function QuoteCard() {
     );
   }
 
-  const inputCls = "w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] text-[#09090b] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors";
-  const selectCls = "w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] outline-none focus:border-[#0f0f0d] transition-colors appearance-none";
+  const inputCls = "w-full bg-[#fafaf8] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] text-[#09090b] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors";
+  const selectCls = "w-full bg-[#fafaf8] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] outline-none focus:border-[#0f0f0d] transition-colors appearance-none";
 
   return (
     <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
@@ -717,25 +724,38 @@ function QuoteCard() {
           <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Contact Number</label>
           <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
         </div>
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
-          <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
-            <option value="">Select Property Type</option>
-            <option value="HDB">HDB</option>
-            <option value="Condo">Condo</option>
-            <option value="Landed">Landed</option>
-            <option value="Commercial">Commercial</option>
-          </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
+            <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
+              <option value="">Select</option>
+              <option value="HDB">HDB</option>
+              <option value="Condo">Condo</option>
+              <option value="Landed">Landed</option>
+              <option value="Commercial">Commercial</option>
+            </select>
+          </div>
+          <div>
+            <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
+            <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
+              <option value="">Select</option>
+              <option value="Below $30,000">Below $30k</option>
+              <option value="$30,000 – $50,000">$30k – $50k</option>
+              <option value="$50,000 – $80,000">$50k – $80k</option>
+              <option value="$80,000 – $120,000">$80k – $120k</option>
+              <option value="Above $120,000">Above $120k</option>
+            </select>
+          </div>
         </div>
         <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
-          <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
-            <option value="">Select Budget Range</option>
-            <option value="Below $30,000">Below $30,000</option>
-            <option value="$30,000 – $50,000">$30,000 – $50,000</option>
-            <option value="$50,000 – $80,000">$50,000 – $80,000</option>
-            <option value="$80,000 – $120,000">$80,000 – $120,000</option>
-            <option value="Above $120,000">Above $120,000</option>
+          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Key Collection</label>
+          <select required value={form.keyCollection} onChange={e => setForm({ ...form, keyCollection: e.target.value })} className={selectCls} style={{ color: form.keyCollection ? "#09090b" : "#99a1af" }}>
+            <option value="">Select</option>
+            <option value="Keys Collected">Keys Collected</option>
+            <option value="Within 3 months">Within 3 months</option>
+            <option value="3–6 months">3–6 months</option>
+            <option value="6–12 months">6–12 months</option>
+            <option value="More than 12 months">More than 12 months</option>
           </select>
         </div>
         {error && <p className="font-['DM_Sans',sans-serif] text-[13px] text-red-500">{error}</p>}
@@ -831,6 +851,7 @@ export function TeamAvatars() {
   const addStoryFileRef = useRef<HTMLInputElement>(null);
   const [uploadingMember, setUploadingMember] = useState(false);
   const [uploadingStory, setUploadingStory] = useState(false);
+  const [storyModalOpen, setStoryModalOpen] = useState(false);
 
   // Build the canonical "team" payload to save back to the server: keep all
   // existing fields, but write `image` (not the resolved `img`) so URLs persist.
@@ -847,15 +868,14 @@ export function TeamAvatars() {
     } finally { setUploadingMember(false); }
   };
 
-  const handleAddStory = async (file: File) => {
+  const handleAddStory = async (file: File, title: string, description: string, location: string) => {
     if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
     setUploadingStory(true);
     try {
       const url = await editCtx.uploadImage(file);
       if (!url) return;
-      // Try to find an existing "Stories" project bucket; if absent create one.
       const existingStories = members.find((m: any) => m.type === "project" && m.name === "Stories");
-      const newReel = { img: url, caption: "New story", location: "", likes: 0, comments: 0 };
+      const newReel = { img: url, caption: title || "New story", description: description || "", location: location || "", likes: 0, comments: 0 };
       let next: any[];
       if (existingStories) {
         next = members.map((m: any) => m === existingStories ? { ...m, reels: [...((m as any).reels || []), newReel] } : m);
@@ -967,7 +987,7 @@ export function TeamAvatars() {
             {/* Add Story / Reel */}
             <div
               className="flex flex-col items-center gap-2 shrink-0 cursor-pointer"
-              onClick={() => addStoryFileRef.current?.click()}
+              onClick={() => setStoryModalOpen(true)}
               title="Upload a story / reel"
             >
               <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#d8d3c8] bg-[#f0ede6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
@@ -985,17 +1005,23 @@ export function TeamAvatars() {
                 )}
               </div>
               <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Add story</span>
-              <input
-                ref={addStoryFileRef}
-                type="file"
-                accept="image/*,video/*"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddStory(f); e.currentTarget.value = ""; }}
-              />
             </div>
           </>
         )}
       </div>
+
+      {/* Add Story Modal */}
+      {storyModalOpen && createPortal(
+        <AddStoryModal
+          onClose={() => setStoryModalOpen(false)}
+          onSave={async (file, title, description, location) => {
+            await handleAddStory(file, title, description, location);
+            setStoryModalOpen(false);
+          }}
+          saving={uploadingStory}
+        />,
+        document.body
+      )}
 
       {/* Instagram-style popup overlay — portaled to body to escape transformed ancestors */}
       {selectedMember && selectedMember.type === "person" && createPortal(
@@ -1325,20 +1351,12 @@ export function TrustedSince() {
   const title = ts?.title || "Trusted Since —";
   const desc = ts?.description || "Add your studio's story here.";
   const badges = ts?.badges ?? [];
-  const certs = ts?.certifications ?? [
-    { name: "HDB Registered Contractor", license: "" },
-    { name: "BCA Licensed Builder", license: "" },
-  ];
-  const hdbImg = p?.images?.hdbCert ? resolveImg(p.images.hdbCert) : imgHdb;
-  const bcaImg = p?.images?.bcaCert ? resolveImg(p.images.bcaCert) : imgBca;
-
   // Hide on live page when no meaningful data
   if (!editCtx) {
     const hasTitle = ts?.title && ts.title !== "Trusted Since —" && ts.title.trim() !== "";
     const hasDesc = ts?.description && ts.description !== "Add your studio's story here." && ts.description.trim() !== "";
     const hasBadges = badges.length > 0;
-    const hasCerts = certs.some((c: any) => c.name && c.license);
-    if (!hasTitle && !hasDesc && !hasBadges && !hasCerts) return null;
+    if (!hasTitle && !hasDesc && !hasBadges) return null;
   }
 
   const badgeIcons = [
@@ -1348,37 +1366,21 @@ export function TrustedSince() {
   ];
 
   return (
-    <div className="bg-[#e8e4db] border-y border-[#d8d3c8] rounded-[12px] px-6 md:px-12 lg:px-16 py-10 md:py-12">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 lg:gap-10">
-        <div className="flex-1">
-          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-3">{title}</h2>
-          <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] mb-4">
-            {desc}
-          </p>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {badges.map((badge: string, i: number) => (
-              <span key={badge} className="flex items-center gap-2 font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#364153]">
-                {badgeIcons[i % badgeIcons.length]}
-                {badge}
-              </span>
-            ))}
-          </div>
+    <div>
+      <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-3">{title}</h2>
+      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] mb-4">
+        {desc}
+      </p>
+      {badges.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-2 mb-4">
+          {badges.map((badge: string, i: number) => (
+            <span key={badge} className="flex items-center gap-2 font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#364153]">
+              {badgeIcons[i % badgeIcons.length]}
+              {badge}
+            </span>
+          ))}
         </div>
-
-        {/* Certification logos */}
-        <div className="bg-white border border-[#d8d3c8] rounded-[14px] shadow-sm flex items-center gap-8 p-6 shrink-0">
-          <div className="flex flex-col items-center gap-2">
-            <img src={hdbImg} alt={certs[0]?.name || "HDB Registered"} className="h-[45px] w-[170px] object-contain" />
-            <span className="font-['DM_Sans',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[0]?.license || "Lic. HB-09-4421A"}</span>
-          </div>
-          {certs.length > 1 && (
-            <div className="flex flex-col items-center gap-2">
-              <img src={bcaImg} alt={certs[1]?.name || "BCA Licensed"} className="h-[45px] w-[170px] object-contain" />
-              <span className="font-['DM_Sans',sans-serif] font-bold text-[10px] text-[#99a1af] tracking-[0.5px] uppercase">{certs[1]?.license || "Lic. HB-09-4421A"}</span>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1429,10 +1431,130 @@ export function BtoPackageCta() {
 }
 
 /* ─── PROJECTS SECTION ─── */
+function ProjectCard({ p, idx, slug, editCtx, onRemove }: { p: any; idx: number; slug: string; editCtx: any; onRemove?: (i: number) => void }) {
+  return (
+    <div className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] group cursor-pointer">
+      <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+      <Link to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 bg-gradient-to-t from-black/42 to-transparent to-[55%] z-[1]" />
+      <div className="absolute bottom-4 left-5">
+        <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
+        <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
+      </div>
+      {editCtx && onRemove && (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(idx); }}
+          className="absolute top-3 right-3 z-10 size-[28px] rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center text-[#0f0f0d] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+          title="Remove project"
+        >
+          <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string; onClose: () => void }) {
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"newest" | "oldest" | "name">("newest");
+
+  const filtered = useMemo(() => {
+    let list = [...projs];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((p: any) => p.name?.toLowerCase().includes(q) || p.meta?.toLowerCase().includes(q));
+    }
+    if (sort === "name") list.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+    else if (sort === "oldest") list.reverse();
+    return list;
+  }, [projs, search, sort]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative mt-[3vh] mb-[3vh] w-[95vw] max-w-[1100px] max-h-[94vh] bg-white rounded-[16px] shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-[#e8e4db]">
+          <div>
+            <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[26px] text-[#0f0f0d] tracking-[-0.5px]">All Projects</h2>
+            <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] mt-0.5">{projs.length} project{projs.length !== 1 ? "s" : ""}</p>
+          </div>
+          <button onClick={onClose} className="size-[36px] rounded-full bg-[#f5f3ef] hover:bg-[#e8e4db] flex items-center justify-center transition-colors cursor-pointer" title="Close">
+            <svg className="size-[18px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {/* Search & Sort */}
+        <div className="flex items-center gap-3 px-6 md:px-8 py-4 border-b border-[#f0ede6]">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 size-[16px] text-[#99a1af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects..."
+              className="w-full h-[40px] pl-10 pr-4 bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] text-[14px] font-['DM_Sans',sans-serif] text-[#0f0f0d] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as any)}
+            className="h-[40px] px-3 bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] text-[13px] font-['DM_Sans',sans-serif] text-[#0f0f0d] outline-none focus:border-[#0f0f0d] transition-colors appearance-none cursor-pointer pr-8"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236b6860' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <svg className="size-[48px] text-[#d8d3c8] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+              <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#6b6860]">No projects found</p>
+              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] mt-1">Try a different search term</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((p: any, idx: number) => (
+                <Link
+                  key={`${p.name}-${idx}`}
+                  to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`}
+                  onClick={onClose}
+                  className="relative rounded-[12px] overflow-hidden h-[220px] group cursor-pointer block"
+                >
+                  <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
+                  <div className="absolute bottom-3 left-4 right-4">
+                    <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>
+                    <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#bab7b3] tracking-[0.08px] mt-0.5">{p.meta}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export function ProjectsSection() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const projs = ctx?.projects ?? [];
+  const slug = window.location.pathname.split('/designer/')[1]?.split('/')[0] || 'studio';
+  const [showAll, setShowAll] = useState(false);
 
   const addProjectFileRef = useRef<HTMLInputElement>(null);
   const [uploadingProject, setUploadingProject] = useState(false);
@@ -1459,6 +1581,10 @@ export function ProjectsSection() {
     await editCtx.saveCollection("projects", serializeProjects(projs.filter((_: any, i: number) => i !== idx)));
   };
 
+  // On live page show only first 2; editor shows all
+  const visibleProjs = editCtx ? projs : projs.slice(0, 2);
+  const hasMore = !editCtx && projs.length > 2;
+
   return (
     <section>
       <div className="mb-4">
@@ -1466,25 +1592,8 @@ export function ProjectsSection() {
         <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Recent completed renovations</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {projs.map((p: any, idx: number) => (
-          <div key={`${p.name}-${idx}`} className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] group cursor-pointer">
-            <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-            <Link to={`/designer/${window.location.pathname.split('/designer/')[1]?.split('/')[0] || 'studio'}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 bg-gradient-to-t from-black/42 to-transparent to-[55%] z-[1]" />
-            <div className="absolute bottom-4 left-5">
-              <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
-              <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
-            </div>
-            {editCtx && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRemoveProject(idx); }}
-                className="absolute top-3 right-3 z-10 size-[28px] rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center text-[#0f0f0d] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                title="Remove project"
-              >
-                <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </button>
-            )}
-          </div>
+        {visibleProjs.map((p: any, idx: number) => (
+          <ProjectCard key={`${p.name}-${idx}`} p={p} idx={idx} slug={slug} editCtx={editCtx} onRemove={editCtx ? handleRemoveProject : undefined} />
         ))}
 
         {/* Add project tile (edit mode only) */}
@@ -1519,6 +1628,22 @@ export function ProjectsSection() {
           </button>
         )}
       </div>
+
+      {/* View All Projects button (live page only, when more than 2) */}
+      {hasMore && (
+        <div className="mt-5 flex justify-center">
+          <button
+            onClick={() => setShowAll(true)}
+            className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-[#0f0f0d] bg-white border border-[#d8d3c8] rounded-[12px] px-8 h-[44px] hover:bg-[#f5f3ef] transition-colors cursor-pointer flex items-center gap-2"
+          >
+            View All Projects
+            <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+      )}
+
+      {/* All projects modal */}
+      {showAll && <AllProjectsModal projs={projs} slug={slug} onClose={() => setShowAll(false)} />}
     </section>
   );
 }
@@ -2189,10 +2314,205 @@ function GoogleIcon({ className = "size-[17px]" }: { className?: string }) {
 const reviewsData: { name: string; initial: string; time: string; text: string }[] = [];
 
 const reviewTabs = [
-  { label: "Network Reviews" },
-  { label: "Facebook Reviews" },
-  { label: "Google Reviews" },
+  { label: "Network Reviews", icon: "network" as const },
+  { label: "Google Reviews", icon: "google" as const },
 ];
+
+function AddStoryModal({
+  onClose,
+  onSave,
+  saving,
+}: {
+  onClose: () => void;
+  onSave: (file: File, title: string, description: string, location: string) => Promise<void>;
+  saving: boolean;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const isVideo = file?.type.startsWith("video/");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !saving) onClose(); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [onClose, saving]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    if (f.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => setPreview(reader.result as string);
+      reader.readAsDataURL(f);
+    } else {
+      setPreview(URL.createObjectURL(f));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file || saving) return;
+    await onSave(file, title, description, location);
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", height: "44px", padding: "0 14px", background: "#fafaf8",
+    border: "1px solid #d8d3c8", borderRadius: "10px", color: "#0f0f0d",
+    fontFamily: "'DM Sans', sans-serif", fontSize: "14px", outline: "none",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
+    color: "#9a9790", fontFamily: "'DM Sans', sans-serif", display: "block", marginBottom: "6px",
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: "rgba(15,15,13,0.55)" }}
+      onClick={() => !saving && onClose()}
+    >
+      <div
+        className="relative w-full max-w-[480px] overflow-hidden flex flex-col"
+        style={{ background: "#fff", border: "1px solid #d8d3c8", borderRadius: "16px", boxShadow: "0 24px 60px rgba(15,15,13,0.25)", fontFamily: "'DM Sans', sans-serif" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #d8d3c8", background: "#f0ede6" }}>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#9a9790" }}>New Story</div>
+            <h2 className="mt-0.5" style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: "22px", color: "#0f0f0d", lineHeight: 1.2 }}>Add Story</h2>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-75 transition-opacity cursor-pointer disabled:opacity-40" style={{ background: "#fff", border: "1px solid #d8d3c8", color: "#6b6860" }} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
+          {/* File upload */}
+          <div>
+            <label style={labelStyle}>Photo or Video <span style={{ color: "#c14" }}>*</span></label>
+            <input ref={fileRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFile} />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="relative w-full overflow-hidden cursor-pointer group/cover"
+              style={{ aspectRatio: "9/16", maxHeight: "320px", background: "#f0ede6", border: "2px dashed #d8d3c8", borderRadius: "12px" }}
+            >
+              {preview ? (
+                <>
+                  {isVideo ? (
+                    <video src={preview} className="w-full h-full object-cover" muted playsInline />
+                  ) : (
+                    <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center transition-colors bg-black/0 group-hover/cover:bg-black/30">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover/cover:opacity-100 transition-opacity"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                  </div>
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9a9790" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="3"/><path d="M16 3v6M8 3v6"/></svg>
+                  <span className="text-[12px]" style={{ color: "#9a9790" }}>Click to upload photo or video</span>
+                </div>
+              )}
+            </button>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label style={labelStyle}>Title</label>
+            <input type="text" value={title} placeholder="e.g. Kitchen Renovation Reveal" onChange={(e) => setTitle(e.target.value)} style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea value={description} placeholder="e.g. A quick look at the completed kitchen makeover" onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-[14px] py-3 text-[14px] outline-none transition-colors resize-none"
+              rows={3}
+              style={{ background: "#fafaf8", border: "1px solid #d8d3c8", borderRadius: "10px", color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+            />
+          </div>
+
+          {/* Location */}
+          <div>
+            <label style={labelStyle}>Location</label>
+            <input type="text" value={location} placeholder="e.g. Toa Payoh, Singapore" onChange={(e) => setLocation(e.target.value)} style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} disabled={saving} className="h-10 px-4 text-[13px] font-medium cursor-pointer hover:opacity-85 disabled:opacity-40" style={{ background: "#fff", color: "#0f0f0d", border: "1px solid #d8d3c8", borderRadius: "10px" }}>Cancel</button>
+            <button type="submit" disabled={!file || saving} className="h-10 px-5 text-[13px] font-medium cursor-pointer hover:opacity-85 disabled:opacity-40 flex items-center gap-2" style={{ background: "#0f0f0d", color: "#fff", border: "1px solid #0f0f0d", borderRadius: "10px" }}>
+              {saving ? (
+                <><svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" /><path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg> Uploading…</>
+              ) : (
+                <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Add Story</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function VideoUploadSlot({ onUploaded }: { onUploaded: (url: string) => void }) {
+  const editCtx = useContext(ProfileEditContext);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { return; }
+    if (file.size > 50 * 1024 * 1024) { return; }
+    setUploading(true);
+    try {
+      const url = await editCtx?.uploadImage?.(file);
+      if (url) onUploaded(url);
+    } catch {}
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={handleFile} />
+      <button
+        type="button"
+        onClick={() => !uploading && fileRef.current?.click()}
+        disabled={uploading}
+        className="flex flex-col items-center justify-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+        style={{ aspectRatio: "16/9", background: "#f0ede6", border: "2px dashed #d8d3c8", borderRadius: "14px" }}
+      >
+        {uploading ? (
+          <div className="w-6 h-6 border-2 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9a9790" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "12px", color: "#9a9790" }}>Upload video (16:9)</span>
+          </>
+        )}
+      </button>
+    </>
+  );
+}
 
 export function HomeownersSay() {
   const ctx = useDesignerCtx();
@@ -2232,7 +2552,11 @@ export function HomeownersSay() {
                   key={tab.label}
                   className="bg-[#f8fafc] border border-[#d8d3c8] rounded-full px-[14px] py-[8px] flex items-center gap-[7px] cursor-pointer hover:bg-[#f1f3f5] transition-colors"
                 >
-                  <GoogleIcon className="size-[17px] shrink-0" />
+                  {tab.icon === "network" ? (
+                    <img src="/002 Page 1.jpg" alt="Network" className="size-[17px] shrink-0 rounded-[3px] object-cover" />
+                  ) : (
+                    <GoogleIcon className="size-[17px] shrink-0" />
+                  )}
                   <span className="font-['DM_Sans',sans-serif] font-medium text-[13.6px] text-[#364153] tracking-[0.08px] whitespace-nowrap">{tab.label}</span>
                 </button>
               ))}
@@ -2281,9 +2605,9 @@ export function HomeownersSay() {
             </h3>
 
             <div className="flex flex-col gap-6">
-              {([] as { img: string; title: string; time: string }[]).map((v) => (
-                <div key={v.title} className="relative rounded-[14px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] h-[240px] md:h-[306px] cursor-pointer group">
-                  <img src={resolveImg(v.img)} alt={v.title} className="w-full h-full object-cover" />
+              {(ctx?.profile?.videoTours || []).map((v: any, i: number) => (
+                <div key={i} className="relative rounded-[14px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] cursor-pointer group" style={{ aspectRatio: "16/9" }}>
+                  <video src={resolveImg(v.src)} className="w-full h-full object-cover" muted playsInline />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                     <div className="bg-white/90 rounded-full size-[64px] shadow-[0px_20px_25px_0px_rgba(0,0,0,0.1),0px_8px_10px_0px_rgba(0,0,0,0.1)] flex items-center justify-center group-hover:scale-110 transition-transform">
                       <svg className="size-[24px] ml-1" viewBox="0 0 24 24" fill="none">
@@ -2291,12 +2615,30 @@ export function HomeownersSay() {
                       </svg>
                     </div>
                   </div>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-16">
-                    <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white leading-[24px]">{v.title}</p>
-                    <span className="bg-black/50 text-[#d1d5dc] font-['DM_Sans',sans-serif] text-[12px] px-2 py-0.5 rounded-[4px] mt-1 inline-block leading-[16px]">{v.time}</span>
-                  </div>
+                  {v.title && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-16">
+                      <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white leading-[24px]">{v.title}</p>
+                    </div>
+                  )}
+                  {editCtx && (
+                    <button
+                      onClick={() => editCtx.saveCollection?.("removeVideoTour", i)}
+                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer"
+                      style={{ background: "rgba(15,15,13,0.7)", color: "#fff" }}
+                      aria-label="Remove video"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  )}
                 </div>
               ))}
+
+              {/* Upload slots in editor — max 2 videos */}
+              {editCtx && (ctx?.profile?.videoTours || []).length < 2 && (
+                <VideoUploadSlot
+                  onUploaded={(url) => editCtx.saveCollection?.("addVideoTour", url)}
+                />
+              )}
             </div>
           </div>
         </div>

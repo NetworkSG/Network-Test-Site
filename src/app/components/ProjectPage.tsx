@@ -512,7 +512,7 @@ export function ProjectPage() {
 // ════════════════════════════════════════════════════════════════════════════════
 function LeadFormCard({ firmName }: { firmName: string }) {
   const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "" });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -554,8 +554,11 @@ function LeadFormCard({ firmName }: { firmName: string }) {
             <LeadField label="Name" type="text" placeholder="Your full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
             <LeadPhoneField value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
             <LeadField label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required />
-            <LeadSelect label="Property Type" value={form.propertyType} options={["HDB", "Condominium", "Landed", "Commercial"]} onChange={(v) => setForm({ ...form, propertyType: v })} />
-            <LeadSelect label="Budget (S$)" value={form.budget} options={["Under S$30k", "S$30k–S$60k", "S$60k–S$100k", "S$100k–S$150k", "S$150k+"]} onChange={(v) => setForm({ ...form, budget: v })} />
+            <div className="grid grid-cols-2 gap-3">
+              <LeadSelect label="Property Type" value={form.propertyType} options={["HDB", "Condominium", "Landed", "Commercial"]} onChange={(v) => setForm({ ...form, propertyType: v })} />
+              <LeadSelect label="Budget (S$)" value={form.budget} options={["Under S$30k", "S$30k–S$60k", "S$60k–S$100k", "S$100k–S$150k", "S$150k+"]} onChange={(v) => setForm({ ...form, budget: v })} />
+            </div>
+            <LeadSelect label="Key Collection" value={form.keyCollection} options={["Keys Collected", "Within 3 months", "3–6 months", "6–12 months", "More than 12 months"]} onChange={(v) => setForm({ ...form, keyCollection: v })} />
 
             <button
               type="submit"

@@ -10,7 +10,6 @@ import {
   StatsRow,
   BioText,
   TeamAvatars,
-  TrustedSince,
   BtoPackageCta,
   ProjectsSection,
   TrustCredentials,
@@ -22,7 +21,7 @@ import {
 } from "./DesignerProfile";
 import {
   LogOut, Pencil, X, Check, Loader2, Plus, Trash2, Save, Eye,
-  Upload, Building2, MapPin, Star, Users, Briefcase, FileText,
+  Upload, MapPin, Star, Users, Briefcase, FileText,
   MessageSquare, Globe, Camera, ArrowLeft,
   Hammer, Layers, Square as SquareIcon, Wind, Zap, Droplet, Paintbrush, Lightbulb,
 } from "lucide-react";
@@ -720,11 +719,6 @@ function InlineTrustedSince() {
   const title = ts.title || "";
   const desc = ts.description || "";
   const badges: string[] = ts.badges || [];
-  const certs: any[] = ts.certifications || [{ name: "", license: "" }, { name: "", license: "" }];
-
-  const hdbImg = p?.images?.hdbCert ? resolveImg(p.images.hdbCert) : null;
-  const bcaImg = p?.images?.bcaCert ? resolveImg(p.images.bcaCert) : null;
-
   const save = (patch: any) => saveSection("profile", { trustedSince: { ...ts, ...patch } });
   const saveBadge = (i: number, v: string) => {
     const next = [...badges];
@@ -733,140 +727,86 @@ function InlineTrustedSince() {
   };
   const addBadge = () => save({ badges: [...badges, "New Badge"] });
   const removeBadge = (i: number) => save({ badges: badges.filter((_, j) => j !== i) });
-  const saveCert = (i: number, patch: any) => {
-    const next = [...certs];
-    next[i] = { ...(next[i] || {}), ...patch };
-    save({ certifications: next });
-  };
 
   return (
-    <section
-      className="py-[80px] md:py-[100px]"
-      style={{ background: C.creamDark, borderTop: `1px solid ${C.creamBorder}`, borderBottom: `1px solid ${C.creamBorder}` }}
-    >
-      <div className="max-w-[1280px] mx-auto px-6 md:px-10">
-        <FadeIn>
-          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-12">
-            <div className="flex-1 max-w-[640px]">
-              <TagLabel>Trust & guarantees</TagLabel>
-              <h2
-                className="mt-3"
-                style={{
-                  fontFamily: serif,
-                  fontSize: "clamp(28px, 3.2vw, 42px)",
-                  color: C.black,
-                  fontWeight: 400,
-                  lineHeight: 1.15,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                <InlineEdit
-                  value={title}
-                  placeholder="Trusted Since 2014"
-                  onSave={(v) => save({ title: v })}
-                  inputClassName="w-full"
-                />
-              </h2>
-              <div className="mt-4 text-[16px] leading-[1.65]" style={{ color: C.gray, fontFamily: sans }}>
-                <InlineEdit
-                  value={desc}
-                  placeholder="Share your studio's story — founder, years of experience, what you stand for."
-                  onSave={(v) => save({ description: v })}
-                  className="w-full"
-                  inputClassName="w-full"
-                  multiline
-                />
-              </div>
-              <div className="mt-6 flex flex-wrap gap-3 items-center">
-                {badges.map((badge: string, i: number) => (
-                  <span
-                    key={i}
-                    className="group/badge inline-flex items-center gap-2 px-4 py-2 text-[13px]"
-                    style={{
-                      background: C.cream,
-                      border: `1px solid ${C.creamBorder}`,
-                      borderRadius: "9999px",
-                      color: C.black,
-                      fontFamily: sans,
-                      fontWeight: 500,
-                    }}
-                  >
-                    <span className="rounded-full size-2 inline-block" style={{ background: C.black }} />
-                    <InlineEdit
-                      value={badge}
-                      placeholder="Trust badge"
-                      onSave={(v) => saveBadge(i, v)}
-                      inputClassName="w-[200px]"
-                    />
-                    <button
-                      onClick={() => removeBadge(i)}
-                      className="opacity-0 group-hover/badge:opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
-                      style={{ color: C.gray }}
-                      title="Remove badge"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </span>
-                ))}
-                <button
-                  onClick={addBadge}
-                  className="inline-flex items-center gap-1 px-3 py-2 text-[13px] hover:opacity-70 transition-opacity cursor-pointer"
-                  style={{
-                    border: `1px dashed ${C.creamBorder}`,
-                    borderRadius: "9999px",
-                    color: C.gray,
-                    fontFamily: sans,
-                  }}
-                >
-                  <Plus size={12} /> Add Badge
-                </button>
-              </div>
-            </div>
-
-            {/* Certification logos */}
-            <div
-              className="flex items-center gap-8 p-7 shrink-0"
+    <div>
+      <FadeIn>
+        <TagLabel>Trust & guarantees</TagLabel>
+        <h2
+          className="mt-3"
+          style={{
+            fontFamily: serif,
+            fontSize: "clamp(28px, 3.2vw, 42px)",
+            color: C.black,
+            fontWeight: 400,
+            lineHeight: 1.15,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          <InlineEdit
+            value={title}
+            placeholder="Trusted Since 2014"
+            onSave={(v) => save({ title: v })}
+            inputClassName="w-full"
+          />
+        </h2>
+        <div className="mt-4 text-[16px] leading-[1.65]" style={{ color: C.gray, fontFamily: sans }}>
+          <InlineEdit
+            value={desc}
+            placeholder="Share your studio's story — founder, years of experience, what you stand for."
+            onSave={(v) => save({ description: v })}
+            className="w-full"
+            inputClassName="w-full"
+            multiline
+          />
+        </div>
+        <div className="mt-6 flex flex-wrap gap-3 items-center">
+          {badges.map((badge: string, i: number) => (
+            <span
+              key={i}
+              className="group/badge inline-flex items-center gap-2 px-4 py-2 text-[13px]"
               style={{
-                background: C.white,
+                background: C.cream,
                 border: `1px solid ${C.creamBorder}`,
-                borderRadius: "12px",
+                borderRadius: "9999px",
+                color: C.black,
+                fontFamily: sans,
+                fontWeight: 500,
               }}
             >
-              {[0, 1].map((i) => {
-                const cert = certs[i] || { name: "", license: "" };
-                const img = i === 0 ? hdbImg : bcaImg;
-                return (
-                  <div key={i} className="flex flex-col items-center gap-2">
-                    {img ? (
-                      <img src={img} alt={cert.name || "Certification"} className="h-[45px] w-[170px] object-contain" />
-                    ) : (
-                      <div
-                        className="h-[45px] w-[170px] flex items-center justify-center"
-                        style={{
-                          background: C.cream,
-                          border: `1px dashed ${C.creamBorder}`,
-                          borderRadius: "8px",
-                        }}
-                      >
-                        <span className="text-[10px] uppercase" style={{ color: C.grayLight, letterSpacing: "0.12em", fontFamily: sans }}>Cert logo</span>
-                      </div>
-                    )}
-                    <div className="text-[10px] uppercase" style={{ color: C.grayLight, letterSpacing: "0.12em", fontWeight: 600, fontFamily: sans }}>
-                      <InlineEdit
-                        value={cert.license || ""}
-                        placeholder="Lic. XX-00-0000X"
-                        onSave={(v) => saveCert(i, { license: v })}
-                        inputClassName="w-[140px] uppercase"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </FadeIn>
-      </div>
-    </section>
+              <span className="rounded-full size-2 inline-block" style={{ background: C.black }} />
+              <InlineEdit
+                value={badge}
+                placeholder="Trust badge"
+                onSave={(v) => saveBadge(i, v)}
+                inputClassName="w-[200px]"
+              />
+              <button
+                onClick={() => removeBadge(i)}
+                className="opacity-0 group-hover/badge:opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
+                style={{ color: C.gray }}
+                title="Remove badge"
+              >
+                <Trash2 size={12} />
+              </button>
+            </span>
+          ))}
+          <button
+            onClick={addBadge}
+            className="inline-flex items-center gap-1 px-3 py-2 text-[13px] hover:opacity-70 transition-opacity cursor-pointer"
+            style={{
+              border: `1px dashed ${C.creamBorder}`,
+              borderRadius: "9999px",
+              color: C.gray,
+              fontFamily: sans,
+            }}
+          >
+            <Plus size={12} /> Add Badge
+          </button>
+        </div>
+
+      </FadeIn>
+    </div>
   );
 }
 
@@ -3232,61 +3172,6 @@ function BioEditForm() {
   );
 }
 
-function TrustedSinceEditForm() {
-  const { rawData, saveSection, saving, setEditing } = useEditor();
-  const t = rawData?.trustedSince || {};
-  const [form, setForm] = useState({
-    title: t.title || "",
-    description: t.description || "",
-    badges: t.badges || [],
-    certifications: t.certifications || [],
-  });
-
-  const handleSave = async () => {
-    const ok = await saveSection("profile", { trustedSince: form });
-    if (ok) setEditing(null);
-  };
-
-  return (
-    <div className="space-y-4">
-      <Field label="Title" value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder="Trusted Since 2014" />
-      <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} multiline />
-
-      <div>
-        <p className="text-[12px] font-semibold text-[#0f0f0d]/40 uppercase tracking-wider mb-2">Trust Badges</p>
-        {form.badges.map((b: string, i: number) => (
-          <div key={i} className="flex items-center gap-2 mb-2">
-            <input
-              value={b}
-              onChange={(e) => { const a = [...form.badges]; a[i] = e.target.value; setForm({ ...form, badges: a }); }}
-              className="flex-1 h-[36px] px-3 border border-[#d8d3c8] rounded-lg text-[13px] text-[#0f0f0d] bg-[#fafaf8] outline-none"
-            />
-            <button onClick={() => { const a = form.badges.filter((_: any, j: number) => j !== i); setForm({ ...form, badges: a }); }} className="text-red-400 hover:text-red-600 cursor-pointer"><Trash2 size={14} /></button>
-          </div>
-        ))}
-        <button onClick={() => setForm({ ...form, badges: [...form.badges, ""] })} className="text-[12px] text-[#0f0f0d]/50 flex items-center gap-1 hover:text-[#0f0f0d] cursor-pointer"><Plus size={12} /> Add Badge</button>
-      </div>
-
-      <div>
-        <p className="text-[12px] font-semibold text-[#0f0f0d]/40 uppercase tracking-wider mb-2">Certifications</p>
-        {form.certifications.map((c: any, i: number) => (
-          <div key={i} className="grid grid-cols-3 gap-2 mb-2">
-            <input value={c.name || ""} onChange={(e) => { const a = [...form.certifications]; a[i] = { ...a[i], name: e.target.value }; setForm({ ...form, certifications: a }); }} placeholder="Cert name" className="h-[36px] px-3 border border-[#d8d3c8] rounded-lg text-[13px] bg-[#fafaf8] outline-none" />
-            <input value={c.since || ""} onChange={(e) => { const a = [...form.certifications]; a[i] = { ...a[i], since: e.target.value }; setForm({ ...form, certifications: a }); }} placeholder="Since" className="h-[36px] px-3 border border-[#d8d3c8] rounded-lg text-[13px] bg-[#fafaf8] outline-none" />
-            <div className="flex gap-2">
-              <input value={c.license || ""} onChange={(e) => { const a = [...form.certifications]; a[i] = { ...a[i], license: e.target.value }; setForm({ ...form, certifications: a }); }} placeholder="License #" className="flex-1 h-[36px] px-3 border border-[#d8d3c8] rounded-lg text-[13px] bg-[#fafaf8] outline-none" />
-              <button onClick={() => { const a = form.certifications.filter((_: any, j: number) => j !== i); setForm({ ...form, certifications: a }); }} className="text-red-400 hover:text-red-600 cursor-pointer"><Trash2 size={14} /></button>
-            </div>
-          </div>
-        ))}
-        <button onClick={() => setForm({ ...form, certifications: [...form.certifications, { name: "", since: "", license: "" }] })} className="text-[12px] text-[#0f0f0d]/50 flex items-center gap-1 hover:text-[#0f0f0d] cursor-pointer"><Plus size={12} /> Add Certification</button>
-      </div>
-
-      <SaveButton onClick={handleSave} saving={saving} />
-    </div>
-  );
-}
-
 function BtoPackageEditForm() {
   const { rawData, saveSection, saving, setEditing } = useEditor();
   const b = rawData?.btoPackage || {};
@@ -3540,29 +3425,17 @@ function ServiceAreaEditForm() {
   const sa = rawData?.serviceArea || {};
   const [form, setForm] = useState({
     hqAddress: sa.hqAddress || "",
-    hqLat: String(sa.hqLat || ""),
-    hqLng: String(sa.hqLng || ""),
-    description: sa.description || "",
     mapEmbedUrl: sa.mapEmbedUrl || "",
   });
 
   const handleSave = async () => {
-    const ok = await saveSection("servicearea", {
-      ...form,
-      hqLat: parseFloat(form.hqLat) || 0,
-      hqLng: parseFloat(form.hqLng) || 0,
-    });
+    const ok = await saveSection("servicearea", form);
     if (ok) setEditing(null);
   };
 
   return (
     <div className="space-y-4">
-      <Field label="HQ Address" value={form.hqAddress} onChange={(v) => setForm({ ...form, hqAddress: v })} placeholder="33 Ubi Ave 3, Singapore 408868" />
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Latitude" value={form.hqLat} onChange={(v) => setForm({ ...form, hqLat: v })} placeholder="1.3271" />
-        <Field label="Longitude" value={form.hqLng} onChange={(v) => setForm({ ...form, hqLng: v })} placeholder="103.8918" />
-      </div>
-      <Field label="Description" value={form.description} onChange={(v) => setForm({ ...form, description: v })} multiline />
+      <Field label="ID Firm Name" value={form.hqAddress} onChange={(v) => setForm({ ...form, hqAddress: v })} placeholder="e.g. OneHome Interior Design" />
       <Field label="Google Maps Embed URL" value={form.mapEmbedUrl} onChange={(v) => setForm({ ...form, mapEmbedUrl: v })} placeholder="https://www.google.com/maps/embed?..." />
       <SaveButton onClick={handleSave} saving={saving} />
     </div>
@@ -3736,7 +3609,17 @@ function EditorView({ slug }: { slug: string }) {
     catch (e: any) { toast.error(e?.message || "Upload failed"); return null; }
   };
 
-  const editSaveCollection = (section: string, data: any) => saveSection(section, data);
+  const editSaveCollection = (section: string, data: any) => {
+    if (section === "addVideoTour") {
+      const current = rawData?.videoTours || [];
+      return saveSection("profile", { videoTours: [...current, { src: data, title: "" }] });
+    }
+    if (section === "removeVideoTour") {
+      const current = rawData?.videoTours || [];
+      return saveSection("profile", { videoTours: current.filter((_: any, i: number) => i !== data) });
+    }
+    return saveSection(section, data);
+  };
 
   return (
     <EditorContext.Provider value={{ editing, setEditing, saving, rawData, slug, saveSection, refetchData: fetchData }}>
@@ -3800,12 +3683,9 @@ function EditorView({ slug }: { slug: string }) {
                 <TeamAvatars />
               </div>
 
-              {/* Trusted Since */}
+              {/* Trusted Since — fully inline */}
               <div className="mt-8 md:mt-12">
-                <EditableSection sectionKey="trustedsince" label="Trusted Since" icon={Building2}>
-                  <TrustedSince />
-                  <TrustedSinceEditForm />
-                </EditableSection>
+                <InlineTrustedSince />
               </div>
 
               {/* Projects — fully inline (use the + tile to add a project) */}
@@ -3832,12 +3712,9 @@ function EditorView({ slug }: { slug: string }) {
               </EditableSection>
             </div>
 
-            {/* Google Review Cards */}
+            {/* Google Review Cards — read-only, fetched from Google */}
             <div className="mt-0">
-              <EditableSection sectionKey="reviews" label="Google Reviews" icon={Star}>
-                <GoogleReviewCards />
-                <ReviewsEditForm />
-              </EditableSection>
+              <GoogleReviewCards />
             </div>
 
             {/* Service Area */}
