@@ -7,14 +7,16 @@ import {
   transformApiData,
   resolveImg,
   HeroSection,
-  StatsRow,
+  StudioInfo,
+  QuoteCard,
   BioText,
   TeamAvatars,
   BtoPackageCta,
   ProjectsSection,
-  TrustCredentials,
-  CaseStudies,
-  HomeownersSay,
+  TrustedSince,
+  RatingBreakdown,
+  ExperienceTable,
+  FAQ,
   GoogleReviewCards,
   ServiceArea,
   ProfileLoadingSkeleton,
@@ -22,7 +24,7 @@ import {
 import {
   LogOut, Pencil, X, Check, Loader2, Plus, Trash2, Save, Eye,
   Upload, MapPin, Star, Users, Briefcase, FileText,
-  MessageSquare, Globe, Camera, ArrowLeft,
+  MessageSquare, Globe, Camera, ArrowLeft, Shield, Award,
   Hammer, Layers, Square as SquareIcon, Wind, Zap, Droplet, Paintbrush, Lightbulb,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -3386,15 +3388,23 @@ function ReviewsEditForm() {
 
 function LatestReviewsEditForm() {
   const { rawData, saveSection, saving, setEditing } = useEditor();
-  const [reviews, setReviews] = useState<any[]>(rawData?.latestReviews || []);
+  // Edit the `reviews` array — this is the field that GoogleReviewCards
+  // falls back to when there are no Google reviews to display.
+  // (Previously this form edited `latestReviews`, which is no longer rendered
+  // anywhere on the public page after the HomeownersSay removal.)
+  const [reviews, setReviews] = useState<any[]>(rawData?.reviews || []);
 
   const handleSave = async () => {
-    const ok = await saveSection("latestreviews", reviews);
+    const ok = await saveSection("reviews", reviews);
     if (ok) setEditing(null);
   };
 
   return (
     <div className="space-y-4">
+      <p className="text-[12px] text-[#6b6860] leading-[1.6]">
+        Manual reviews are shown when Google reviews are not yet connected (or while they refresh).
+        Once your Google Place ID is set, real Google reviews will replace these automatically.
+      </p>
       {reviews.map((r, i) => (
         <div key={i} className="border border-[#e5e2dc] rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -3404,17 +3414,199 @@ function LatestReviewsEditForm() {
           <div className="grid grid-cols-3 gap-3">
             <Field label="Name" value={r.name || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], name: v }; setReviews(a); }} />
             <Field label="Initial" value={r.initial || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], initial: v }; setReviews(a); }} placeholder="A" />
-            <Field label="Time" value={r.time || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], time: v }; setReviews(a); }} placeholder="2 months ago" />
+            <Field label="Date" value={r.date || r.time || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], date: v, time: v }; setReviews(a); }} placeholder="2 months ago" />
           </div>
-          <Field label="Review Text" value={r.text || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], text: v }; setReviews(a); }} multiline />
+          <Field label="Title" value={r.title || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], title: v }; setReviews(a); }} placeholder="Short summary headline" />
+          <Field label="Review Text" value={r.text || r.fullText || ""} onChange={(v) => { const a = [...reviews]; a[i] = { ...a[i], text: v, fullText: v }; setReviews(a); }} multiline />
         </div>
       ))}
       <button
-        onClick={() => setReviews([...reviews, { name: "", initial: "", time: "", text: "" }])}
+        onClick={() => setReviews([...reviews, { name: "", initial: "", date: "", title: "", text: "", fullText: "", bgColor: "bg-[#fef3c7]", textColor: "text-[#a16207]" }])}
         className="w-full py-2.5 border-2 border-dashed border-[#d8d3c8] rounded-lg text-[13px] text-[#0f0f0d]/50 hover:text-[#0f0f0d] hover:border-[#0f0f0d]/30 transition-colors flex items-center justify-center gap-2 cursor-pointer"
       >
         <Plus size={14} /> Add Review
       </button>
+      <SaveButton onClick={handleSave} saving={saving} />
+    </div>
+  );
+}
+
+function TrustedSinceEditForm() {
+  const { rawData, saveSection, saving, setEditing } = useEditor();
+  const ts = rawData?.trustedSince || {};
+  const creds = rawData?.credentials || {};
+  const [form, setForm] = useState({
+    title: ts.title || "",
+    description: ts.description || "",
+    badges: Array.isArray(ts.badges) ? [...ts.badges] : [],
+    hdbActive: !!creds?.hdb?.active,
+    hdbTitle: creds?.hdb?.title || "",
+    hdbFirm: creds?.hdb?.firm || "",
+    hdbReg: creds?.hdb?.reg || "",
+    bcaActive: !!creds?.bca?.active,
+    bcaTitle: creds?.bca?.title || "",
+    bcaFirm: creds?.bca?.firm || "",
+    bcaReg: creds?.bca?.reg || "",
+    landedEligible: !!creds?.landedEligible,
+  });
+
+  const handleSave = async () => {
+    // trustedSince + credentials both live on the profile object,
+    // so we save via the "profile" section which deep-merges these keys.
+    const payload = {
+      trustedSince: {
+        ...(ts || {}),
+        title: form.title,
+        description: form.description,
+        badges: form.badges.filter((b) => b.trim() !== ""),
+      },
+      credentials: {
+        ...(creds || {}),
+        hdb: {
+          active: form.hdbActive,
+          title: form.hdbTitle,
+          firm: form.hdbFirm,
+          reg: form.hdbReg,
+        },
+        bca: {
+          active: form.bcaActive,
+          title: form.bcaTitle,
+          firm: form.bcaFirm,
+          reg: form.bcaReg,
+        },
+        landedEligible: form.landedEligible,
+      },
+    };
+    const ok = await saveSection("profile", payload);
+    if (ok) setEditing(null);
+  };
+
+  const updateBadge = (i: number, v: string) => {
+    const a = [...form.badges];
+    a[i] = v;
+    setForm({ ...form, badges: a });
+  };
+
+  return (
+    <div className="space-y-5">
+      <Field
+        label="Section Title"
+        value={form.title}
+        onChange={(v) => setForm({ ...form, title: v })}
+        placeholder="e.g. Trusted Since 2015"
+      />
+      <Field
+        label="Description"
+        value={form.description}
+        onChange={(v) => setForm({ ...form, description: v })}
+        placeholder="Tell homeowners about your studio's history and approach."
+        multiline
+      />
+
+      {/* ── Badges ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <TagLabel>Custom Badges</TagLabel>
+          <button
+            onClick={() => setForm({ ...form, badges: [...form.badges, ""] })}
+            className="text-[12px] text-[#0f0f0d]/70 hover:text-[#0f0f0d] flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={12} /> Add badge
+          </button>
+        </div>
+        {form.badges.length === 0 && (
+          <p className="text-[12px] text-[#9a9790]">No badges yet. Add a free-form credential like "ISO 9001 Certified".</p>
+        )}
+        {form.badges.map((b, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={b}
+              onChange={(e) => updateBadge(i, e.target.value)}
+              placeholder="e.g. Houzz Best of Service 2024"
+              className="flex-1 h-[44px] px-4 text-[14px] outline-none transition-colors"
+              style={{
+                background: C.white,
+                border: `1px solid ${C.creamBorder}`,
+                borderRadius: "12px",
+                color: C.black,
+                fontFamily: sans,
+              }}
+            />
+            <button
+              onClick={() => setForm({ ...form, badges: form.badges.filter((_, j) => j !== i) })}
+              className="text-red-400 hover:text-red-600 cursor-pointer p-2"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* ── HDB Credentials ── */}
+      <div className="border border-[#e5e2dc] rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <Toggle label="HDB Registered Contractor" checked={form.hdbActive} onChange={(v) => setForm({ ...form, hdbActive: v })} />
+          {form.hdbActive && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#bbf7d0] bg-[#f0fdf4]">
+              <svg className="size-[14px] shrink-0" viewBox="0 0 13.5 16.5" fill="none">
+                <rect height="15" stroke="#16a34a" strokeLinejoin="round" strokeWidth="1.5" width="12" x="0.75" y="0.75" />
+                <path d="M4.5 8.25L6 9.75L9 6.75" stroke="#16a34a" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+              </svg>
+              <span className="text-[11px] font-bold tracking-[0.08em] text-[#166534]" style={{ fontFamily: sans }}>HDB</span>
+            </div>
+          )}
+        </div>
+        {form.hdbActive && (
+          <div className="space-y-3 pt-1">
+            <Field label="Title" value={form.hdbTitle} onChange={(v) => setForm({ ...form, hdbTitle: v })} placeholder="HDB Registered Contractor" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Firm" value={form.hdbFirm} onChange={(v) => setForm({ ...form, hdbFirm: v })} placeholder="Your firm name" />
+              <Field label="Registration #" value={form.hdbReg} onChange={(v) => setForm({ ...form, hdbReg: v })} placeholder="HDB-XXXX" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── BCA Credentials ── */}
+      <div className="border border-[#e5e2dc] rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <Toggle label="BCA Licensed Builder" checked={form.bcaActive} onChange={(v) => setForm({ ...form, bcaActive: v })} />
+          {form.bcaActive && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#bfdbfe] bg-[#eff6ff]">
+              <svg className="size-[14px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="#155DFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <span className="text-[11px] font-bold tracking-[0.08em] text-[#1e40af]" style={{ fontFamily: sans }}>BCA</span>
+            </div>
+          )}
+        </div>
+        {form.bcaActive && (
+          <div className="space-y-3 pt-1">
+            <Field label="Title" value={form.bcaTitle} onChange={(v) => setForm({ ...form, bcaTitle: v })} placeholder="BCA Licensed Builder" />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Firm" value={form.bcaFirm} onChange={(v) => setForm({ ...form, bcaFirm: v })} placeholder="Your firm name" />
+              <Field label="License #" value={form.bcaReg} onChange={(v) => setForm({ ...form, bcaReg: v })} placeholder="BCA-XXXX" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Landed eligibility ── */}
+      <div className="border border-[#e5e2dc] rounded-lg p-4">
+        <div className="flex items-center justify-between gap-3">
+          <Toggle label="Landed Home Eligible" checked={form.landedEligible} onChange={(v) => setForm({ ...form, landedEligible: v })} />
+          {form.landedEligible && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#fed7aa] bg-[#fff7ed]">
+              <svg className="size-[14px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="#FFA929" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+              <span className="text-[11px] font-bold tracking-[0.08em] text-[#9a3412]" style={{ fontFamily: sans }}>LANDED</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <SaveButton onClick={handleSave} saving={saving} />
     </div>
   );
@@ -3449,6 +3641,15 @@ function EditorView({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // ── Project modal state (Add / Edit) ──
+  // Mounted at the editor level so the click-to-add and click-to-edit chrome
+  // inside ProjectsSection (which lives in DesignerProfile.tsx) can open them
+  // via callbacks wired into ProfileEditContext.
+  const [addProjectModalOpen, setAddProjectModalOpen] = useState(false);
+  const [savingNewProject, setSavingNewProject] = useState(false);
+  const [editProjectIndex, setEditProjectIndex] = useState<number | null>(null);
+  const [savingEditProject, setSavingEditProject] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -3621,10 +3822,101 @@ function EditorView({ slug }: { slug: string }) {
     return saveSection(section, data);
   };
 
+  // ── Project modal save handlers ──
+  // (Mirrors the logic that previously lived inside InlineProjects so the
+  //  AddProjectModal / EditProjectModal can be reused from the live
+  //  ProjectsSection component.)
+  const handleSaveNewProject = async (draft: NewProjectDraft) => {
+    const projects: any[] = rawData?.projects || [];
+    setSavingNewProject(true);
+    try {
+      const propertyTypeCombined = draft.propertySubType
+        ? `${draft.propertyType}, ${draft.propertySubType}`
+        : draft.propertyType;
+
+      const newProject = {
+        id: slugifyTitle(draft.title) || `project-${Date.now()}`,
+        name: draft.title,
+        meta: `${propertyTypeCombined} · ${draft.cost} · ${draft.year}`,
+        image: draft.coverImage,
+        title: draft.title,
+        location: draft.location,
+        cost: draft.cost,
+        size: draft.size,
+        year: draft.year,
+        propertyType: draft.propertyType,
+        propertySubType: draft.propertySubType,
+        propertyTypeDisplay: propertyTypeCombined,
+        style: draft.style,
+        coverImage: draft.coverImage,
+        gallery: draft.gallery,
+        worksIncluded: draft.worksIncluded,
+        designerName: draft.designerName,
+      };
+
+      const ok = await saveSection("projects", [...projects, newProject]);
+      if (ok) {
+        toast.success("Project added");
+        setAddProjectModalOpen(false);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save project");
+    } finally {
+      setSavingNewProject(false);
+    }
+  };
+
+  const handleEditProjectSave = async (draft: NewProjectDraft) => {
+    if (editProjectIndex === null) return;
+    const projects: any[] = rawData?.projects || [];
+    setSavingEditProject(true);
+    try {
+      const propertyTypeCombined = draft.propertySubType
+        ? `${draft.propertyType}, ${draft.propertySubType}`
+        : draft.propertyType;
+      const updated = {
+        ...projects[editProjectIndex],
+        id: slugifyTitle(draft.title) || projects[editProjectIndex]?.id || `project-${Date.now()}`,
+        name: draft.title,
+        meta: `${propertyTypeCombined} · ${draft.cost} · ${draft.year}`,
+        image: draft.coverImage,
+        title: draft.title,
+        location: draft.location,
+        cost: draft.cost,
+        size: draft.size,
+        year: draft.year,
+        propertyType: draft.propertyType,
+        propertySubType: draft.propertySubType,
+        propertyTypeDisplay: propertyTypeCombined,
+        style: draft.style,
+        coverImage: draft.coverImage,
+        gallery: draft.gallery,
+        worksIncluded: draft.worksIncluded,
+        designerName: draft.designerName,
+      };
+      const next = projects.map((p, j) => (j === editProjectIndex ? updated : p));
+      const ok = await saveSection("projects", next);
+      if (ok) {
+        toast.success("Project updated");
+        setEditProjectIndex(null);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update project");
+    } finally {
+      setSavingEditProject(false);
+    }
+  };
+
   return (
     <EditorContext.Provider value={{ editing, setEditing, saving, rawData, slug, saveSection, refetchData: fetchData }}>
       <DesignerDataContext.Provider value={ctxValue}>
-        <ProfileEditContext.Provider value={{ save: editSave, saveCollection: editSaveCollection, uploadImage: editUpload }}>
+        <ProfileEditContext.Provider value={{
+          save: editSave,
+          saveCollection: editSaveCollection,
+          uploadImage: editUpload,
+          openAddProjectModal: () => setAddProjectModalOpen(true),
+          openEditProjectModal: (i: number) => setEditProjectIndex(i),
+        }}>
         <Toaster position="top-right" richColors />
 
         <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]" style={{ color: C.black }}>
@@ -3661,70 +3953,87 @@ function EditorView({ slug }: { slug: string }) {
           </div>
 
           <main className="pt-[64px] md:pt-[72px]">
-            <div className="max-w-[1293px] mx-auto px-4 md:px-8">
-              {/* Hero + Profile — fully inline (click any text/image to edit) */}
+            <div className="max-w-[1280px] mx-auto px-4 md:px-8">
+              {/* 1. Cover Banner (header) — fully inline */}
               <HeroSection />
 
-              {/* Stats */}
-              <div className="mt-6 md:mt-8 lg:max-w-[790px]">
-                <EditableSection sectionKey="stats" label="Stats" icon={Star}>
-                  <StatsRow />
-                  <StatsEditForm />
-                </EditableSection>
+              {/* 2. Studio Info (with KeyMetrics inside) + Lead Form (side-by-side under hero banner) */}
+              <div className="mt-8 md:mt-10">
+                <div className="grid md:grid-cols-[3fr_2fr] gap-8 md:gap-10 items-start">
+                  <StudioInfo />
+                  <FadeIn>
+                    <QuoteCard compact />
+                  </FadeIn>
+                </div>
               </div>
 
-              {/* Bio — click text to edit inline */}
-              <div className="mt-6 lg:max-w-[768px]">
+              {/* 4. Bio — click text to edit inline */}
+              <div className="mt-16 md:mt-24 lg:max-w-[768px]">
                 <BioText />
               </div>
 
-              {/* Team Avatars — fully inline (use the + tiles to add members / stories) */}
-              <div className="mt-6">
-                <TeamAvatars />
+              {/* 4b. Quick Facts (full-width 3-column grid) */}
+              <div className="mt-10 md:mt-14">
+                <ExperienceTable inline />
               </div>
 
-              {/* Trusted Since — fully inline */}
-              <div className="mt-8 md:mt-12">
-                <InlineTrustedSince />
+              {/* 5. Team Avatars — fully inline (use the + tiles to add members / stories) */}
+              <div className="mt-16 md:mt-24">
+                <FadeIn>
+                  <TagLabel>OUR TEAM</TagLabel>
+                  <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-5">
+                    Meet the Team
+                  </h2>
+                  <TeamAvatars />
+                </FadeIn>
               </div>
 
-              {/* Projects — fully inline (use the + tile to add a project) */}
-              <div className="mt-12 md:mt-16">
-                <InlineProjects />
-              </div>
+              {/* 6. Projects Carousel — fully inline (use the + tile to add a project) */}
+              <ProjectsSection />
+
+              {/* 7. Rating Breakdown */}
+              <RatingBreakdown />
             </div>
 
-            {/* Business Info / Trust & Credentials — credentials uses inline pencil + form, business info is inline-editable */}
-            <div className="mt-12 md:mt-16">
-              <TrustCredentials />
-            </div>
+            {/* 8. Homeowner Reviews — read-only (sourced from Google; no inline editing) */}
+            <GoogleReviewCards />
 
-            {/* Case Studies — fully inline (use the + tile to add a phase) */}
-            <div className="mt-0">
-              <CaseStudies />
-            </div>
-
-            {/* What Homeowners Say */}
-            <div className="mt-0">
-              <EditableSection sectionKey="latestreviews" label="Latest Reviews" icon={MessageSquare}>
-                <HomeownersSay />
-                <LatestReviewsEditForm />
+            <div className="max-w-[1280px] mx-auto px-4 md:px-8">
+              {/* 9. Trusted Since — editable via overlay form (title, description, badges, credentials) */}
+              <EditableSection sectionKey="trustedsince" label="Trust & Credentials" icon={Shield}>
+                <TrustedSince />
+                <TrustedSinceEditForm />
               </EditableSection>
+
+              {/* 11. FAQ */}
+              <FAQ />
             </div>
 
-            {/* Google Review Cards — read-only, fetched from Google */}
-            <div className="mt-0">
-              <GoogleReviewCards />
-            </div>
-
-            {/* Service Area */}
-            <div className="mt-0">
-              <EditableSection sectionKey="servicearea" label="Service Area" icon={MapPin}>
-                <ServiceArea />
-                <ServiceAreaEditForm />
-              </EditableSection>
-            </div>
+            {/* 12. Service Area */}
+            <EditableSection sectionKey="servicearea" label="Service Area" icon={MapPin}>
+              <ServiceArea />
+              <ServiceAreaEditForm />
+            </EditableSection>
           </main>
+
+          {/* ── Project Add/Edit Modals ── (mounted at editor level so the live
+              ProjectsSection component can open them via ProfileEditContext) */}
+          <AddProjectModal
+            open={addProjectModalOpen}
+            onClose={() => { if (!savingNewProject) setAddProjectModalOpen(false); }}
+            onSave={handleSaveNewProject}
+            saving={savingNewProject}
+            teamMembers={rawData?.team || []}
+          />
+          {editProjectIndex !== null && (rawData?.projects?.[editProjectIndex]) && (
+            <EditProjectModal
+              project={rawData.projects[editProjectIndex]}
+              onClose={() => { if (!savingEditProject) setEditProjectIndex(null); }}
+              onSave={handleEditProjectSave}
+              saving={savingEditProject}
+              teamMembers={rawData?.team || []}
+            />
+          )}
         </div>
         </ProfileEditContext.Provider>
       </DesignerDataContext.Provider>

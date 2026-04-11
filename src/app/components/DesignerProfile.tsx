@@ -6,7 +6,9 @@ import { Navbar } from "./Navbar";
 import { DesignerProfileFooter } from "./DesignerProfileFooter";
 import { SiteNav } from "./SiteNav";
 import { FOOTER } from "./homepage/content";
+import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { useDesignerData } from "./useDesignerData";
+import { useGoogleReviews } from "./useGoogleReviews";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
@@ -89,6 +91,12 @@ interface DesignerCtxType {
   caseStudyPhases: any[];
   reviews: any[];
   reviewsData: any[];
+  /** Google Place reviews (cached server-side, refreshed monthly). When the
+   *  Google Places API key is wired up server-side this populates from the
+   *  live Google response; until then it's an empty array. */
+  googleReviews?: any[];
+  /** Optional metadata for the cached Google reviews payload (rating, total). */
+  googleMeta?: { rating: number; totalRatings: number; source: string; fetchedAt: string } | null;
   profile: any;
   projects: any[];
   serviceArea: any;
@@ -108,6 +116,10 @@ export type ProfileEditCtxType = {
   save: (path: string, value: any) => void | Promise<any>;
   saveCollection?: (section: string, data: any) => void | Promise<any>;
   uploadImage?: (file: File) => Promise<string | null>;
+  /** Opens the editor's "Add Project" modal (mounted at the editor level). */
+  openAddProjectModal?: () => void;
+  /** Opens the editor's "Edit Project" modal for the project at the given index. */
+  openEditProjectModal?: (index: number) => void;
 };
 export const ProfileEditContext = createContext<ProfileEditCtxType | null>(null);
 
@@ -159,13 +171,13 @@ export function EditableText({
     return (
       <span
         onClick={(e) => { if (saving) return; e.stopPropagation(); setEditing(true); }}
-        className={`${className} ${saving ? "cursor-wait opacity-60" : "cursor-text hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#d8d3c8] hover:outline-offset-2"} rounded-[4px] transition-colors inline-flex items-center gap-1.5`}
+        className={`${className} ${saving ? "cursor-wait opacity-60" : "cursor-text hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#e4e4e7] hover:outline-offset-2"} rounded-[4px] transition-colors inline-flex items-center gap-1.5`}
         style={style}
         title={saving ? "Saving…" : "Click to edit"}
       >
         {value || <span style={{ color: "#a8a8a8" }}>{placeholder || "Click to edit"}</span>}
         {saving && (
-          <svg className="size-[12px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: "#6b6860" }}>
+          <svg className="size-[12px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: "#71717a" }}>
             <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2.5" />
             <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
@@ -334,7 +346,7 @@ function Stars({ count = 5, size = "size-[14px]" }: { count?: number; size?: str
   );
 }
 
-/* ─── HERO SECTION ─── */
+/* ─── HERO SECTION (Compact Horizontal Layout) ─── */
 export function HeroSection() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
@@ -347,14 +359,13 @@ export function HeroSection() {
   const availText = p?.availability || "";
   const locText = p?.location || "Singapore Based";
   const isVerified = p?.verified ?? false;
+  const rating = p?.stats?.rating || "4.9";
   const coverName = cp?.name || "Featured project name";
   const coverCost = cp?.cost || "";
   const coverArea = cp?.area || "";
   const coverYear = cp?.year || "";
   const coverStyle = cp?.style || "";
 
-  // Cover editor state — when in edit mode, the cover image + project metadata
-  // are edited together via a wrapper panel rather than inline.
   const [coverEditing, setCoverEditing] = useState(false);
   const [coverDraft, setCoverDraft] = useState({ name: coverName, cost: coverCost, area: coverArea, year: coverYear, style: coverStyle });
   const [coverUploading, setCoverUploading] = useState(false);
@@ -389,87 +400,68 @@ export function HeroSection() {
 
   return (
     <section className="relative w-full">
-      {/* Cover Image */}
-      <div className="group relative w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] overflow-hidden">
+      {/* Full-width cover banner — acts as the page header */}
+      <div className="group relative w-full h-[260px] md:h-[420px] lg:h-[480px] rounded-[20px] overflow-hidden">
         <img
           src={coverImg}
           alt={`${companyName} project`}
-          className="absolute inset-0 w-full h-full object-cover scale-125"
+          className="absolute inset-0 w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/18 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
 
-        {/* Project tag */}
-        <div className="absolute top-3 md:top-4 left-3 md:left-4 z-10">
-          <span className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[15px] text-white">
-            {coverName}
-          </span>
+        {/* Project name overlay */}
+        <div className="absolute bottom-5 left-6 md:bottom-7 md:left-9 z-[2]">
+          <p style={{ fontFamily: sans }} className="font-semibold text-[13px] md:text-[14px] text-white/90 tracking-wide uppercase">{coverName}</p>
+          <div className="flex items-center gap-3 mt-1">
+            {coverCost && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverCost}</span>}
+            {coverArea && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverArea}</span>}
+            {coverStyle && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverStyle}</span>}
+          </div>
         </div>
 
-        {/* Edit pencil — only when editCtx is present */}
+        {/* Edit pencil */}
         {editCtx && !coverEditing && (
           <button
             type="button"
             onClick={() => setCoverEditing(true)}
-            className="absolute top-3 md:top-4 right-3 md:right-4 z-20 flex items-center gap-1.5 bg-white/95 hover:bg-white text-[#0f0f0d] rounded-full px-3 py-1.5 shadow-md transition-colors"
+            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-white/95 hover:bg-white text-[#0f0f0d] rounded-full px-3 py-1.5 transition-colors"
             title="Edit cover image and project details"
           >
             <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
             </svg>
-            <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium uppercase tracking-[0.08em]">Edit cover</span>
+            <span style={{ fontFamily: sans }} className="text-[12px] font-medium uppercase tracking-[0.08em]">Edit cover</span>
           </button>
         )}
-
-        {/* Project details - desktop left sidebar */}
-        <div className="hidden lg:block absolute left-0 top-0 h-full w-[320px] bg-gradient-to-r from-black to-transparent -translate-x-full opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-500 ease-out">
-          <div className="p-8 pt-14 space-y-5">
-            <div>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Renovation Cost</p>
-              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverCost}</p>
-            </div>
-            <div>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Area Size</p>
-              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverArea}</p>
-            </div>
-            <div>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Year of Completion</p>
-              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverYear}</p>
-            </div>
-            <div>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#a8a8a8]">Interior Style</p>
-              <p className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-white">{coverStyle}</p>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Cover edit panel — opens below the cover image when pencil is clicked */}
+      {/* Cover edit panel (preserved for editor) */}
       {editCtx && coverEditing && (
-        <div className="relative z-20 mt-4 mx-2 md:mx-0 lg:mr-[440px] bg-white border border-[#d8d3c8] rounded-[16px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#d8d3c8] bg-[#f0ede6]">
+        <div className="relative z-20 mt-4 bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#d8d3c8]" style={{ background: C.cream }}>
             <div className="flex items-center gap-2">
-              <svg className="size-[14px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="size-[14px]" style={{ color: C.black }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
               </svg>
-              <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#0f0f0d]">Editing · Cover</span>
+              <span style={{ fontFamily: sans, color: C.black }} className="text-[11px] font-semibold uppercase tracking-[0.12em]">Editing · Cover</span>
             </div>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setCoverEditing(false)} className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] hover:text-[#0f0f0d] px-3 py-1.5 rounded-[8px] transition-colors">Cancel</button>
-              <button type="button" onClick={handleCoverSave} className="font-['DM_Sans',sans-serif] text-[13px] font-medium text-white bg-[#0f0f0d] hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
+              <button type="button" onClick={() => setCoverEditing(false)} style={{ fontFamily: sans, color: C.grayLight }} className="text-[13px] px-3 py-1.5 rounded-[8px] transition-colors hover:opacity-70">Cancel</button>
+              <button type="button" onClick={handleCoverSave} style={{ fontFamily: sans, background: C.black }} className="text-[13px] font-medium text-white hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
             </div>
           </div>
           <div className="p-6 grid md:grid-cols-[280px_1fr] gap-6">
-            {/* Image upload tile */}
             <div>
-              <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860] mb-2">Cover photo</p>
+              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-2">Cover photo</p>
               <button
                 type="button"
                 onClick={() => coverFileRef.current?.click()}
-                className="relative w-full h-[160px] rounded-[12px] overflow-hidden border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] transition-colors group/cover"
+                className="relative w-full h-[160px] rounded-[12px] overflow-hidden border-2 border-dashed border-[#d8d3c8] hover:border-[#0f0f0d] transition-colors group/cover"
+                style={{ background: C.cream }}
               >
                 <img src={coverImg} alt="Cover preview" className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium text-white">{coverUploading ? "Uploading…" : "Click to replace"}</span>
+                  <span style={{ fontFamily: sans }} className="text-[12px] font-medium text-white">{coverUploading ? "Uploading…" : "Click to replace"}</span>
                 </div>
               </button>
               <input
@@ -480,143 +472,120 @@ export function HeroSection() {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCoverImagePick(f); e.currentTarget.value = ""; }}
               />
             </div>
-
-            {/* Form fields */}
             <div className="grid grid-cols-2 gap-4">
-              <label className="col-span-2 block">
-                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Project name</span>
-                <input
-                  type="text"
-                  value={coverDraft.name}
-                  onChange={(e) => setCoverDraft({ ...coverDraft, name: e.target.value })}
-                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
-                  placeholder="Serangoon Terrace"
-                />
-              </label>
-              <label className="block">
-                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Renovation cost</span>
-                <input
-                  type="text"
-                  value={coverDraft.cost}
-                  onChange={(e) => setCoverDraft({ ...coverDraft, cost: e.target.value })}
-                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
-                  placeholder="$128,500"
-                />
-              </label>
-              <label className="block">
-                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Area size</span>
-                <input
-                  type="text"
-                  value={coverDraft.area}
-                  onChange={(e) => setCoverDraft({ ...coverDraft, area: e.target.value })}
-                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
-                  placeholder="145m²"
-                />
-              </label>
-              <label className="block">
-                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Year completed</span>
-                <input
-                  type="text"
-                  value={coverDraft.year}
-                  onChange={(e) => setCoverDraft({ ...coverDraft, year: e.target.value })}
-                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
-                  placeholder="2024"
-                />
-              </label>
-              <label className="block">
-                <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">Interior style</span>
-                <input
-                  type="text"
-                  value={coverDraft.style}
-                  onChange={(e) => setCoverDraft({ ...coverDraft, style: e.target.value })}
-                  className="mt-1 w-full h-[44px] bg-white border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
-                  placeholder="Modern Contemporary"
-                />
-              </label>
+              {[
+                { label: "Project name", key: "name" as const, span: 2, ph: "Serangoon Terrace" },
+                { label: "Renovation cost", key: "cost" as const, span: 1, ph: "$128,500" },
+                { label: "Area size", key: "area" as const, span: 1, ph: "145m²" },
+                { label: "Year completed", key: "year" as const, span: 1, ph: "2024" },
+                { label: "Interior style", key: "style" as const, span: 1, ph: "Modern Contemporary" },
+              ].map((f) => (
+                <label key={f.key} className={`${f.span === 2 ? "col-span-2" : ""} block`}>
+                  <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[11px] font-semibold uppercase tracking-[0.12em]">{f.label}</span>
+                  <input
+                    type="text"
+                    value={coverDraft[f.key]}
+                    onChange={(e) => setCoverDraft({ ...coverDraft, [f.key]: e.target.value })}
+                    className="mt-1 w-full h-[44px] border border-[#d8d3c8] rounded-[10px] px-3 text-[14px] focus:outline-none focus:border-[#0f0f0d] transition-colors"
+                    style={{ fontFamily: sans, color: C.black, background: C.cream }}
+                    placeholder={f.ph}
+                  />
+                </label>
+              ))}
             </div>
           </div>
         </div>
       )}
-
-      {/* Quote Card - desktop right */}
-      <div className="hidden lg:block absolute right-6 top-[340px] w-[400px] z-10">
-        <QuoteCard />
-      </div>
-
-      {/* Profile info row */}
-      <div className={`relative ${coverEditing ? "mt-6" : "mt-[-50px] md:mt-[-80px]"} pl-4 md:pl-8 flex items-start gap-5 md:gap-7`}>
-        {/* Logo */}
-        <div className="relative bg-black rounded-full size-[90px] md:size-[160px] border-[3px] md:border-4 border-white shadow-lg shrink-0 overflow-hidden flex items-center justify-center z-[1]">
-          <EditableImage src={logoImg} alt={companyName} path="images.logo" className="w-[90%] h-[90%] object-cover rounded-full" />
-        </div>
-
-        {/* Name + info - desktop */}
-        <div className="hidden md:block pt-[90px] lg:max-w-[520px]">
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="font-['EB_Garamond',Georgia,serif] font-normal text-[24px] text-[#0f0f0d]">
-              <EditableText value={companyName} path="name" placeholder="Studio name" />
-            </h1>
-            {isVerified && (
-              <div className="bg-[#0f0f0d] rounded-full size-[16px] flex items-center justify-center">
-                <svg className="size-[10px]" viewBox="0 0 10 7.5" fill="none">
-                  <path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-                </svg>
-              </div>
-            )}
-          </div>
-          <p className="font-['DM_Sans',sans-serif] text-[16px] text-[#6b6860] leading-[24px] mb-2">
-            <EditableText value={taglineText} path="tagline" placeholder="Tagline" multiline />
-          </p>
-          <div className="flex items-center gap-4 text-[14px] text-[#6b6860] font-['DM_Sans',sans-serif]">
-            <span className="flex items-center gap-1.5">
-              <span className="bg-[#00c950] rounded-full size-2 inline-block" />
-              <EditableText value={availText} path="availability" placeholder="Availability" />
-            </span>
-            <span>&bull;</span>
-            <span><EditableText value={locText} path="location" placeholder="Location" /></span>
-          </div>
-        </div>
-      </div>
-
-      {/* Name + info - mobile */}
-      <div className="md:hidden px-2 mt-3">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#0f0f0d]">
-            <EditableText value={companyName} path="name" placeholder="Studio name" />
-          </h1>
-          {isVerified && (
-            <div className="bg-[#0f0f0d] rounded-full size-[14px] flex items-center justify-center">
-              <svg className="size-[8px]" viewBox="0 0 10 7.5" fill="none">
-                <path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-            </div>
-          )}
-        </div>
-        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[22px] mb-2">
-          <EditableText value={taglineText} path="tagline" placeholder="Tagline" multiline />
-        </p>
-        <div className="flex items-center gap-3 text-[13px] text-[#6b6860] font-['DM_Sans',sans-serif]">
-          <span className="flex items-center gap-1.5">
-            <span className="bg-[#00c950] rounded-full size-2 inline-block" />
-            <EditableText value={availText} path="availability" placeholder="Availability" />
-          </span>
-          <span>&bull;</span>
-          <span><EditableText value={locText} path="location" placeholder="Location" /></span>
-        </div>
-      </div>
     </section>
   );
 }
 
-/* ─── QUOTE CARD ─── */
-function QuoteCard() {
+/* ─── STUDIO INFO (logo + name + rating + location + availability) ───
+ * Lives in its own component so the public/editor pages can render it
+ * side-by-side with the QuoteCard form below the cover banner. */
+export function StudioInfo() {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const p = ctx?.profile;
+  const logoImg = p?.images?.logo ? resolveImg(p.images.logo) : PLACEHOLDER_LOGO;
+  const companyName = p?.name || "Input Interior Designer name";
+  const taglineText = p?.tagline || "Add your tagline";
+  const availText = p?.availability || "";
+  const locText = p?.location || "Singapore Based";
+  const isVerified = p?.verified ?? false;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="relative bg-black rounded-full size-[100px] md:size-[128px] border-[3px] border-[#d8d3c8] shrink-0 overflow-hidden flex items-center justify-center mb-4">
+        <EditableImage src={logoImg} alt={companyName} path="images.logo" className="w-[90%] h-[90%] object-cover rounded-full" />
+      </div>
+
+      {/* Name */}
+      <h1 style={{ fontFamily: serif, color: C.black, fontSize: "clamp(28px, 3.5vw, 42px)" }} className="font-normal leading-tight mb-2">
+        <EditableText value={companyName} path="name" placeholder="Studio name" />
+        {isVerified && (
+          <span className="inline-flex items-center justify-center bg-[#16a34a] rounded-full size-[20px] ml-2 align-middle">
+            <svg className="size-[12px]" viewBox="0 0 10 7.5" fill="none">
+              <path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+            </svg>
+          </span>
+        )}
+      </h1>
+
+      {/* Tagline */}
+      <p style={{ fontFamily: sans, color: C.gray }} className="text-[15px] md:text-[17px] leading-[1.5] mb-4">
+        <EditableText value={taglineText} path="tagline" placeholder="Tagline" multiline />
+      </p>
+
+      {/* Location + Availability */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2" style={{ fontFamily: sans }}>
+        {(availText || editCtx) && (
+          <span className="flex items-center gap-1.5 text-[14px]" style={{ color: C.gray }}>
+            <span className="bg-[#00c950] rounded-full size-2 inline-block" />
+            <EditableText
+              value={availText}
+              path="availability"
+              placeholder="Available now"
+            />
+          </span>
+        )}
+        <span className="flex items-center gap-1.5 text-[14px]" style={{ color: C.grayLight }}>
+          <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+          <EditableText value={locText} path="location" placeholder="Location" />
+        </span>
+      </div>
+
+      {/* Key Metrics — 2x2 grid below location */}
+      <div className="mt-6">
+        <KeyMetrics cols={2} />
+      </div>
+    </div>
+  );
+}
+
+/* ─── QUOTE CARD (Full-width enquiry section) ─── */
+export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const slug = ctx?.profile?.slug || "";
+  const companyName = ctx?.profile?.name || "this designer";
+  const logoImg = ctx?.profile?.images?.logo ? resolveImg(ctx.profile.images.logo) : PLACEHOLDER_LOGO;
+  const rating = ctx?.profile?.stats?.rating || "4.9";
   const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [step, setStep] = useState<1 | 2>(1);
+
+  const goToStep2 = () => {
+    if (!form.name.trim() || !form.phone.trim()) {
+      setError("Please fill in your name and contact number.");
+      return;
+    }
+    setError("");
+    setStep(2);
+  };
 
   const handleSubmit = async () => {
     if (!form.name.trim() || !form.phone.trim() || !form.propertyType || !form.budget || !form.keyCollection) {
@@ -650,43 +619,37 @@ function QuoteCard() {
     setSubmitting(false);
   };
 
-  // Editor mode: show dummy placeholder form
+  const inputCls = `w-full border border-[${C.creamBorder}] rounded-[10px] px-4 h-[44px] text-[14px] outline-none focus:border-[${C.black}] transition-colors`;
+  const selectCls = `w-full border border-[${C.creamBorder}] rounded-[10px] px-4 h-[44px] text-[14px] outline-none focus:border-[${C.black}] transition-colors appearance-none`;
+
+  // Editor mode: show placeholder
   if (editCtx) {
     return (
-      <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
-        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-1">Get Your Free Quote</h2>
-        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] mb-5 leading-[22px]">
-          Speak with our designers within 24 hours. No hard sell, just honest advice.
-        </p>
-        <div className="space-y-4">
-          <div>
-            <div className="h-[14px] w-[80px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
-          </div>
-          <div>
-            <div className="h-[14px] w-[110px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="h-[14px] w-[80px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-              <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
-            </div>
-            <div>
-              <div className="h-[14px] w-[85px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-              <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
+      <div className="bg-[#fafaf8] rounded-[16px] border border-[#d8d3c8] p-8 md:p-12">
+        <TagLabel>GET A FREE QUOTE</TagLabel>
+        <h2 style={{ fontFamily: serif, color: C.black }} className="font-normal text-[24px] md:text-[28px] mt-3 mb-2">Start Your Renovation Journey</h2>
+        <p style={{ fontFamily: sans, color: C.gray }} className="text-[15px] mb-8">Form preview — this section is live on the public page.</p>
+        <div className={compact ? "" : "grid md:grid-cols-[1fr_300px] gap-8"}>
+          <div className="space-y-4">
+            {["Full Name", "Contact Number", "Property Type", "Budget Range", "Key Collection"].map((l) => (
+              <div key={l}>
+                <div className="h-[14px] w-[100px] rounded-[4px] mb-1.5" style={{ background: C.cream }} />
+                <div className="h-[48px] w-full rounded-[10px] border border-[#d8d3c8]" style={{ background: C.cream }} />
+              </div>
+            ))}
+            <div className="h-[52px] w-full rounded-[12px] flex items-center justify-center" style={{ background: C.black }}>
+              <span style={{ fontFamily: sans }} className="font-medium text-[14px] text-white">Get Free Quotes &rarr;</span>
             </div>
           </div>
-          <div>
-            <div className="h-[14px] w-[120px] bg-[#e8e4db] rounded-[4px] mb-1.5" />
-            <div className="h-[42px] w-full bg-[#e8e4db] border border-[#d8d3c8] rounded-[14px]" />
-          </div>
-          <div className="w-full bg-[#09090b] rounded-[14px] h-[44px] flex items-center justify-center">
-            <span className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-white tracking-[-0.35px]">Get Free Quotes &rarr;</span>
-          </div>
-          <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#ababab] text-center">
-            No spam. No obligation. 100% free consultation.
-          </p>
+          {!compact && (
+            <div className="hidden md:flex flex-col items-center justify-center p-6 rounded-[12px] border border-[#d8d3c8]" style={{ background: C.cream }}>
+              <div className="size-[56px] rounded-full bg-black overflow-hidden mb-3">
+                <img src={logoImg} alt="" className="w-full h-full object-cover" />
+              </div>
+              <p style={{ fontFamily: sans, color: C.black }} className="text-[14px] font-medium">{companyName}</p>
+              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] mt-1">Typically replies within 24h</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -694,85 +657,162 @@ function QuoteCard() {
 
   if (submitted) {
     return (
-      <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7 text-center">
-        <div className="w-14 h-14 bg-[#ECFDF5] rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <div className="bg-[#fafaf8] rounded-[16px] border border-[#d8d3c8] p-8 md:p-12 text-center">
+        <div className="w-16 h-16 bg-[#ECFDF5] rounded-full flex items-center justify-center mx-auto mb-5">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-2">Quote Request Sent!</h2>
-        <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] leading-[22px]">
-          Thank you, {form.name.split(" ")[0]}! The team will get back to you within 24 hours.
+        <h2 style={{ fontFamily: serif, color: C.black }} className="font-normal text-[24px] mb-2">Quote Request Sent!</h2>
+        <p style={{ fontFamily: sans, color: C.gray }} className="text-[16px] leading-[1.6]">
+          Thank you, {form.name.split(" ")[0]}! {companyName} will get back to you within 24 hours.
         </p>
       </div>
     );
   }
 
-  const inputCls = "w-full bg-[#fafaf8] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] text-[#09090b] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors";
-  const selectCls = "w-full bg-[#fafaf8] border border-[#d8d3c8] rounded-[14px] px-4 py-2.5 text-[14px] font-['DM_Sans',sans-serif] outline-none focus:border-[#0f0f0d] transition-colors appearance-none";
-
   return (
-    <div className="bg-white rounded-[12px] border border-[#d8d3c8] shadow-[0px_25px_35.9px_0px_rgba(0,0,0,0.07)] p-6 md:p-7">
-      <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[20px] text-[#09090b] mb-1">Get Your Free Quote</h2>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#747474] mb-5 leading-[22px]">
+    <div className="bg-[#fafaf8] rounded-[16px] border border-[#d8d3c8] p-5 md:p-6 lg:p-7 h-full flex flex-col">
+      <TagLabel>GET A FREE QUOTE</TagLabel>
+      <h2 style={{ fontFamily: serif, color: C.black }} className="font-normal text-[20px] md:text-[22px] mt-2 mb-1.5">Start Your Renovation Journey</h2>
+      <p style={{ fontFamily: sans, color: C.gray }} className="text-[14px] mb-4 leading-[1.55]">
         Speak with our designers within 24 hours. No hard sell, just honest advice.
       </p>
-      <div className="space-y-4">
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Full Name</label>
-          <input type="text" required placeholder="e.g. Jing Wei Tan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} />
+
+      {/* Step indicator */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="size-[24px] rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ fontFamily: sans, background: C.black, color: "white" }}>1</div>
+          <span style={{ fontFamily: sans, color: step === 1 ? C.black : C.grayLight }} className="text-[13px] font-medium">Your Info</span>
         </div>
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Contact Number</label>
-          <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+        <div className="flex-1 h-px" style={{ background: step === 2 ? C.black : C.creamBorder }} />
+        <div className="flex items-center gap-2">
+          <div className="size-[24px] rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ fontFamily: sans, background: step === 2 ? C.black : C.cream, color: step === 2 ? "white" : C.grayLight, border: step === 2 ? "none" : `1px solid ${C.creamBorder}` }}>2</div>
+          <span style={{ fontFamily: sans, color: step === 2 ? C.black : C.grayLight }} className="text-[13px] font-medium">Project</span>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Property Type</label>
-            <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ color: form.propertyType ? "#09090b" : "#99a1af" }}>
-              <option value="">Select</option>
-              <option value="HDB">HDB</option>
-              <option value="Condo">Condo</option>
-              <option value="Landed">Landed</option>
-              <option value="Commercial">Commercial</option>
-            </select>
-          </div>
-          <div>
-            <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Budget Range</label>
-            <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ color: form.budget ? "#09090b" : "#99a1af" }}>
-              <option value="">Select</option>
-              <option value="Below $30,000">Below $30k</option>
-              <option value="$30,000 – $50,000">$30k – $50k</option>
-              <option value="$50,000 – $80,000">$50k – $80k</option>
-              <option value="$80,000 – $120,000">$80k – $120k</option>
-              <option value="Above $120,000">Above $120k</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#09090b] block mb-1.5">Key Collection</label>
-          <select required value={form.keyCollection} onChange={e => setForm({ ...form, keyCollection: e.target.value })} className={selectCls} style={{ color: form.keyCollection ? "#09090b" : "#99a1af" }}>
-            <option value="">Select</option>
-            <option value="Keys Collected">Keys Collected</option>
-            <option value="Within 3 months">Within 3 months</option>
-            <option value="3–6 months">3–6 months</option>
-            <option value="6–12 months">6–12 months</option>
-            <option value="More than 12 months">More than 12 months</option>
-          </select>
-        </div>
-        {error && <p className="font-['DM_Sans',sans-serif] text-[13px] text-red-500">{error}</p>}
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="w-full bg-[#09090b] text-white font-['DM_Sans',sans-serif] font-semibold text-[14px] rounded-[14px] h-[44px] tracking-[-0.35px] hover:bg-[#1a1a1a] transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {submitting ? (
-            <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg>
+      </div>
+
+      <div className={compact ? "flex-1 flex flex-col" : "grid md:grid-cols-[1fr_280px] gap-8 lg:gap-12 flex-1"}>
+        {/* Left: Form — children distribute evenly so the column fills the card */}
+        <div className="flex-1 flex flex-col justify-between gap-3">
+          {step === 1 ? (
+            <>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Full Name</label>
+                <input type="text" required placeholder="e.g. Jing Wei Tan" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} style={{ fontFamily: sans, color: C.black, background: C.cream }} />
+              </div>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Contact Number</label>
+                <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} style={{ fontFamily: sans, color: C.black, background: C.cream }} />
+              </div>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Email</label>
+                <input type="email" placeholder="you@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className={inputCls} style={{ fontFamily: sans, color: C.black, background: C.cream }} />
+              </div>
+              {error && <p style={{ fontFamily: sans }} className="text-[13px] text-red-500">{error}</p>}
+              <button
+                onClick={goToStep2}
+                className="w-full text-white font-medium text-[14px] rounded-[12px] h-[48px] hover:opacity-85 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                style={{ fontFamily: sans, background: C.black }}
+              >
+                Next <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.33 8H12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" /><path d="M8 3.33L12.67 8L8 12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" /></svg>
+              </button>
+            </>
           ) : (
-            <>Get Free Quotes &rarr;</>
+            <>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Property Type</label>
+                <select required value={form.propertyType} onChange={e => setForm({ ...form, propertyType: e.target.value })} className={selectCls} style={{ fontFamily: sans, color: form.propertyType ? C.black : C.grayLight, background: C.cream }}>
+                  <option value="">Select</option>
+                  <option value="HDB">HDB</option>
+                  <option value="Condo">Condo</option>
+                  <option value="Landed">Landed</option>
+                  <option value="Commercial">Commercial</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Budget Range</label>
+                <select required value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })} className={selectCls} style={{ fontFamily: sans, color: form.budget ? C.black : C.grayLight, background: C.cream }}>
+                  <option value="">Select</option>
+                  <option value="Below $30,000">Below $30k</option>
+                  <option value="$30,000 – $50,000">$30k – $50k</option>
+                  <option value="$50,000 – $80,000">$50k – $80k</option>
+                  <option value="$80,000 – $120,000">$80k – $120k</option>
+                  <option value="Above $120,000">Above $120k</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Key Collection</label>
+                <select required value={form.keyCollection} onChange={e => setForm({ ...form, keyCollection: e.target.value })} className={selectCls} style={{ fontFamily: sans, color: form.keyCollection ? C.black : C.grayLight, background: C.cream }}>
+                  <option value="">Select</option>
+                  <option value="Keys Collected">Keys Collected</option>
+                  <option value="Within 3 months">Within 3 months</option>
+                  <option value="3–6 months">3–6 months</option>
+                  <option value="6–12 months">6–12 months</option>
+                  <option value="More than 12 months">More than 12 months</option>
+                </select>
+              </div>
+              {error && <p style={{ fontFamily: sans }} className="text-[13px] text-red-500">{error}</p>}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setError(""); setStep(1); }}
+                  className="font-medium text-[14px] rounded-[12px] h-[48px] px-5 hover:opacity-85 active:scale-[0.98] transition-all cursor-pointer border"
+                  style={{ fontFamily: sans, color: C.black, background: C.cream, borderColor: C.creamBorder }}
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="flex-1 text-white font-medium text-[14px] rounded-[12px] h-[48px] hover:opacity-85 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  style={{ fontFamily: sans, background: C.black }}
+                >
+                  {submitting ? (
+                    <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" strokeLinecap="round"/></svg>
+                  ) : (
+                    <>Get Free Quotes <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.33 8H12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" /><path d="M8 3.33L12.67 8L8 12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" /></svg></>
+                  )}
+                </button>
+              </div>
+            </>
           )}
-        </button>
-        <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#ababab] text-center">
-          No spam. No obligation. 100% free consultation.
-        </p>
+          <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] text-center">
+            No spam. No obligation. 100% free consultation.
+          </p>
+        </div>
+
+        {/* Right: Designer mini card (hidden in compact mode — used when QuoteCard
+            sits side-by-side with the StudioInfo column under the hero banner) */}
+        {!compact && (
+          <div className="hidden md:flex flex-col items-center justify-start pt-6">
+            <div className="flex flex-col items-center p-6 rounded-[12px] border border-[#d8d3c8] w-full" style={{ background: C.cream }}>
+              <div className="size-[64px] rounded-full bg-black overflow-hidden mb-3">
+                <img src={logoImg} alt={companyName} className="w-full h-full object-cover" />
+              </div>
+              <p style={{ fontFamily: sans, color: C.black }} className="text-[15px] font-medium text-center">{companyName}</p>
+              <div className="flex items-center gap-1 mt-1.5">
+                <svg className="size-[13px]" viewBox="0 0 24 24" fill="#FFA929"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                <span style={{ fontFamily: sans, color: C.black }} className="text-[13px] font-medium">{rating}</span>
+              </div>
+              <div className="mt-4 pt-4 border-t border-[#d8d3c8] w-full text-center">
+                <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px]">Typically replies within</p>
+                <p style={{ fontFamily: sans, color: C.black }} className="text-[14px] font-medium mt-0.5">24 hours</p>
+              </div>
+            </div>
+
+            {/* Trust badges */}
+            <div className="mt-4 space-y-2 w-full">
+              {[
+                { icon: "✓", text: "Free consultation" },
+                { icon: "✓", text: "No obligation quote" },
+                { icon: "✓", text: "Licensed & insured" },
+              ].map((b) => (
+                <div key={b.text} className="flex items-center gap-2">
+                  <span className="size-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-[#16a34a]" style={{ background: "rgba(22,163,74,0.1)" }}>{b.icon}</span>
+                  <span style={{ fontFamily: sans, color: C.gray }} className="text-[13px]">{b.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -819,11 +859,11 @@ export function StatsRow() {
   return (
     <div className="grid grid-cols-3 gap-2.5">
       {stats.map((s) => (
-        <div key={s.label} className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] flex items-center gap-2.5 px-4 py-3 min-w-0">
+        <div key={s.label} className="bg-[#f5f1e8] border border-[#d8d3c8] rounded-[12px] flex items-center gap-2.5 px-4 py-3 min-w-0">
           <div className="shrink-0">{s.icon}</div>
           <div>
-            <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#0f0f0d] leading-tight">{s.label}</p>
-            <p className="font-['DM_Sans',sans-serif] text-[11px] md:text-[12px] text-[#6b6860] tracking-[0.15px]">{s.sub}</p>
+            <p style={{fontFamily: sans}} className="font-semibold text-[14px] md:text-[15px] text-[#0f0f0d] leading-tight">{s.label}</p>
+            <p style={{fontFamily: sans}} className="text-[11px] md:text-[12px] text-[#9a9790] tracking-[0.15px]">{s.sub}</p>
           </div>
         </div>
       ))}
@@ -946,7 +986,7 @@ export function TeamAvatars() {
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleRemoveMember(idx); }}
-                className="absolute -top-1 -right-1 size-[22px] rounded-full bg-white border border-[#d8d3c8] shadow-sm flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] z-10"
+                className="absolute -top-1 -right-1 size-[22px] rounded-full bg-white border border-[#e4e4e7] shadow-sm flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] z-10"
                 title="Remove"
               >
                 <svg className="size-[10px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -964,17 +1004,17 @@ export function TeamAvatars() {
               onClick={() => addMemberFileRef.current?.click()}
               title="Add a team member"
             >
-              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#d8d3c8] bg-[#f0ede6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
+              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#e4e4e7] bg-[#f6f6f6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
                 {uploadingMember ? (
-                  <svg className="size-5 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                  <svg className="size-5 animate-spin text-[#71717a]" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                     <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                   </svg>
                 ) : (
-                  <svg className="size-7 text-[#6b6860]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                  <svg className="size-7 text-[#71717a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 )}
               </div>
-              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Add member</span>
+              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a]">Add member</span>
               <input
                 ref={addMemberFileRef}
                 type="file"
@@ -990,21 +1030,21 @@ export function TeamAvatars() {
               onClick={() => setStoryModalOpen(true)}
               title="Upload a story / reel"
             >
-              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#d8d3c8] bg-[#f0ede6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
+              <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#e4e4e7] bg-[#f6f6f6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
                 {uploadingStory ? (
-                  <svg className="size-5 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+                  <svg className="size-5 animate-spin text-[#71717a]" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                     <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                   </svg>
                 ) : (
-                  <svg className="size-7 text-[#6b6860]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="size-7 text-[#71717a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="3" />
                     <circle cx="12" cy="12" r="3" />
                     <path d="M16 3v6M8 3v6" />
                   </svg>
                 )}
               </div>
-              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Add story</span>
+              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a]">Add story</span>
             </div>
           </>
         )}
@@ -1055,7 +1095,7 @@ export function TeamAvatars() {
               {editCtx ? (
                 <>
                   <input
-                    className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3 text-center bg-transparent border-b border-dashed border-[#d8d3c8] focus:border-[#0f0f0d] outline-none w-full transition-colors"
+                    className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] text-[#0f0f0d] mt-3 text-center bg-transparent border-b border-dashed border-[#e4e4e7] focus:border-[#0f0f0d] outline-none w-full transition-colors"
                     value={selectedMember.name}
                     placeholder="Name"
                     onChange={(e) => {
@@ -1069,7 +1109,7 @@ export function TeamAvatars() {
                     }}
                   />
                   <input
-                    className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5 text-center bg-transparent border-b border-dashed border-[#d8d3c8] focus:border-[#0f0f0d] outline-none w-full transition-colors"
+                    className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5 text-center bg-transparent border-b border-dashed border-[#e4e4e7] focus:border-[#0f0f0d] outline-none w-full transition-colors"
                     value={"role" in selectedMember ? selectedMember.role : ""}
                     placeholder="Role / Designation"
                     onChange={(e) => {
@@ -1089,32 +1129,32 @@ export function TeamAvatars() {
                   <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#0f0f0d] font-medium mt-0.5">{"role" in selectedMember ? selectedMember.role : ""}</p>
                 </>
               )}
-              <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860] mt-0.5">{"specialty" in selectedMember ? selectedMember.specialty : ""}</p>
+              <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a] mt-0.5">{"specialty" in selectedMember ? selectedMember.specialty : ""}</p>
 
               {/* Stats row */}
               <div className="flex justify-center gap-5 mt-4 w-full">
                 <div className="text-center flex-1">
                   <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"projects" in selectedMember ? selectedMember.projects : 0}</p>
-                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Projects</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Projects</p>
                 </div>
-                <div className="w-px bg-[#d8d3c8]" />
+                <div className="w-px bg-[#e4e4e7]" />
                 <div className="text-center flex-1">
                   <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"experience" in selectedMember ? selectedMember.experience : ""}</p>
-                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Experience</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Experience</p>
                 </div>
-                <div className="w-px bg-[#d8d3c8]" />
+                <div className="w-px bg-[#e4e4e7]" />
                 <div className="text-center flex-1">
                   <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">
                     <svg className="inline size-[13px] text-[#0f0f0d] mr-0.5 -mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                     4.9
                   </p>
-                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#6b6860]">Rating</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Rating</p>
                 </div>
               </div>
             </div>
 
             {/* Divider */}
-            <div className="h-px bg-[#d8d3c8] mx-4" />
+            <div className="h-px bg-[#e4e4e7] mx-4" />
 
             {/* Designs grid */}
             {"designs" in selectedMember && selectedMember.designs && (
@@ -1315,30 +1355,27 @@ export function BioText() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const bio = ctx?.profile?.bio;
-  // In edit mode, always render an EditableText so the field is clickable even if currently empty.
-  if (editCtx) {
-    return (
-      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
-        <EditableText
-          value={bio || ""}
-          path="bio"
-          placeholder="Add a short description about your studio."
-          multiline
-        />
-      </p>
-    );
-  }
-  if (bio) {
-    return (
-      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
-        {bio}
-      </p>
-    );
-  }
+  const name = ctx?.profile?.name || "Us";
+
+  const bioContent = editCtx ? (
+    <EditableText
+      value={bio || ""}
+      path="bio"
+      placeholder="Add a short description about your studio."
+      multiline
+    />
+  ) : bio ? bio : "Add a short description about your studio.";
+
   return (
-    <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] tracking-[-0.09px]">
-      Add a short description about your studio.
-    </p>
+    <FadeIn>
+      <TagLabel>ABOUT US</TagLabel>
+      <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-4">
+        Why Choose {name}?
+      </h2>
+      <p className="text-[16px] md:text-[18px] leading-[1.8] max-w-[720px]" style={{ fontFamily: sans, color: C.gray }}>
+        {bioContent}
+      </p>
+    </FadeIn>
   );
 }
 
@@ -1365,23 +1402,91 @@ export function TrustedSince() {
     <svg key="award" className="size-[18px] shrink-0" viewBox="0 0 18 18" fill="none"><path d="M9 1L11.47 6.01L17 6.82L13 10.72L13.94 16.24L9 13.65L4.06 16.24L5 10.72L1 6.82L6.53 6.01L9 1Z" stroke="#FE9A00" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" /></svg>,
   ];
 
+  // Build timeline items from credentials + badges
+  const timelineItems: { icon: React.ReactNode; title: string; sub: string; color: string }[] = [];
+  const savedCreds = ctx?.profile?.credentials;
+
+  // Official HDB & BCA brand marks — bundled assets imported at the top of the
+  // file (`imgHdb` / `imgBca`) so they ship with the build and resolve through
+  // Vite, no /public path required.
+  const HdbLogo = (
+    <img
+      src={imgHdb}
+      alt="Housing & Development Board"
+      className="shrink-0 object-contain"
+      style={{ height: 40, width: "auto", maxWidth: 110 }}
+    />
+  );
+
+  const BcaLogo = (
+    <img
+      src={imgBca}
+      alt="Building and Construction Authority"
+      className="shrink-0 object-contain"
+      style={{ height: 40, width: "auto", maxWidth: 110 }}
+    />
+  );
+
+  if (savedCreds?.hdb?.active) {
+    timelineItems.push({
+      icon: HdbLogo,
+      title: savedCreds.hdb.title || "HDB Registered Contractor",
+      sub: [savedCreds.hdb.firm, savedCreds.hdb.reg].filter(Boolean).join(" · "),
+      color: "#c8102e",
+    });
+  }
+  if (savedCreds?.bca?.active) {
+    timelineItems.push({
+      icon: BcaLogo,
+      title: savedCreds.bca.title || "BCA Licensed Builder",
+      sub: [savedCreds.bca.firm, savedCreds.bca.reg].filter(Boolean).join(" · "),
+      color: "#003a70",
+    });
+  }
+  if (savedCreds?.landedEligible) {
+    timelineItems.push({
+      icon: <svg className="size-[16px]" viewBox="0 0 24 24" fill="none" stroke="#FFA929" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>,
+      title: "Landed Home Eligible",
+      sub: "Certified for full A&A works on landed properties",
+      color: "#FFA929",
+    });
+  }
+  badges.forEach((badge: string, i: number) => {
+    timelineItems.push({
+      icon: badgeIcons[i % badgeIcons.length],
+      title: badge,
+      sub: "",
+      color: "#0f0f0d",
+    });
+  });
+
   return (
-    <div>
-      <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-3">{title}</h2>
-      <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] leading-[26px] mb-4">
-        {desc}
-      </p>
-      {badges.length > 0 && (
-        <div className="flex flex-wrap gap-x-6 gap-y-2 mb-4">
-          {badges.map((badge: string, i: number) => (
-            <span key={badge} className="flex items-center gap-2 font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#364153]">
-              {badgeIcons[i % badgeIcons.length]}
-              {badge}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+    <section className="py-[40px] md:py-[64px]">
+      <FadeIn>
+        <TagLabel>TRUST &amp; CREDENTIALS</TagLabel>
+        <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-3">{title}</h2>
+        <p style={{ fontFamily: sans, color: C.gray }} className="text-[16px] md:text-[18px] leading-[1.7] mb-6">
+          {desc}
+        </p>
+
+        {/* Credentials list */}
+        {timelineItems.length > 0 && (
+          <div className="space-y-4">
+            {timelineItems.map((item, i) => (
+              <FadeIn key={i} delay={i * 0.08}>
+                <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-4 md:p-5 flex items-center gap-4">
+                  <div className="shrink-0">{item.icon}</div>
+                  <div className="min-w-0">
+                    <p style={{ fontFamily: sans, color: C.black }} className="font-medium text-[14px] md:text-[15px]">{item.title}</p>
+                    {item.sub && <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[13px] mt-0.5">{item.sub}</p>}
+                  </div>
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+        )}
+      </FadeIn>
+    </section>
   );
 }
 
@@ -1400,7 +1505,7 @@ export function BtoPackageCta() {
   ];
 
   return (
-    <div className="bg-gradient-to-r from-[#eff6ff] to-[#eef2ff] border border-[#dbeafe] rounded-[14px] px-6 md:px-16 py-6 md:py-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="bg-gradient-to-r from-[#eff6ff] to-[#eef2ff] border border-[#dbeafe] rounded-[12px] px-6 md:px-16 py-6 md:py-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
       <div className="flex items-start gap-4">
         <div className="bg-white rounded-full size-[48px] shadow-sm shrink-0 flex items-center justify-center">
           <svg className="size-[24px]" viewBox="0 0 20 22" fill="none">
@@ -1409,7 +1514,7 @@ export function BtoPackageCta() {
         </div>
         <div>
           <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[17px] md:text-[18px] text-[#0f0f0d] mb-1">{btoTitle}</h3>
-          <p className="font-['DM_Sans',sans-serif] text-[13px] md:text-[14px] text-[#6b6860] leading-[20px]">
+          <p className="font-['DM_Sans',sans-serif] text-[13px] md:text-[14px] text-[#71717a] leading-[20px]">
             {btoDesc}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
@@ -1419,7 +1524,7 @@ export function BtoPackageCta() {
           </div>
         </div>
       </div>
-      <button className="bg-[#0f0f0d] text-white font-['DM_Sans',sans-serif] font-medium text-[14px] rounded-[10px] shadow-md px-5 py-2.5 whitespace-nowrap hover:bg-[#2b2b2b] transition-colors cursor-pointer flex items-center gap-2">
+      <button className="bg-[#0f0f0d] text-white font-medium text-[14px] rounded-[12px] h-[52px] px-8 whitespace-nowrap hover:opacity-85 active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2" style={{fontFamily: sans}}>
         View Packages
         <svg className="size-[16px]" viewBox="0 0 16 16" fill="none">
           <path d="M3.33 8H12.67" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33" />
@@ -1431,25 +1536,49 @@ export function BtoPackageCta() {
 }
 
 /* ─── PROJECTS SECTION ─── */
-function ProjectCard({ p, idx, slug, editCtx, onRemove }: { p: any; idx: number; slug: string; editCtx: any; onRemove?: (i: number) => void }) {
+function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx: number; slug: string; editCtx: any; onRemove?: (i: number) => void; onEdit?: (i: number) => void }) {
+  // In edit mode with an onEdit handler, the card opens the editor modal instead
+  // of navigating to the project detail page.
+  const overlay = editCtx && onEdit ? (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(idx); }}
+      className="absolute inset-0 z-[1] cursor-pointer bg-transparent border-0 p-0"
+      title="Edit project"
+      aria-label="Edit project"
+    />
+  ) : (
+    <Link to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 z-[1]" />
+  );
+
   return (
-    <div className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] group cursor-pointer">
-      <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-      <Link to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 bg-gradient-to-t from-black/42 to-transparent to-[55%] z-[1]" />
-      <div className="absolute bottom-4 left-5">
-        <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
-        <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
+    <div className="relative group isolate h-[280px] md:h-[400px] cursor-pointer">
+      {/* Ambient glow on hover (desktop only) */}
+      <div className="absolute -inset-6 opacity-0 group-hover:opacity-40 transition-opacity duration-700 hidden md:block" style={{ filter: "blur(60px)", transform: "scale(1.1)" }}>
+        <img src={resolveImg(p.img)} alt="" className="w-full h-full object-cover saturate-150 brightness-110" />
       </div>
-      {editCtx && onRemove && (
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(idx); }}
-          className="absolute top-3 right-3 z-10 size-[28px] rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center text-[#0f0f0d] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-          title="Remove project"
-        >
-          <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-        </button>
-      )}
+      {/* Card inner */}
+      <div className="relative z-10 bg-[#0f0f0d] rounded-[16px] overflow-hidden h-full">
+        {/* Image layer — full color, subtle zoom on hover */}
+        <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        {/* Gradient overlay for caption legibility */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
+        {overlay}
+        <div className="absolute bottom-4 left-5 z-[2] pointer-events-none">
+          <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
+          <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
+        </div>
+        {editCtx && onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(idx); }}
+            className="absolute top-3 right-3 z-10 size-[28px] rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center text-[#0f0f0d] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+            title="Remove project"
+          >
+            <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1479,20 +1608,20 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-start justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative mt-[3vh] mb-[3vh] w-[95vw] max-w-[1100px] max-h-[94vh] bg-white rounded-[16px] shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative mt-[3vh] mb-[3vh] w-[95vw] max-w-[1100px] max-h-[94vh] bg-white rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-[#e8e4db]">
+        <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-[#e4e4e7]">
           <div>
-            <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[26px] text-[#0f0f0d] tracking-[-0.5px]">All Projects</h2>
-            <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] mt-0.5">{projs.length} project{projs.length !== 1 ? "s" : ""}</p>
+            <h2 className="font-['EB_Garamond',Georgia,serif] font-semibold text-[24px] md:text-[28px] text-[#0f0f0d] tracking-[-1.2px]">All Projects</h2>
+            <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#71717a] mt-0.5">{projs.length} project{projs.length !== 1 ? "s" : ""}</p>
           </div>
-          <button onClick={onClose} className="size-[36px] rounded-full bg-[#f5f3ef] hover:bg-[#e8e4db] flex items-center justify-center transition-colors cursor-pointer" title="Close">
+          <button onClick={onClose} className="size-[36px] rounded-full bg-[#f6f6f6] hover:bg-[#f6f6f6] flex items-center justify-center transition-colors cursor-pointer" title="Close">
             <svg className="size-[18px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Search & Sort */}
-        <div className="flex items-center gap-3 px-6 md:px-8 py-4 border-b border-[#f0ede6]">
+        <div className="flex items-center gap-3 px-6 md:px-8 py-4 border-b border-[#e4e4e7]">
           <div className="relative flex-1">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 size-[16px] text-[#99a1af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
             <input
@@ -1500,13 +1629,13 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects..."
-              className="w-full h-[40px] pl-10 pr-4 bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] text-[14px] font-['DM_Sans',sans-serif] text-[#0f0f0d] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors"
+              className="w-full h-[40px] pl-10 pr-4 bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] text-[14px] font-['DM_Sans',sans-serif] text-[#0f0f0d] placeholder:text-[#99a1af] outline-none focus:border-[#0f0f0d] transition-colors"
             />
           </div>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as any)}
-            className="h-[40px] px-3 bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] text-[13px] font-['DM_Sans',sans-serif] text-[#0f0f0d] outline-none focus:border-[#0f0f0d] transition-colors appearance-none cursor-pointer pr-8"
+            className="h-[40px] px-3 bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] text-[13px] font-['DM_Sans',sans-serif] text-[#0f0f0d] outline-none focus:border-[#0f0f0d] transition-colors appearance-none cursor-pointer pr-8"
             style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236b6860' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
           >
             <option value="newest">Newest First</option>
@@ -1519,8 +1648,8 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
         <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <svg className="size-[48px] text-[#d8d3c8] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-              <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#6b6860]">No projects found</p>
+              <svg className="size-[48px] text-[#e4e4e7] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+              <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#71717a]">No projects found</p>
               <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] mt-1">Try a different search term</p>
             </div>
           ) : (
@@ -1530,7 +1659,7 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   key={`${p.name}-${idx}`}
                   to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`}
                   onClick={onClose}
-                  className="relative rounded-[12px] overflow-hidden h-[220px] group cursor-pointer block"
+                  className="relative rounded-[20px] overflow-hidden h-[220px] group cursor-pointer block"
                 >
                   <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
@@ -1581,41 +1710,61 @@ export function ProjectsSection() {
     await editCtx.saveCollection("projects", serializeProjects(projs.filter((_: any, i: number) => i !== idx)));
   };
 
-  // On live page show only first 2; editor shows all
-  const visibleProjs = editCtx ? projs : projs.slice(0, 2);
-  const hasMore = !editCtx && projs.length > 2;
+  const VISIBLE_COUNT = 6;
+  const hasMore = !editCtx && projs.length > VISIBLE_COUNT;
+  const visibleProjs = !editCtx ? projs.slice(0, VISIBLE_COUNT) : projs;
 
   return (
-    <section>
-      <div className="mb-4">
-        <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px]">Projects</h2>
-        <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Recent completed renovations</p>
+    <section className="py-[40px] md:py-[64px]">
+      <FadeIn>
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <TagLabel>OUR PROJECTS</TagLabel>
+          <h2 style={{fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black}} className="font-normal tracking-[-0.03em] mt-3 mb-1">Featured Projects</h2>
+          <p style={{fontFamily: sans, color: C.gray}} className="text-[16px] md:text-[18px]">Recent completed renovations</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {visibleProjs.map((p: any, idx: number) => (
-          <ProjectCard key={`${p.name}-${idx}`} p={p} idx={idx} slug={slug} editCtx={editCtx} onRemove={editCtx ? handleRemoveProject : undefined} />
-        ))}
+      </FadeIn>
 
-        {/* Add project tile (edit mode only) */}
-        {editCtx && (
+      {/* Horizontal carousel */}
+      {editCtx ? (
+        /* Editor: keep grid for easier editing */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {projs.map((p: any, idx: number) => (
+            <ProjectCard
+              key={`${p.name}-${idx}`}
+              p={p}
+              idx={idx}
+              slug={slug}
+              editCtx={editCtx}
+              onRemove={handleRemoveProject}
+              onEdit={editCtx.openEditProjectModal}
+            />
+          ))}
           <button
             type="button"
-            onClick={() => addProjectFileRef.current?.click()}
-            className="relative rounded-[12px] overflow-hidden h-[280px] md:h-[507px] border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] hover:bg-white transition-colors flex flex-col items-center justify-center gap-3 group/add"
+            onClick={() => {
+              if (editCtx.openAddProjectModal) {
+                editCtx.openAddProjectModal();
+              } else {
+                addProjectFileRef.current?.click();
+              }
+            }}
+            className="relative rounded-[16px] overflow-hidden h-[280px] md:h-[400px] border-2 border-dashed border-[#d8d3c8] hover:border-[#0f0f0d] transition-colors flex flex-col items-center justify-center gap-3 group/add"
+            style={{ background: C.cream }}
             title="Add a project"
           >
             {uploadingProject ? (
-              <svg className="size-9 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
+              <svg className="size-9 animate-spin" style={{ color: C.grayLight }} viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                 <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
               </svg>
             ) : (
               <>
-                <div className="size-[64px] rounded-full border-2 border-dashed border-[#d8d3c8] bg-white flex items-center justify-center group-hover/add:border-[#0f0f0d] transition-colors">
-                  <svg className="size-8 text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                <div className="size-[64px] rounded-full border-2 border-dashed border-[#d8d3c8] flex items-center justify-center group-hover/add:border-[#0f0f0d] transition-colors" style={{ background: C.white }}>
+                  <svg className="size-8 group-hover/add:text-[#0f0f0d] transition-colors" style={{ color: C.grayLight }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 </div>
-                <span className="font-['DM_Sans',sans-serif] text-[14px] font-medium text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors">Add a project</span>
-                <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#99a1af]">Click to upload an image</span>
+                <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[14px] font-medium group-hover/add:text-[#0f0f0d] transition-colors">Add a project</span>
               </>
             )}
             <input
@@ -1626,15 +1775,22 @@ export function ProjectsSection() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddProject(f); e.currentTarget.value = ""; }}
             />
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+          {visibleProjs.map((p: any, idx: number) => (
+            <ProjectCard key={`${p.name}-${idx}`} p={p} idx={idx} slug={slug} editCtx={editCtx} />
+          ))}
+        </div>
+      )}
 
-      {/* View All Projects button (live page only, when more than 2) */}
+      {/* View All Projects */}
       {hasMore && (
-        <div className="mt-5 flex justify-center">
+        <div className="mt-8 flex justify-center">
           <button
             onClick={() => setShowAll(true)}
-            className="font-['DM_Sans',sans-serif] font-semibold text-[14px] text-[#0f0f0d] bg-white border border-[#d8d3c8] rounded-[12px] px-8 h-[44px] hover:bg-[#f5f3ef] transition-colors cursor-pointer flex items-center gap-2"
+            className="text-white rounded-[12px] h-[52px] px-8 text-[14px] font-medium flex items-center gap-2 hover:opacity-85 active:scale-[0.98] transition-all cursor-pointer"
+            style={{ fontFamily: sans, background: C.black }}
           >
             View All Projects
             <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
@@ -1642,7 +1798,6 @@ export function ProjectsSection() {
         </div>
       )}
 
-      {/* All projects modal */}
       {showAll && <AllProjectsModal projs={projs} slug={slug} onClose={() => setShowAll(false)} />}
     </section>
   );
@@ -1669,7 +1824,7 @@ function BusinessInfoCell({ value, placeholder, onSave }: { value: string; place
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); if (e.key === "Escape") { setDraft(value); setDirty(false); (e.currentTarget as HTMLInputElement).blur(); } }}
       placeholder={placeholder}
-      className="bg-transparent border-0 rounded-[6px] px-2 py-1 outline-none w-full text-[14px] md:text-[15px] font-medium text-[#0f0f0d] focus:bg-white focus:ring-1 focus:ring-[#d8d3c8] transition-colors placeholder:text-[#a8a8a8] placeholder:font-normal"
+      className="bg-transparent border-0 rounded-[6px] px-2 py-1 outline-none w-full text-[14px] md:text-[15px] font-medium text-[#0f0f0d] focus:bg-white focus:ring-1 focus:ring-[#e4e4e7] transition-colors placeholder:text-[#a8a8a8] placeholder:font-normal"
     />
   );
 }
@@ -1775,12 +1930,13 @@ export function TrustCredentials() {
   if (!editCtx && !hasActiveCredentials && !hasBusinessInfo) return null;
 
   return (
-    <section className="bg-[#fafaf8] py-10 md:py-14 px-4 md:px-8">
-      <div className="max-w-[1293px] mx-auto">
-        <div className="mb-5">
-          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px]">Trust &amp; Credentials</h2>
-          <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860]">Verified licences and registrations</p>
-        </div>
+    <section className="py-[40px] md:py-[64px] px-4 md:px-8">
+      <div className="max-w-[1280px] mx-auto">
+        <FadeIn>
+        <TagLabel>TRUST &amp; CREDENTIALS</TagLabel>
+        <h2 style={{fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black}} className="font-normal tracking-[-0.03em] mt-3 mb-2">Trust &amp; Credentials</h2>
+        <p style={{fontFamily: sans, color: C.gray}} className="text-[16px] md:text-[18px] mb-6">Verified licences and registrations</p>
+        </FadeIn>
 
         <div className={`grid grid-cols-1 ${!editCtx && !hasActiveCredentials ? "" : "lg:grid-cols-[1fr_1fr]"} gap-6 lg:gap-8`}>
           {/* Left column: Credential cards — hidden on live page when no active credentials */}
@@ -1790,7 +1946,7 @@ export function TrustCredentials() {
               <button
                 type="button"
                 onClick={() => setCredEditing(true)}
-                className="absolute -top-2 -right-2 z-10 flex items-center gap-1.5 bg-white hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] border border-[#d8d3c8] rounded-full px-3 py-1.5 shadow-sm transition-colors"
+                className="absolute -top-2 -right-2 z-10 flex items-center gap-1.5 bg-white hover:bg-[#0f0f0d] hover:text-white text-[#0f0f0d] border border-[#e4e4e7] rounded-full px-3 py-1.5 shadow-sm transition-colors"
                 title="Edit credentials"
               >
                 <svg className="size-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1804,7 +1960,7 @@ export function TrustCredentials() {
               { img: imgHdb, ...credentials.hdb },
               { img: imgBca, ...credentials.bca },
             ].filter((c) => c.active).map((c) => (
-              <div key={c.title} className="bg-white border border-[#d8d3c8] rounded-[12px] p-5 flex gap-4">
+              <div key={c.title} className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-5 flex gap-4">
                 <div className="bg-[#f8fafc] rounded-[12px] size-[69px] shrink-0 flex items-center justify-center">
                   <img src={resolveImg(c.img)} alt={c.title} className="h-[44px] w-[50px] object-contain" />
                 </div>
@@ -1813,7 +1969,7 @@ export function TrustCredentials() {
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[15px] md:text-[16px] text-[#0f0f0d] tracking-[-0.09px]">{c.title}</p>
                     <span className="bg-[rgba(22,163,74,0.08)] text-[#16a34a] font-['DM_Sans',sans-serif] font-medium text-[12px] px-2.5 py-0.5 rounded-full">Active</span>
                   </div>
-                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] tracking-[0.08px]">{c.firm} &middot; {c.reg}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#71717a] tracking-[0.08px]">{c.firm} &middot; {c.reg}</p>
                   <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] tracking-[0.08px] mt-1">{c.desc}</p>
                 </div>
               </div>
@@ -1828,15 +1984,15 @@ export function TrustCredentials() {
                 </svg>
                 <div>
                   <p className="font-['DM_Sans',sans-serif] font-semibold text-[14px] md:text-[15px] text-[#0f0f0d]">Eligible for Landed Home Renovations</p>
-                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] tracking-[0.08px]">Certified to undertake full A&amp;A works on landed properties</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#71717a] tracking-[0.08px]">Certified to undertake full A&amp;A works on landed properties</p>
                 </div>
               </div>
             )}
 
             {/* Credential edit panel */}
             {editCtx && credEditing && (
-              <div className="bg-white border border-[#d8d3c8] rounded-[16px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-[#d8d3c8] bg-[#f0ede6]">
+              <div className="bg-white border border-[#e4e4e7] rounded-[20px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[#e4e4e7] bg-[#f6f6f6]">
                   <div className="flex items-center gap-2">
                     <svg className="size-[14px] text-[#0f0f0d]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
@@ -1844,7 +2000,7 @@ export function TrustCredentials() {
                     <span className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#0f0f0d]">Editing · Credentials</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setCredEditing(false)} className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] hover:text-[#0f0f0d] px-3 py-1.5 rounded-[8px] transition-colors">Cancel</button>
+                    <button type="button" onClick={() => setCredEditing(false)} className="font-['DM_Sans',sans-serif] text-[13px] text-[#71717a] hover:text-[#0f0f0d] px-3 py-1.5 rounded-[8px] transition-colors">Cancel</button>
                     <button type="button" onClick={handleCredSave} className="font-['DM_Sans',sans-serif] text-[13px] font-medium text-white bg-[#0f0f0d] hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
                   </div>
                 </div>
@@ -1852,7 +2008,7 @@ export function TrustCredentials() {
                   {/* HDB */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">HDB Registered Contractor</p>
+                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">HDB Registered Contractor</p>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1860,7 +2016,7 @@ export function TrustCredentials() {
                           onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, active: e.target.checked } })}
                           className="size-[16px] accent-[#0f0f0d] cursor-pointer"
                         />
-                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Show this credential</span>
+                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a]">Show this credential</span>
                       </label>
                     </div>
                     <div className={`space-y-3 ${credDraft.hdb.active ? "" : "opacity-50 pointer-events-none"}`}>
@@ -1869,21 +2025,21 @@ export function TrustCredentials() {
                         value={credDraft.hdb.title}
                         onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, title: e.target.value } })}
                         placeholder="Title"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                       <input
                         type="text"
                         value={credDraft.hdb.firm}
                         onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, firm: e.target.value } })}
                         placeholder="ID firm (e.g. Your Studio Pte Ltd)"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                       <input
                         type="text"
                         value={credDraft.hdb.reg}
                         onChange={(e) => setCredDraft({ ...credDraft, hdb: { ...credDraft.hdb, reg: e.target.value } })}
                         placeholder="Registration date (e.g. Registered 2014)"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                     </div>
                   </div>
@@ -1891,7 +2047,7 @@ export function TrustCredentials() {
                   {/* BCA */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6b6860]">BCA Licensed Builder</p>
+                      <p className="font-['DM_Sans',sans-serif] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">BCA Licensed Builder</p>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1899,7 +2055,7 @@ export function TrustCredentials() {
                           onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, active: e.target.checked } })}
                           className="size-[16px] accent-[#0f0f0d] cursor-pointer"
                         />
-                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#6b6860]">Show this credential</span>
+                        <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a]">Show this credential</span>
                       </label>
                     </div>
                     <div className={`space-y-3 ${credDraft.bca.active ? "" : "opacity-50 pointer-events-none"}`}>
@@ -1908,21 +2064,21 @@ export function TrustCredentials() {
                         value={credDraft.bca.title}
                         onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, title: e.target.value } })}
                         placeholder="Title"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                       <input
                         type="text"
                         value={credDraft.bca.firm}
                         onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, firm: e.target.value } })}
                         placeholder="ID firm (e.g. Your Studio Pte Ltd)"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                       <input
                         type="text"
                         value={credDraft.bca.reg}
                         onChange={(e) => setCredDraft({ ...credDraft, bca: { ...credDraft.bca, reg: e.target.value } })}
                         placeholder="Registration date (e.g. Licensed since 2015)"
-                        className="w-full h-[42px] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
+                        className="w-full h-[42px] bg-[#f6f6f6] border border-[#e4e4e7] rounded-[10px] px-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] focus:ring-2 focus:ring-[#0f0f0d]/10"
                       />
                     </div>
                   </div>
@@ -1944,13 +2100,13 @@ export function TrustCredentials() {
           )}
 
           {/* Right column: Business info table */}
-          <div className="bg-white border border-[#d8d3c8] rounded-[12px] overflow-hidden">
+          <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] overflow-hidden">
             <div className="border-b border-[#d8d3c8] px-5 py-3.5">
-              <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-[#6b6860] tracking-[0.42px] uppercase">Business Information</p>
+              <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-[#71717a] tracking-[0.42px] uppercase">Business Information</p>
             </div>
             {(editCtx ? allRows : allRows.filter((r) => r.value.trim() !== "")).map((info: any, i: number, arr: any[]) => (
-              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < arr.length - 1 ? "border-b border-[#d8d3c8]" : ""}`}>
-                <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6860] w-[160px] md:w-[180px] shrink-0">{info.label}</p>
+              <div key={info.label} className={`flex gap-5 px-5 py-3 ${i < arr.length - 1 ? "border-b border-[#e4e4e7]" : ""}`}>
+                <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#71717a] w-[160px] md:w-[180px] shrink-0">{info.label}</p>
                 <div className="font-['DM_Sans',sans-serif] font-medium text-[14px] md:text-[15px] text-[#0f0f0d] flex-1 min-w-0">
                   {editCtx ? (
                     <BusinessInfoCell
@@ -2061,243 +2217,9 @@ function TagIcon({ icon, color }: { icon: string; color: string }) {
   }
 }
 
-/* ─── CASE STUDIES ─── */
-function PhaseTextField({ value, placeholder, multiline, onSave, className, style }: { value: string; placeholder: string; multiline?: boolean; onSave: (v: string) => void; className?: string; style?: React.CSSProperties }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => { setDraft(value); }, [value]);
-  const commit = () => { if (draft !== value) onSave(draft); };
-  const common = {
-    value: draft,
-    onChange: (e: any) => setDraft(e.target.value),
-    onBlur: commit,
-    placeholder,
-    className: `${className || ""} bg-transparent border-0 outline-none w-full rounded-[6px] px-2 -mx-2 focus:bg-white focus:ring-1 focus:ring-[#d8d3c8] transition-colors placeholder:text-[#a8a8a8]`,
-    style,
-  };
-  if (multiline) {
-    return <textarea {...(common as any)} rows={3} onKeyDown={(e: any) => { if (e.key === "Escape") { setDraft(value); e.currentTarget.blur(); } }} />;
-  }
-  return <input type="text" {...(common as any)} onKeyDown={(e: any) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(value); e.currentTarget.blur(); } }} />;
-}
+/* ─── CASE STUDIES REMOVED ─── */
 
-export function CaseStudies() {
-  const ctx = useDesignerCtx();
-  const editCtx = useContext(ProfileEditContext);
-  const phases = ctx?.caseStudyPhases ?? caseStudyPhases;
-
-  // Hide on live page when no phases exist
-  if (!editCtx && !phases.length) return null;
-
-  const addPhaseFileRef = useRef<HTMLInputElement>(null);
-  const replaceImgRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const [uploadingPhase, setUploadingPhase] = useState(false);
-  const [replacingIdx, setReplacingIdx] = useState<number | null>(null);
-
-  const serializePhases = (next: any[]) => next.map(({ img, ...rest }: any) => ({ ...rest, image: rest.image ?? img ?? "" }));
-
-  const handleAddPhase = async (file: File) => {
-    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
-    setUploadingPhase(true);
-    try {
-      const url = await editCtx.uploadImage(file);
-      if (!url) return;
-      const nextNum = phases.length + 1;
-      const newPhase = { phase: `Phase ${nextNum}`, title: "New Phase", desc: "Description", image: url, tags: [] };
-      await editCtx.saveCollection("casestudies", serializePhases([...phases, newPhase]));
-    } finally { setUploadingPhase(false); }
-  };
-
-  const handleRemovePhase = async (idx: number) => {
-    if (!editCtx?.saveCollection) return;
-    await editCtx.saveCollection("casestudies", serializePhases(phases.filter((_: any, i: number) => i !== idx)));
-  };
-
-  const handleUpdatePhase = async (idx: number, field: string, value: string) => {
-    if (!editCtx?.saveCollection) return;
-    const next = phases.map((p: any, i: number) => i === idx ? { ...p, [field]: value } : p);
-    await editCtx.saveCollection("casestudies", serializePhases(next));
-  };
-
-  const handleReplacePhaseImage = async (idx: number, file: File) => {
-    if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
-    setReplacingIdx(idx);
-    try {
-      const url = await editCtx.uploadImage(file);
-      if (!url) return;
-      const next = phases.map((p: any, i: number) => i === idx ? { ...p, image: url, img: url } : p);
-      await editCtx.saveCollection("casestudies", serializePhases(next));
-    } finally { setReplacingIdx(null); }
-  };
-
-  return (
-    <section className="bg-[#fafaf8] py-10 md:py-14 px-4 md:px-8 overflow-hidden">
-      <div className="max-w-[1293px] mx-auto">
-        {/* Left-aligned header */}
-        <div className="mb-8 md:mb-12">
-          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[19px] md:text-[20px] text-[#0f0f0d] tracking-[-0.88px] leading-[48px]">
-            Case Study: From Blueprint to Completion
-          </h2>
-          <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] max-w-[684px] leading-[26px]">
-            A structured overview of how this residence progressed from concept planning to final handover.
-          </p>
-        </div>
-
-        {/* Timeline rows – image LEFT, dot CENTER, card RIGHT */}
-        <div className="relative flex flex-col gap-10 lg:gap-14">
-          {/* Vertical connecting line between dots */}
-          <div className="hidden lg:block absolute left-1/2 -translate-x-1/2 top-[11px] bottom-[11px] w-[2px] bg-[#e5e5e5] pointer-events-none" />
-
-          {phases.map((phase: any, idx: number) => (
-            <div
-              key={`${phase.phase}-${idx}`}
-              className="flex flex-col lg:flex-row items-start lg:items-stretch relative group/phase"
-            >
-              {/* Image – left column */}
-              <div className="w-full lg:w-[38%] shrink-0">
-                <div className="relative rounded-[10px] overflow-hidden shadow-[0px_10px_30px_0px_rgba(0,0,0,0.04)] h-[220px] md:h-[335px]">
-                  <img src={resolveImg(phase.img)} alt={phase.title} className="w-full h-full object-cover" />
-                  {editCtx && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => replaceImgRefs.current[idx]?.click()}
-                        className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100"
-                        title="Replace image"
-                      >
-                        {replacingIdx === idx ? (
-                          <svg className="size-9 animate-spin text-white" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-                            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                          </svg>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 text-white">
-                            <svg className="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
-                            <span className="font-['DM_Sans',sans-serif] text-[12px] font-medium">Replace image</span>
-                          </div>
-                        )}
-                      </button>
-                      <input
-                        ref={(el) => { replaceImgRefs.current[idx] = el; }}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleReplacePhaseImage(idx, f); e.currentTarget.value = ""; }}
-                      />
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Timeline dot – center (absolutely positioned at true center) */}
-              <div className="hidden lg:flex absolute left-1/2 -translate-x-1/2 top-2 z-10">
-                <div className="size-[18px] bg-[#e5e5e5] rounded-full flex items-center justify-center">
-                  <div className="size-[4px] rounded-full" />
-                </div>
-              </div>
-
-              {/* Content card – right column */}
-              <div className="w-full lg:flex-1 mt-4 lg:mt-0 relative">
-                {editCtx && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePhase(idx)}
-                    className="absolute -top-2 -right-2 z-10 size-[28px] rounded-full bg-white hover:bg-[#0f0f0d] text-[#0f0f0d] hover:text-white border border-[#d8d3c8] shadow-sm flex items-center justify-center opacity-0 group-hover/phase:opacity-100 transition-all"
-                    title="Remove phase"
-                  >
-                    <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                  </button>
-                )}
-                <div className="bg-white border border-[#d8d3c8] rounded-[12px] h-full p-6 flex flex-col justify-center max-w-[495px] ml-auto">
-                  {editCtx ? (
-                    <>
-                      <PhaseTextField
-                        value={phase.phase}
-                        placeholder="Phase 1"
-                        onSave={(v) => handleUpdatePhase(idx, "phase", v)}
-                        className="font-['DM_Sans',sans-serif] font-bold text-[12px] text-[#0f0f0d] tracking-[1.44px] leading-[18px] mb-2 uppercase"
-                      />
-                      <PhaseTextField
-                        value={phase.title}
-                        placeholder="Title"
-                        onSave={(v) => handleUpdatePhase(idx, "title", v)}
-                        className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] md:text-[20px] text-[#0f0f0d] leading-[40px] mb-1"
-                      />
-                      <PhaseTextField
-                        value={phase.desc}
-                        placeholder="Description"
-                        multiline
-                        onSave={(v) => handleUpdatePhase(idx, "desc", v)}
-                        className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] leading-[27px] mb-5 resize-none"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-['DM_Sans',sans-serif] font-bold text-[12px] text-[#0f0f0d] tracking-[1.44px] leading-[18px] mb-2">{phase.phase}</p>
-                      <h3 className="font-['EB_Garamond',Georgia,serif] font-normal text-[18px] md:text-[20px] text-[#0f0f0d] leading-[40px] mb-1">{phase.title}</h3>
-                      <p className="font-['DM_Sans',sans-serif] text-[14px] md:text-[15px] text-[#6b6b6b] leading-[27px] mb-5 max-w-[405px]">{phase.desc}</p>
-                    </>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {(phase.tags || []).map((t: any) => (
-                      <span
-                        key={t.label}
-                        className={`${t.bg} ${t.text} font-['DM_Sans',sans-serif] font-medium text-[12px] leading-[18px] pl-[10px] pr-3 py-1 rounded-full inline-flex items-center gap-[4px]`}
-                      >
-                        <TagIcon icon={t.icon} color={t.iconColor} />
-                        {t.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* Add phase tile (edit mode only) */}
-          {editCtx && (
-            <div className="flex flex-col lg:flex-row items-start lg:items-stretch relative">
-              <div className="w-full lg:w-[38%] shrink-0">
-                <button
-                  type="button"
-                  onClick={() => addPhaseFileRef.current?.click()}
-                  className="w-full rounded-[10px] h-[220px] md:h-[335px] border-2 border-dashed border-[#d8d3c8] bg-[#f0ede6] hover:border-[#0f0f0d] hover:bg-white transition-colors flex flex-col items-center justify-center gap-3 group/add"
-                  title="Add phase"
-                >
-                  {uploadingPhase ? (
-                    <svg className="size-9 animate-spin text-[#6b6860]" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-                      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                    </svg>
-                  ) : (
-                    <>
-                      <div className="size-[64px] rounded-full border-2 border-dashed border-[#d8d3c8] bg-white flex items-center justify-center group-hover/add:border-[#0f0f0d] transition-colors">
-                        <svg className="size-8 text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                      </div>
-                      <span className="font-['DM_Sans',sans-serif] text-[14px] font-medium text-[#6b6860] group-hover/add:text-[#0f0f0d] transition-colors">Add phase</span>
-                      <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#99a1af]">Click to upload an image</span>
-                    </>
-                  )}
-                </button>
-                <input
-                  ref={addPhaseFileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddPhase(f); e.currentTarget.value = ""; }}
-                />
-              </div>
-              <div className="w-full lg:flex-1 mt-4 lg:mt-0">
-                <div className="border-2 border-dashed border-[#d8d3c8] rounded-[12px] h-full p-6 flex items-center justify-center max-w-[495px] ml-auto bg-[#f0ede6]/40">
-                  <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#99a1af] text-center">Upload an image to start a new phase. Title and description appear here.</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
+export function CaseStudies() { return null; }
 
 /* ─── WHAT HOMEOWNERS SAY ─── */
 function GoogleIcon({ className = "size-[17px]" }: { className?: string }) {
@@ -2362,8 +2284,8 @@ function AddStoryModal({
   };
 
   const inputStyle: React.CSSProperties = {
-    width: "100%", height: "44px", padding: "0 14px", background: "#fafaf8",
-    border: "1px solid #d8d3c8", borderRadius: "10px", color: "#0f0f0d",
+    width: "100%", height: "44px", padding: "0 14px", background: "#f6f6f6",
+    border: "1px solid #e4e4e7", borderRadius: "10px", color: "#0f0f0d",
     fontFamily: "'DM Sans', sans-serif", fontSize: "14px", outline: "none",
   };
   const labelStyle: React.CSSProperties = {
@@ -2379,16 +2301,16 @@ function AddStoryModal({
     >
       <div
         className="relative w-full max-w-[480px] overflow-hidden flex flex-col"
-        style={{ background: "#fff", border: "1px solid #d8d3c8", borderRadius: "16px", boxShadow: "0 24px 60px rgba(15,15,13,0.25)", fontFamily: "'DM Sans', sans-serif" }}
+        style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: "16px", boxShadow: "0 24px 60px rgba(15,15,13,0.25)", fontFamily: "'DM Sans', sans-serif" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #d8d3c8", background: "#f0ede6" }}>
+        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #e4e4e7", background: "#f6f6f6" }}>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#9a9790" }}>New Story</div>
             <h2 className="mt-0.5" style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: "22px", color: "#0f0f0d", lineHeight: 1.2 }}>Add Story</h2>
           </div>
-          <button type="button" onClick={onClose} disabled={saving} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-75 transition-opacity cursor-pointer disabled:opacity-40" style={{ background: "#fff", border: "1px solid #d8d3c8", color: "#6b6860" }} aria-label="Close">
+          <button type="button" onClick={onClose} disabled={saving} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-75 transition-opacity cursor-pointer disabled:opacity-40" style={{ background: "#fff", border: "1px solid #e4e4e7", color: "#71717a" }} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -2403,7 +2325,7 @@ function AddStoryModal({
               type="button"
               onClick={() => fileRef.current?.click()}
               className="relative w-full overflow-hidden cursor-pointer group/cover"
-              style={{ aspectRatio: "9/16", maxHeight: "320px", background: "#f0ede6", border: "2px dashed #d8d3c8", borderRadius: "12px" }}
+              style={{ aspectRatio: "9/16", maxHeight: "320px", background: "#f6f6f6", border: "2px dashed #e4e4e7", borderRadius: "12px" }}
             >
               {preview ? (
                 <>
@@ -2430,7 +2352,7 @@ function AddStoryModal({
             <label style={labelStyle}>Title</label>
             <input type="text" value={title} placeholder="e.g. Kitchen Renovation Reveal" onChange={(e) => setTitle(e.target.value)} style={inputStyle}
               onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#e4e4e7"; }}
             />
           </div>
 
@@ -2440,9 +2362,9 @@ function AddStoryModal({
             <textarea value={description} placeholder="e.g. A quick look at the completed kitchen makeover" onChange={(e) => setDescription(e.target.value)}
               className="w-full px-[14px] py-3 text-[14px] outline-none transition-colors resize-none"
               rows={3}
-              style={{ background: "#fafaf8", border: "1px solid #d8d3c8", borderRadius: "10px", color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}
+              style={{ background: "#f6f6f6", border: "1px solid #e4e4e7", borderRadius: "10px", color: "#0f0f0d", fontFamily: "'DM Sans', sans-serif" }}
               onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#e4e4e7"; }}
             />
           </div>
 
@@ -2451,13 +2373,13 @@ function AddStoryModal({
             <label style={labelStyle}>Location</label>
             <input type="text" value={location} placeholder="e.g. Toa Payoh, Singapore" onChange={(e) => setLocation(e.target.value)} style={inputStyle}
               onFocus={(e) => { e.currentTarget.style.borderColor = "#0f0f0d"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "#d8d3c8"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "#e4e4e7"; }}
             />
           </div>
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} disabled={saving} className="h-10 px-4 text-[13px] font-medium cursor-pointer hover:opacity-85 disabled:opacity-40" style={{ background: "#fff", color: "#0f0f0d", border: "1px solid #d8d3c8", borderRadius: "10px" }}>Cancel</button>
+            <button type="button" onClick={onClose} disabled={saving} className="h-10 px-4 text-[13px] font-medium cursor-pointer hover:opacity-85 disabled:opacity-40" style={{ background: "#fff", color: "#0f0f0d", border: "1px solid #e4e4e7", borderRadius: "10px" }}>Cancel</button>
             <button type="submit" disabled={!file || saving} className="h-10 px-5 text-[13px] font-medium cursor-pointer hover:opacity-85 disabled:opacity-40 flex items-center gap-2" style={{ background: "#0f0f0d", color: "#fff", border: "1px solid #0f0f0d", borderRadius: "10px" }}>
               {saving ? (
                 <><svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" /><path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg> Uploading…</>
@@ -2499,7 +2421,7 @@ function VideoUploadSlot({ onUploaded }: { onUploaded: (url: string) => void }) 
         onClick={() => !uploading && fileRef.current?.click()}
         disabled={uploading}
         className="flex flex-col items-center justify-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-        style={{ aspectRatio: "16/9", background: "#f0ede6", border: "2px dashed #d8d3c8", borderRadius: "14px" }}
+        style={{ aspectRatio: "16/9", background: "#f6f6f6", border: "2px dashed #e4e4e7", borderRadius: "14px" }}
       >
         {uploading ? (
           <div className="w-6 h-6 border-2 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" />
@@ -2524,18 +2446,21 @@ export function HomeownersSay() {
   if (!editCtx && !rData.length) return null;
 
   return (
-    <section className="py-10 md:py-16 px-4 md:px-8 border-b border-[#d8d3c8]">
-      <div className="max-w-[1293px] mx-auto">
+    <section className="py-[40px] md:py-[64px] px-4 md:px-8">
+      <div className="max-w-[1280px] mx-auto">
         {/* Centered header */}
+        <FadeIn>
         <div className="flex flex-col items-center mb-10 md:mb-12">
-          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[24px] text-[#0f0f0d] tracking-[-0.6px] leading-[32px] text-center">
+          <TagLabel>HOMEOWNER REVIEWS</TagLabel>
+          <h2 style={{fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black}} className="font-normal tracking-[-0.03em] mt-3 text-center">
             What Homeowners Say
           </h2>
           <div className="flex items-center gap-2 mt-2">
             <Stars count={5} size="size-[16px]" />
-            <span className="font-['DM_Sans',sans-serif] font-medium text-[16px] text-[#6b6860]">{rating}/5 Average Rating</span>
+            <span style={{fontFamily: sans}} className="font-medium text-[16px] text-[#9a9790]">{rating}/5 Average Rating</span>
           </div>
         </div>
+        </FadeIn>
 
         {/* Two-column layout */}
         <div className="flex flex-col lg:flex-row gap-10 lg:gap-[38px]">
@@ -2550,7 +2475,7 @@ export function HomeownersSay() {
               {reviewTabs.map((tab) => (
                 <button
                   key={tab.label}
-                  className="bg-[#f8fafc] border border-[#d8d3c8] rounded-full px-[14px] py-[8px] flex items-center gap-[7px] cursor-pointer hover:bg-[#f1f3f5] transition-colors"
+                  className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[100px] px-[14px] py-[8px] flex items-center gap-[7px] cursor-pointer hover:bg-[#e8e4db] transition-colors"
                 >
                   {tab.icon === "network" ? (
                     <img src="/002 Page 1.jpg" alt="Network" className="size-[17px] shrink-0 rounded-[3px] object-cover" />
@@ -2567,7 +2492,7 @@ export function HomeownersSay() {
               {rData.map((r: any, i: number) => (
                 <div
                   key={`latest-${i}`}
-                  className="bg-white border border-[#d8d3c8] rounded-[14px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] p-[21px]"
+                  className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-[21px]"
                 >
                   {/* Header: avatar + name/time */}
                   <div className="flex items-center justify-between mb-[15px]">
@@ -2592,7 +2517,7 @@ export function HomeownersSay() {
                   </div>
 
                   {/* Review text */}
-                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[22.75px]">{r.text}</p>
+                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#71717a] leading-[22.75px]">{r.text}</p>
                 </div>
               ))}
             </div>
@@ -2606,7 +2531,7 @@ export function HomeownersSay() {
 
             <div className="flex flex-col gap-6">
               {(ctx?.profile?.videoTours || []).map((v: any, i: number) => (
-                <div key={i} className="relative rounded-[14px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] cursor-pointer group" style={{ aspectRatio: "16/9" }}>
+                <div key={i} className="relative rounded-[16px] overflow-hidden border border-[#d8d3c8] cursor-pointer group" style={{ aspectRatio: "16/9" }}>
                   <video src={resolveImg(v.src)} className="w-full h-full object-cover" muted playsInline />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                     <div className="bg-white/90 rounded-full size-[64px] shadow-[0px_20px_25px_0px_rgba(0,0,0,0.1),0px_8px_10px_0px_rgba(0,0,0,0.1)] flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -2653,25 +2578,27 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
   const contentRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="bg-white border border-[#d8d3c8] rounded-[16px] overflow-hidden shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-      {/* Image */}
-      <div className={`relative w-full overflow-hidden ${review.hasVideo ? "h-[253px]" : "h-[160px]"}`}>
-        <img
-          src={resolveImg(review.img)}
-          alt={review.title}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-        {review.hasVideo && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-white rounded-full size-[32px] flex items-center justify-center shadow-md">
-              <svg className="size-[16px] ml-0.5" viewBox="0 0 13.3333 13.3333" fill="none">
-                <path d="M0.666667 0.666667L10 6.66667L0.666667 12.6667V0.666667Z" fill="#515151" stroke="#515151" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
-              </svg>
+    <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] overflow-hidden">
+      {/* Image — only render when the review has one (Google Place reviews don't supply images) */}
+      {review.img && (
+        <div className={`relative w-full overflow-hidden ${review.hasVideo ? "h-[253px]" : "h-[160px]"}`}>
+          <img
+            src={resolveImg(review.img)}
+            alt={review.title}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+          {review.hasVideo && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-white rounded-full size-[32px] flex items-center justify-center shadow-md">
+                <svg className="size-[16px] ml-0.5" viewBox="0 0 13.3333 13.3333" fill="none">
+                  <path d="M0.666667 0.666667L10 6.66667L0.666667 12.6667V0.666667Z" fill="#515151" stroke="#515151" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.33333" />
+                </svg>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <div className="p-5">
@@ -2717,7 +2644,7 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
         </div>
 
         {/* Divider + Reviewer */}
-        <div className="border-t border-[#e8e4db] pt-3 flex items-center gap-[10px]">
+        <div className="border-t border-[#e4e4e7] pt-3 flex items-center gap-[10px]">
           <div className={`${review.bgColor} rounded-full size-[36px] flex items-center justify-center shrink-0`}>
             <span className={`font-['DM_Sans',sans-serif] font-semibold text-[14px] ${review.textColor} leading-[20px]`}>
               {review.initial}
@@ -2736,7 +2663,11 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
 export function GoogleReviewCards() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
-  const rvws = ctx?.reviews ?? reviews;
+  // Prefer cached Google Place reviews when the server returned any.
+  // Fall back to the designer-authored `reviews` array (or the empty
+  // module-level fallback) so the section still renders during dev.
+  const googleRvws = ctx?.googleReviews ?? [];
+  const rvws = googleRvws.length > 0 ? googleRvws : (ctx?.reviews ?? reviews);
   const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -2774,8 +2705,12 @@ export function GoogleReviewCards() {
   };
 
   return (
-    <section ref={sectionRef} className="py-10 md:py-16 px-4 md:px-8 border-b border-[#d8d3c8] scroll-mt-[80px]">
-      <div className="max-w-[1293px] mx-auto">
+    <section ref={sectionRef} className="py-[40px] md:py-[64px] px-4 md:px-8 border-b border-[#d8d3c8] scroll-mt-[80px]">
+      <div className="max-w-[1280px] mx-auto">
+
+        {/* Header lives in <RatingBreakdown /> directly above this section
+            (which is now the "HOMEOWNER REVIEWS / What Homeowners Say" header
+            for the combined reviews block). No centered header needed here. */}
 
         {/* ── Reviews container with animated max-height ── */}
         <div className="relative">
@@ -2978,17 +2913,20 @@ export function ServiceArea() {
     : null;
 
   return (
-    <section className="bg-[#e8e4db] border-t border-[#d8d3c8] rounded-[12px] py-10 md:py-14 px-4 md:px-8">
-      <div className="max-w-[1293px] mx-auto">
+    <section className="py-[40px] md:py-[64px] px-4 md:px-8">
+      <div className="max-w-[1280px] mx-auto">
+        <FadeIn>
         <div className="text-center mb-8">
-          <h2 className="font-['EB_Garamond',Georgia,serif] font-normal text-[22px] md:text-[24px] text-[#0f0f0d] tracking-[-0.6px] mb-2">Our Service Area</h2>
-          <p className="font-['DM_Sans',sans-serif] text-[15px] md:text-[16px] text-[#6b6860] max-w-[464px] mx-auto leading-[24px]">
+          <TagLabel>SERVICE AREA</TagLabel>
+          <h2 style={{fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black}} className="font-normal tracking-[-0.03em] mt-3 mb-2">Our Service Area</h2>
+          <p style={{fontFamily: sans, color: C.gray}} className="text-[16px] md:text-[18px] max-w-[464px] mx-auto leading-[1.7]">
             {saDesc}
           </p>
         </div>
+        </FadeIn>
 
         {/* Map card */}
-        <div className="relative rounded-[22px] overflow-hidden h-[400px] md:h-[537px] group">
+        <div className="relative rounded-[16px] overflow-hidden h-[400px] md:h-[537px] group border border-[#d8d3c8]">
           {/* Google Maps iframe with dark filter */}
           <iframe
             className="absolute inset-0 w-full h-full border-none pointer-events-none"
@@ -3162,41 +3100,851 @@ function MobileQuoteSection() {
   );
 }
 
+/* ─── BREADCRUMBS ─── */
+function Breadcrumbs() {
+  const ctx = useDesignerCtx();
+  const name = ctx?.profile?.name || "Designer";
+  return (
+    <nav className="py-4" style={{ fontFamily: sans }}>
+      <div className="flex items-center gap-2 text-[13px]" style={{ color: C.grayLight }}>
+        <Link to="/" className="hover:underline" style={{ color: C.gray, textDecoration: "none" }}>Home</Link>
+        <svg className="size-[10px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        <Link to="/interior-designers" className="hover:underline" style={{ color: C.gray, textDecoration: "none" }}>Interior Designers</Link>
+        <svg className="size-[10px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        <span style={{ color: C.black }}>{name}</span>
+      </div>
+    </nav>
+  );
+}
+
+/* ─── KEY METRICS ─── */
+export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
+  const ctx = useDesignerCtx();
+  const s = ctx?.profile?.stats;
+  const projectCount = ctx?.projects?.length ?? 0;
+  const bInfo = ctx?.businessInfo ?? [];
+  const yearsEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("year"));
+  const yearsVal = s?.years || yearsEntry?.value || "10+";
+  const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
+  const budgetVal = budgetEntry?.value?.trim() || "$30k – $120k";
+
+  type Metric = {
+    value: string;
+    valuePath: string | undefined;
+    suffix: string;
+    label: string;
+    icon: any;
+    /** Optional override for the value font size — used when the value is a long string (e.g. budget range). */
+    valueClassName?: string;
+    /** When set, the value is rendered through BusinessInfoEditCell so it can be inline-edited
+     *  as a row in the profile's businessInfo array (matching the Quick Facts grid). */
+    businessInfoLabel?: string;
+  };
+
+  const metrics: Metric[] = [
+    {
+      value: s?.rating || "4.9",
+      valuePath: undefined,
+      suffix: "/5.0",
+      label: "Average Rating",
+      icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#FFA929" /></svg>,
+    },
+    {
+      value: projectCount > 0 ? String(projectCount) : "50+",
+      valuePath: undefined,
+      suffix: "",
+      label: "Projects Completed",
+      icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
+    },
+    {
+      value: yearsVal,
+      valuePath: "stats.years",
+      suffix: yearsVal.includes("+") ? "" : " yrs",
+      label: "Industry Experience",
+      icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>,
+    },
+    {
+      value: budgetVal,
+      valuePath: undefined,
+      suffix: "",
+      label: "Budget Range",
+      // Smaller font + tracking-tight so longer strings like "$30,000 – $120,000" stay on one line.
+      valueClassName: "text-[18px] md:text-[20px] font-normal leading-tight tracking-tight",
+      // Routes through BusinessInfoEditCell so the value can be edited inline and persisted
+      // to the businessInfo array under the "Budget range" label.
+      businessInfoLabel: "Budget range",
+      icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
+    },
+  ];
+
+  const gridCls = cols === 2
+    ? "grid grid-cols-2 gap-3 md:gap-4"
+    : "grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4";
+
+  return (
+    <FadeIn>
+      <div className={gridCls}>
+        {metrics.map((m) => (
+          <div key={m.label} className="bg-[#f5f1e8] border border-[#d8d3c8] rounded-[12px] p-5 md:p-6">
+            <div className="mb-3">{m.icon}</div>
+            <div className="flex items-baseline gap-0.5">
+              {m.valuePath ? (
+                <EditableText
+                  value={m.value}
+                  path={m.valuePath}
+                  placeholder="—"
+                  className={m.valueClassName ?? "text-[32px] md:text-[36px] font-normal leading-none"}
+                  style={{ fontFamily: serif, color: C.black }}
+                />
+              ) : m.businessInfoLabel ? (
+                <BusinessInfoEditCell
+                  index={-1}
+                  value={m.value}
+                  label={m.businessInfoLabel}
+                  placeholder="$30k – $120k"
+                  displayClassName={m.valueClassName ?? "text-[32px] md:text-[36px] font-normal leading-none"}
+                  inputClassName={m.valueClassName ?? "text-[32px] md:text-[36px] font-normal leading-none"}
+                  displayStyle={{ fontFamily: serif, color: C.black }}
+                  inputStyle={{ fontFamily: serif, color: C.black }}
+                />
+              ) : (
+                <span
+                  style={{ fontFamily: serif, color: C.black }}
+                  className={m.valueClassName ?? "text-[32px] md:text-[36px] font-normal leading-none"}
+                >
+                  {m.value}
+                </span>
+              )}
+              {m.suffix && <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[14px]">{m.suffix}</span>}
+            </div>
+            <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[13px] md:text-[14px] mt-1">{m.label}</p>
+          </div>
+        ))}
+      </div>
+    </FadeIn>
+  );
+}
+
+/* ─── RATING BREAKDOWN ─── */
+export function RatingBreakdown() {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const rating = parseFloat(ctx?.profile?.stats?.rating || "4.9");
+  const reviewCount = ctx?.reviewsData?.length ?? 0;
+  const totalReviews = ctx?.profile?.stats?.reviewCount || reviewCount || "186";
+
+  const categories = [
+    { label: "Design Quality", score: Math.min(5, rating + 0.05) },
+    { label: "Communication", score: Math.min(5, rating - 0.1) },
+    { label: "Value for Money", score: Math.min(5, rating - 0.15) },
+    { label: "Timeliness", score: Math.min(5, rating - 0.05) },
+    { label: "Workmanship", score: rating },
+  ];
+
+  if (!editCtx && !reviewCount && !ctx?.profile?.stats?.rating) return null;
+
+  return (
+    <section className="py-[40px] md:py-[64px]">
+      <FadeIn>
+        <div className="flex flex-col items-center text-center mb-8">
+          <TagLabel>HOMEOWNER REVIEWS</TagLabel>
+          <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3">
+            What Homeowners Say
+          </h2>
+        </div>
+
+        <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-6 md:p-8">
+          <div className="flex flex-col md:flex-row gap-8 md:gap-12">
+            {/* Left: Overall score */}
+            <div className="flex flex-col items-center md:items-start shrink-0 md:w-[180px]">
+              <span style={{ fontFamily: serif, color: C.black }} className="text-[56px] md:text-[64px] font-normal leading-none">{rating.toFixed(1)}</span>
+              <div className="flex gap-[2px] mt-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <svg key={i} className="size-[16px]" viewBox="0 0 24 24" fill={i < Math.round(rating) ? "#FFA929" : "#d8d3c8"}>
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ))}
+              </div>
+              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[14px] mt-2">{totalReviews} reviews</p>
+            </div>
+
+            {/* Right: Category bars */}
+            <div className="flex-1 flex flex-col gap-4">
+              {categories.map((cat) => (
+                <div key={cat.label} className="flex items-center gap-3">
+                  <span style={{ fontFamily: sans, color: C.gray }} className="text-[14px] w-[130px] shrink-0">{cat.label}</span>
+                  <div className="flex-1 h-[8px] rounded-full overflow-hidden" style={{ background: C.creamBorder }}>
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(cat.score / 5) * 100}%`, background: C.black }} />
+                  </div>
+                  <span style={{ fontFamily: sans, color: C.black }} className="text-[14px] font-medium w-[32px] text-right">{cat.score.toFixed(1)}</span>
+                </div>
+              ))}
+              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] mt-1">Based on overall rating</p>
+            </div>
+          </div>
+        </div>
+      </FadeIn>
+    </section>
+  );
+}
+
+/* Inline editable cell for a single businessInfo row.
+ * businessInfo is stored as an array on the profile and saved via the
+ * "businessinfo" server section as a whole array — so we rebuild the full
+ * array on commit and route through editCtx.save("businessInfo", arr).
+ *
+ * Optional className/style props let callers reuse this cell in places that
+ * need different typography (e.g. the KeyMetrics budget tile uses serif/large). */
+function BusinessInfoEditCell({
+  index,
+  value,
+  label,
+  displayClassName,
+  displayStyle,
+  inputClassName,
+  inputStyle,
+  placeholder = "Click to edit",
+}: {
+  index: number;
+  value: string;
+  label: string;
+  displayClassName?: string;
+  displayStyle?: React.CSSProperties;
+  inputClassName?: string;
+  inputStyle?: React.CSSProperties;
+  placeholder?: string;
+}) {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      try { inputRef.current.select(); } catch {}
+    }
+  }, [editing]);
+
+  if (!editCtx) {
+    return (
+      <span
+        style={displayStyle ?? { fontFamily: sans, color: C.black }}
+        className={displayClassName ?? "text-[14px] md:text-[15px] font-medium flex-1"}
+      >
+        {value}
+      </span>
+    );
+  }
+
+  const commit = async () => {
+    setEditing(false);
+    if (draft === value) return;
+    setSaving(true);
+    try {
+      const current = (ctx?.businessInfo ?? []) as any[];
+      // Identify the row by label, not by the (potentially stale) index. This
+      // also lets virtual default rows — which start with biIndex === -1 —
+      // create a new entry on first save instead of overwriting the array.
+      const existingIdx = current.findIndex((b: any) => b?.label === label);
+      const next = existingIdx >= 0
+        ? current.map((b, i) => (i === existingIdx ? { ...b, value: draft } : b))
+        : [...current, { label, value: draft }];
+      await Promise.resolve(editCtx.save("businessInfo", next));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const cancel = () => { setDraft(value); setEditing(false); };
+
+  const baseDisplayCls = displayClassName ?? "text-[14px] md:text-[15px] font-medium flex-1";
+  const baseInputCls = inputClassName ?? "text-[14px] md:text-[15px] font-medium flex-1";
+  const baseDisplayStyle = displayStyle ?? { fontFamily: sans, color: C.black };
+  const baseInputStyle = inputStyle ?? { fontFamily: sans, color: C.black };
+
+  if (!editing) {
+    return (
+      <span
+        onClick={(e) => { if (saving) return; e.stopPropagation(); setEditing(true); }}
+        className={`${baseDisplayCls} ${saving ? "cursor-wait opacity-60" : "cursor-text hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#e4e4e7] hover:outline-offset-2"} rounded-[4px] transition-colors inline-flex items-center gap-1.5`}
+        style={baseDisplayStyle}
+        title={saving ? "Saving…" : placeholder}
+      >
+        {value || <span style={{ color: "#a8a8a8" }}>{placeholder}</span>}
+        {saving && (
+          <svg className="size-[12px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: "#71717a" }}>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.3" strokeWidth="2.5" />
+            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      ref={(el) => { inputRef.current = el; }}
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+      className={`${baseInputCls} bg-white border border-[#0f0f0d] rounded-[6px] px-2 py-1 outline-none`}
+      style={baseInputStyle}
+    />
+  );
+}
+
+/* Multi-select dropdown for Quick Fact list-type fields ("Project types",
+ * "Style specialisation"). Stores the selection back into businessInfo as a
+ * comma-separated string so the public-page chip renderer (which already
+ * splits on `,` / `·`) keeps working unchanged. */
+function BusinessInfoMultiSelect({
+  value,
+  label,
+  options,
+}: {
+  value: string;
+  label: string;
+  options: string[];
+}) {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Parse comma/·-separated value into a Set for fast lookups.
+  const selectedSet = new Set(
+    (value || "")
+      .split(/[,\u00b7]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  // Anything the studio previously typed that isn't in the predefined options
+  // (e.g. a custom style) — show it at the bottom so it isn't silently lost.
+  const customExtras = Array.from(selectedSet).filter((s) => !options.includes(s));
+
+  if (!editCtx) {
+    return (
+      <span style={{ fontFamily: sans, color: C.black }} className="text-[14px] md:text-[15px] font-medium flex-1">
+        {value}
+      </span>
+    );
+  }
+
+  // Close panel on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const persist = async (nextSelected: Set<string>) => {
+    // Preserve any custom extras the user typed previously, then append the
+    // currently selected predefined options in their canonical order.
+    const orderedSelections = options.filter((o) => nextSelected.has(o));
+    const finalList = [...orderedSelections, ...customExtras.filter((c) => nextSelected.has(c))];
+    const next = finalList.join(", ");
+    if (next === value) return;
+    setSaving(true);
+    try {
+      const current = (ctx?.businessInfo ?? []) as any[];
+      const existingIdx = current.findIndex((b: any) => b?.label === label);
+      const arr = existingIdx >= 0
+        ? current.map((b, i) => (i === existingIdx ? { ...b, value: next } : b))
+        : [...current, { label, value: next }];
+      await Promise.resolve(editCtx.save("businessInfo", arr));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (option: string) => {
+    const nextSet = new Set(selectedSet);
+    if (nextSet.has(option)) nextSet.delete(option);
+    else nextSet.add(option);
+    persist(nextSet);
+  };
+
+  // Compact summary chip row + dropdown trigger button
+  const selectedInOrder = options.filter((o) => selectedSet.has(o));
+  const allSelected = [...selectedInOrder, ...customExtras];
+
+  return (
+    <div ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`text-[14px] md:text-[15px] font-medium flex items-center gap-2 px-2 py-1 rounded-[6px] transition-colors cursor-pointer ${saving ? "opacity-60 cursor-wait" : "hover:bg-[rgba(15,15,13,0.06)] hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#e4e4e7] hover:outline-offset-2"}`}
+        style={{ fontFamily: sans, color: C.black, background: "transparent", border: "none" }}
+        title={saving ? "Saving…" : `Select ${label.toLowerCase()}`}
+        disabled={saving}
+      >
+        {allSelected.length > 0 ? (
+          <span className="flex flex-wrap gap-1.5">
+            {allSelected.map((s) => (
+              <span
+                key={s}
+                className="text-[12px] font-medium px-2.5 py-1 rounded-full border"
+                style={{ background: C.cream, color: C.black, borderColor: C.creamBorder, fontFamily: sans }}
+              >
+                {s}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span style={{ color: "#a8a8a8" }}>Click to select</span>
+        )}
+        <svg
+          className="size-[14px] shrink-0 transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", color: "#71717a" }}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[220px] rounded-[10px] border bg-white py-1.5"
+          style={{
+            borderColor: C.creamBorder,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+            fontFamily: sans,
+          }}
+        >
+          {options.map((opt) => {
+            const checked = selectedSet.has(opt);
+            return (
+              <label
+                key={opt}
+                className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-[#f5f1e8] transition-colors"
+              >
+                <span
+                  className="size-[16px] rounded-[4px] border flex items-center justify-center shrink-0 transition-colors"
+                  style={{
+                    borderColor: checked ? C.black : C.creamBorder,
+                    background: checked ? C.black : C.white,
+                  }}
+                >
+                  {checked && (
+                    <svg className="size-[11px]" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(opt)}
+                  className="sr-only"
+                />
+                <span className="text-[14px]" style={{ color: C.black }}>{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── EXPERIENCE TABLE ─── */
+export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
+  const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
+  const p = ctx?.profile;
+  const creds = p?.credentials;
+  const bInfo = ctx?.businessInfo ?? [];
+  const teamCount = ctx?.teamMembers?.length ?? 0;
+
+  type Row = { label: string; value: string; path?: string; biIndex?: number };
+  const rows: Row[] = [];
+
+  if (creds?.hdb?.active && creds?.hdb?.reg) rows.push({ label: "HDB License", value: `${creds.hdb.firm || ""} · ${creds.hdb.reg}`.replace(/^ · /, "") });
+  if (creds?.bca?.active && creds?.bca?.reg) rows.push({ label: "BCA Registration", value: `${creds.bca.firm || ""} · ${creds.bca.reg}`.replace(/^ · /, "") });
+
+  // Add business info entries (in edit mode include empty rows so they're discoverable).
+  // Skip labels that are already surfaced inside the KeyMetrics tiles to avoid duplication.
+  const HIDDEN_BUSINESS_LABELS = new Set(["Years in operation", "Budget range"]);
+
+  // Default Quick Fact fields shown to every studio in edit mode (and on the
+  // public page once filled in). The order here is the order they render in
+  // the 3-column grid: ACRA / UEN → Office address → Project types →
+  // Style specialisation. Team Members is appended below.
+  const DEFAULT_FIELDS: { label: string; placeholder: string }[] = [
+    { label: "ACRA / UEN", placeholder: "e.g. 201203456R" },
+    { label: "Office address", placeholder: "e.g. 5855 W Century, Ang Mo Kio, Singapore" },
+    { label: "Project types", placeholder: "e.g. HDB, Condo, Landed, Commercial" },
+    { label: "Style specialisation", placeholder: "e.g. Modern, Japandi, Minimalist" },
+  ];
+
+  // Build a label → biIndex map of what the studio already has saved so we
+  // can render the existing value (and keep the same edit index) when present.
+  const existingByLabel = new Map<string, number>();
+  bInfo.forEach((b: any, i: number) => {
+    if (b?.label && !HIDDEN_BUSINESS_LABELS.has(b.label)) {
+      existingByLabel.set(b.label, i);
+    }
+  });
+
+  // Render the default fields in their fixed order. If a default has a saved
+  // value, show it; otherwise (in edit mode) show an empty editable row that
+  // BusinessInfoEditCell will create on first edit.
+  DEFAULT_FIELDS.forEach(({ label }) => {
+    const idx = existingByLabel.get(label);
+    if (idx !== undefined) {
+      const entry = bInfo[idx];
+      if (editCtx || entry?.value?.trim()) {
+        rows.push({ label, value: entry?.value || "", biIndex: idx });
+      }
+      existingByLabel.delete(label);
+    } else if (editCtx) {
+      // Virtual row — BusinessInfoEditCell will append a new entry on save.
+      rows.push({ label, value: "", biIndex: -1 });
+    }
+  });
+
+  // Any other custom businessInfo entries the studio has added beyond the
+  // defaults — render them after the defaults so the layout stays predictable.
+  existingByLabel.forEach((idx, label) => {
+    const entry = bInfo[idx];
+    if (editCtx || entry?.value?.trim()) {
+      rows.push({ label, value: entry?.value || "", biIndex: idx });
+    }
+  });
+
+  // Surface team size here (it was previously a KeyMetrics tile).
+  if (teamCount > 0 || editCtx) {
+    rows.push({ label: "Team Members", value: teamCount > 0 ? String(teamCount) : "—" });
+  }
+
+  if (!editCtx && rows.length === 0) return null;
+
+  // Icon-led list redesign — no more striped table.
+  const iconFor = (label: string) => {
+    const stroke = C.black;
+    const cls = "size-[16px]";
+    switch (label) {
+      case "ACRA / UEN":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="9" y1="13" x2="15" y2="13" />
+            <line x1="9" y1="17" x2="13" y2="17" />
+          </svg>
+        );
+      case "Office address":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+            <circle cx="12" cy="10" r="3" />
+          </svg>
+        );
+      case "Project types":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+        );
+      case "Style specialisation":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="13.5" cy="6.5" r=".5" />
+            <circle cx="17.5" cy="10.5" r=".5" />
+            <circle cx="8.5" cy="7.5" r=".5" />
+            <circle cx="6.5" cy="12.5" r=".5" />
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+          </svg>
+        );
+      case "Budget range":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+        );
+      case "Team Members":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        );
+      case "HDB License":
+      case "BCA Registration":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+        );
+    }
+  };
+
+  const CHIP_FIELDS = new Set(["Project types", "Style specialisation"]);
+  const isChipField = (label: string) => CHIP_FIELDS.has(label);
+
+  // Predefined option lists for the multi-select dropdown fields. Add to these
+  // arrays to surface more options to studios — order here is the order they
+  // render in the dropdown and on the public page.
+  const MULTI_SELECT_OPTIONS: Record<string, string[]> = {
+    "Project types": ["HDB", "Condo", "Landed", "Commercial"],
+    "Style specialisation": [
+      "Modern",
+      "Contemporary",
+      "Scandinavian",
+      "Industrial",
+      "Japandi",
+      "Minimalist",
+      "Mid-Century",
+      "Traditional",
+      "Bohemian",
+      "Rustic",
+      "Coastal",
+    ],
+  };
+
+  const renderValue = (row: Row) => {
+    // Editable single-value (e.g. user-edits the source field). Keep inline edit affordance.
+    if (row.path) {
+      return (
+        <EditableText
+          value={row.value}
+          path={row.path}
+          placeholder="Click to edit"
+          className="text-[15px] md:text-[16px] font-medium leading-[1.4] block mt-1"
+          style={{ fontFamily: sans, color: C.black }}
+        />
+      );
+    }
+    if (row.biIndex !== undefined) {
+      // In edit mode keep the existing input cell so the value stays editable.
+      if (editCtx) {
+        // List-type fields ("Project types", "Style specialisation") use a
+        // checkbox dropdown instead of a free-text input so studios just pick
+        // from a predefined set.
+        if (MULTI_SELECT_OPTIONS[row.label]) {
+          return (
+            <div className="mt-1 -ml-2">
+              <BusinessInfoMultiSelect
+                value={row.value}
+                label={row.label}
+                options={MULTI_SELECT_OPTIONS[row.label]}
+              />
+            </div>
+          );
+        }
+        return (
+          <div className="mt-1 -ml-2">
+            <BusinessInfoEditCell index={row.biIndex} value={row.value} label={row.label} />
+          </div>
+        );
+      }
+      // Public mode — chip rendering for list-type fields.
+      if (isChipField(row.label) && row.value) {
+        const chips = row.value.split(/[,\u00b7]/).map((s) => s.trim()).filter(Boolean);
+        return (
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {chips.map((chip) => (
+              <span
+                key={chip}
+                className="text-[12px] font-medium px-2.5 py-1 rounded-full border"
+                style={{ background: C.cream, color: C.black, borderColor: C.creamBorder, fontFamily: sans }}
+              >
+                {chip}
+              </span>
+            ))}
+          </div>
+        );
+      }
+    }
+    return (
+      <p
+        className="text-[15px] md:text-[16px] font-medium leading-[1.4] mt-1"
+        style={{ fontFamily: sans, color: C.black }}
+      >
+        {row.value || (editCtx ? <span style={{ color: C.grayLight }}>—</span> : null)}
+      </p>
+    );
+  };
+
+  const inner = (
+    <FadeIn>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5 list-none p-0 m-0">
+        {rows.map((row, i) => (
+          <li key={`${row.label}-${i}`} className="flex items-start gap-3.5">
+            <div
+              className="size-10 rounded-[10px] flex items-center justify-center shrink-0"
+              style={{ background: C.white, border: `1px solid ${C.creamBorder}` }}
+            >
+              {iconFor(row.label)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p
+                className="text-[11px] font-semibold uppercase tracking-[0.1em]"
+                style={{ fontFamily: sans, color: C.grayLight }}
+              >
+                {row.label}
+              </p>
+              {renderValue(row)}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </FadeIn>
+  );
+
+  if (inline) return inner;
+
+  return (
+    <section className="py-[40px] md:py-[64px]">
+      {inner}
+    </section>
+  );
+}
+
+/* ─── FAQ ─── */
+function FAQItem({ question, answer, isOpen, onToggle }: { question: string; answer: string; isOpen: boolean; onToggle: () => void }) {
+  return (
+    <div style={{ borderBottom: `1px solid ${C.creamBorder}` }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between py-5 px-5 md:px-6 text-left cursor-pointer bg-transparent border-none"
+        style={{ fontFamily: sans }}
+      >
+        <span style={{ color: C.black }} className="text-[15px] md:text-[16px] font-medium pr-4">{question}</span>
+        <svg
+          className="size-[18px] shrink-0 transition-transform duration-300"
+          style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", color: C.grayLight }}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      <div
+        className="overflow-hidden transition-all duration-300"
+        style={{ maxHeight: isOpen ? "300px" : "0px", opacity: isOpen ? 1 : 0 }}
+      >
+        <p className="px-5 md:px-6 pb-5 text-[14px] md:text-[15px] leading-[1.7]" style={{ fontFamily: sans, color: C.gray }}>
+          {answer}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function FAQ() {
+  const ctx = useDesignerCtx();
+  const name = ctx?.profile?.name || "us";
+  const [openIdx, setOpenIdx] = useState<number | null>(0);
+
+  const items = [
+    {
+      q: `How do I get started with ${name}?`,
+      a: `Getting started is simple — fill out the free quote form on this page or contact us directly. We'll schedule a no-obligation consultation to understand your vision, budget, and timeline. From there, we'll provide a personalised proposal tailored to your space.`,
+    },
+    {
+      q: "What does the design process look like?",
+      a: "Our process typically follows these stages: initial consultation, concept development with mood boards and 3D renders, detailed design documentation, material selection, and finally construction oversight. We keep you involved at every stage to ensure the result matches your vision.",
+    },
+    {
+      q: "How long does a typical renovation take?",
+      a: "Timelines vary depending on scope and property type. A typical HDB renovation takes 8–12 weeks, condos take 10–14 weeks, and landed properties can take 16–24 weeks. We'll provide a detailed timeline during the proposal stage.",
+    },
+    {
+      q: "What is included in the quotation?",
+      a: "Our quotations cover design fees, material costs, carpentry work, electrical and plumbing works, painting, and project management. We provide transparent, itemised quotes so you know exactly what you're paying for — no hidden costs.",
+    },
+    {
+      q: "Do you handle HDB, condo, and landed renovations?",
+      a: "Yes, we handle all property types in Singapore including HDB flats (BTO and resale), private condominiums, and landed homes. Our team is HDB-registered and BCA-licensed, so you can be confident your project is in qualified hands.",
+    },
+  ];
+
+  return (
+    <section className="py-[40px] md:py-[64px]">
+      <FadeIn>
+        <TagLabel>FREQUENTLY ASKED</TagLabel>
+        <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-6">
+          Common Questions
+        </h2>
+
+        <div className="rounded-[16px] overflow-hidden border border-[#d8d3c8]" style={{ background: C.white }}>
+          {items.map((item, i) => (
+            <FAQItem
+              key={i}
+              question={item.q}
+              answer={item.a}
+              isOpen={openIdx === i}
+              onToggle={() => setOpenIdx(openIdx === i ? null : i)}
+            />
+          ))}
+        </div>
+      </FadeIn>
+    </section>
+  );
+}
+
 /* ─── LOADING SKELETON ─── */
 export function ProfileLoadingSkeleton() {
   return (
     <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]">
       <SiteNav logoImg={logoMarkImg} />
       <main className="pt-[24px] md:pt-[40px]">
-        <div className="max-w-[1293px] mx-auto px-4 md:px-8">
+        <div className="max-w-[1280px] mx-auto px-4 md:px-8">
           {/* Cover shimmer */}
-          <div className="w-full h-[260px] md:h-[462px] rounded-[16px] md:rounded-[20px] bg-[#d8d3c8] animate-pulse" />
+          <div className="w-full h-[260px] md:h-[462px] rounded-[16px] bg-[#e4e4e7] animate-pulse" />
           {/* Profile row shimmer */}
           <div className="flex items-start gap-5 md:gap-7 mt-[-50px] md:mt-[-80px] pl-4 md:pl-8">
-            <div className="size-[90px] md:size-[160px] rounded-full bg-[#d8d3c8] animate-pulse border-4 border-white shrink-0" />
+            <div className="size-[90px] md:size-[160px] rounded-full bg-[#e4e4e7] animate-pulse border-4 border-white shrink-0" />
             <div className="hidden md:block pt-[90px] space-y-3 flex-1 max-w-[520px]">
-              <div className="h-7 w-[200px] bg-[#d8d3c8] rounded-lg animate-pulse" />
-              <div className="h-5 w-[360px] bg-[#d8d3c8] rounded-lg animate-pulse" />
-              <div className="h-4 w-[240px] bg-[#d8d3c8] rounded-lg animate-pulse" />
+              <div className="h-7 w-[200px] bg-[#e4e4e7] rounded-lg animate-pulse" />
+              <div className="h-5 w-[360px] bg-[#e4e4e7] rounded-lg animate-pulse" />
+              <div className="h-4 w-[240px] bg-[#e4e4e7] rounded-lg animate-pulse" />
             </div>
           </div>
           {/* Stats shimmer */}
           <div className="mt-6 md:mt-8 grid grid-cols-3 gap-2.5 max-w-[790px]">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-[60px] bg-[#d8d3c8] rounded-[12px] animate-pulse" />
+              <div key={i} className="h-[60px] bg-[#e4e4e7] rounded-[16px] animate-pulse" />
             ))}
           </div>
           {/* Bio shimmer */}
           <div className="mt-6 max-w-[768px] space-y-2">
-            <div className="h-4 w-full bg-[#d8d3c8] rounded animate-pulse" />
-            <div className="h-4 w-[80%] bg-[#d8d3c8] rounded animate-pulse" />
+            <div className="h-4 w-full bg-[#e4e4e7] rounded animate-pulse" />
+            <div className="h-4 w-[80%] bg-[#e4e4e7] rounded animate-pulse" />
           </div>
           {/* Team shimmer */}
           <div className="mt-6 flex gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="flex flex-col items-center gap-2">
-                <div className="size-[74px] md:size-[80px] rounded-full bg-[#d8d3c8] animate-pulse" />
-                <div className="h-3 w-12 bg-[#d8d3c8] rounded animate-pulse" />
+                <div className="size-[74px] md:size-[80px] rounded-full bg-[#e4e4e7] animate-pulse" />
+                <div className="h-3 w-12 bg-[#e4e4e7] rounded animate-pulse" />
               </div>
             ))}
           </div>
@@ -3210,12 +3958,25 @@ export function ProfileLoadingSkeleton() {
 export function DesignerProfile() {
   const { slug } = useParams();
   const { data: apiData, loading, error } = useDesignerData(slug);
+  const { payload: googlePayload, uiReviews: googleUiReviews } = useGoogleReviews(slug);
 
   // Transform API data into component-compatible shapes
   const ctxValue = useMemo<DesignerCtxType | null>(() => {
     if (!apiData) return null;
-    return transformApiData(apiData);
-  }, [apiData]);
+    const base = transformApiData(apiData);
+    return {
+      ...base,
+      googleReviews: googleUiReviews,
+      googleMeta: googlePayload
+        ? {
+            rating: googlePayload.rating,
+            totalRatings: googlePayload.totalRatings,
+            source: googlePayload.source,
+            fetchedAt: googlePayload.fetchedAt,
+          }
+        : null,
+    };
+  }, [apiData, googleUiReviews, googlePayload]);
 
   // Show loading skeleton while fetching
   if (loading) {
@@ -3231,91 +3992,90 @@ export function DesignerProfile() {
 
   return (
     <DesignerDataContext.Provider value={ctxValue}>
-      <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]">
+      <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans }}>
         <SiteNav logoImg={logoMarkImg} />
 
-        <main className="pt-[24px] md:pt-[40px]">
-          <div className="max-w-[1293px] mx-auto px-4 md:px-8">
-            {/* Hero + Profile */}
+        <main className="pt-[16px] md:pt-[24px]">
+          <div className="max-w-[1280px] mx-auto px-4 md:px-8">
+            {/* 1. Breadcrumbs */}
+            <Breadcrumbs />
+
+            {/* 2. Cover Banner (header) */}
             <HeroSection />
 
-            {/* Stats */}
-            <div className="mt-6 md:mt-8 lg:max-w-[790px]">
-              <StatsRow />
+            {/* 3. Studio Info (with KeyMetrics inside) + Lead Form (side-by-side under hero banner) */}
+            <div className="mt-8 md:mt-10">
+              <div className="grid md:grid-cols-[3fr_2fr] gap-8 md:gap-10 items-stretch">
+                <StudioInfo />
+                <FadeIn className="h-full">
+                  <QuoteCard compact />
+                </FadeIn>
+              </div>
             </div>
 
-            {/* Bio */}
-            <div className="mt-6 lg:max-w-[768px]">
+            {/* 5. Bio */}
+            <div className="mt-16 md:mt-24 lg:max-w-[768px]">
               <BioText />
             </div>
 
-            {/* Team Avatars */}
-            <div className="mt-6">
-              <TeamAvatars />
+            {/* 5b. Quick Facts (full-width 3-column grid) */}
+            <div className="mt-10 md:mt-14">
+              <ExperienceTable inline />
             </div>
 
-            {/* Mobile Quote Card */}
-            <div className="mt-6">
-              <MobileQuoteSection />
+            {/* 6. Team Avatars */}
+            <div className="mt-16 md:mt-24">
+              <FadeIn>
+                <TagLabel>OUR TEAM</TagLabel>
+                <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-5">
+                  Meet the Team
+                </h2>
+                <TeamAvatars />
+              </FadeIn>
             </div>
 
-            {/* Trusted Since */}
-            <div className={`mt-8 md:mt-12${!(ctxValue?.teamMembers?.length) ? " lg:max-w-[768px]" : ""}`}>
-              <TrustedSince />
-            </div>
+            {/* 7. Projects Carousel */}
+            <ProjectsSection />
 
-            {/* Projects */}
-            <div className="mt-12 md:mt-16">
-              <ProjectsSection />
-            </div>
+            {/* 8. Rating Breakdown */}
+            <RatingBreakdown />
           </div>
 
-          {/* Trust & Credentials (full width bg) */}
-          <div className="mt-12 md:mt-16">
-            <TrustCredentials />
+          {/* 9. Homeowner Reviews */}
+          <GoogleReviewCards />
+
+          <div className="max-w-[1280px] mx-auto px-4 md:px-8">
+            {/* 10. Trusted Since (timeline) */}
+            <TrustedSince />
+
+            {/* 13. FAQ */}
+            <FAQ />
           </div>
 
-          {/* Case Studies */}
-          <div className="mt-0">
-            <CaseStudies />
-          </div>
-
-          {/* What Homeowners Say */}
-          <div className="mt-0">
-            <HomeownersSay />
-          </div>
-
-          {/* Google Review Cards with Images */}
-          <div className="mt-0">
-            <GoogleReviewCards />
-          </div>
-
-          {/* Service Area */}
-          <div className="mt-0">
-            <ServiceArea />
-          </div>
+          {/* 14. Service Area */}
+          <ServiceArea />
         </main>
 
-        {/* Footer (homepage style) */}
+        {/* Footer */}
         <footer className="px-6 md:px-10 py-10 md:py-14 mt-12 md:mt-16">
           <div className="max-w-[1280px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
                 <a href="/" className="block shrink-0" style={{
-                  width: "110px", height: "23px", background: "#0f0f0d",
+                  width: "110px", height: "23px", background: C.black,
                   maskImage: `url('${logoMarkImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
                   WebkitMaskImage: `url('${logoMarkImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
                 }} />
                 <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
                   {FOOTER.links.map((link: { label: string; href: string }) => (
                     <a key={link.label} href={link.href}
-                      className="text-[13px] font-normal hover:opacity-60 cursor-pointer no-underline font-['DM_Sans',sans-serif]"
-                      style={{ color: "#9a9790", transition: "all 0.15s" }}
+                      className="text-[13px] font-normal hover:opacity-60 cursor-pointer no-underline"
+                      style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}
                     >{link.label}</a>
                   ))}
                 </div>
               </div>
-              <span className="text-[12px] font-normal font-['DM_Sans',sans-serif]" style={{ color: "#9a9790" }}>
+              <span className="text-[12px] font-normal" style={{ color: C.grayLight, fontFamily: sans }}>
                 {FOOTER.copyright}
               </span>
             </div>
