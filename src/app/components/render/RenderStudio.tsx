@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sanitizeInput } from "@/app/utils/sanitize";
-import { LeadModal } from "./LeadModal";
 
 // ─── API helpers ─────────────────────────────────────────────────
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -98,7 +97,8 @@ export function RenderStudio() {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [sendingToDesigner, setSendingToDesigner] = useState(false);
+  const [sentToDesigner, setSentToDesigner] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -348,6 +348,47 @@ export function RenderStudio() {
     setHints({});
     setError(null);
   }, []);
+
+  // Auto-submit "Send to designer" using contact info saved during gate sign-up
+  const handleSendToDesigner = useCallback(async () => {
+    if (!currentTaskId || sendingToDesigner || sentToDesigner) return;
+    let contact: Record<string, string> = {};
+    try {
+      const raw = sessionStorage.getItem("render-gate-contact");
+      if (raw) contact = JSON.parse(raw);
+    } catch { /* noop */ }
+    if (!contact.name || !contact.email || !contact.whatsapp) {
+      setError("Missing contact info. Please go back and fill in the form.");
+      return;
+    }
+    setSendingToDesigner(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/render-lead-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+        body: JSON.stringify({
+          taskId: currentTaskId,
+          name: contact.name,
+          whatsapp: contact.whatsapp,
+          email: contact.email,
+          propertyType: contact.propertyType || undefined,
+          budget: contact.budget || undefined,
+          timeline: contact.timeline || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Failed to send. Please try again.");
+      } else {
+        setSentToDesigner(true);
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSendingToDesigner(false);
+    }
+  }, [currentTaskId, sendingToDesigner, sentToDesigner]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
@@ -656,23 +697,28 @@ export function RenderStudio() {
                   </p>
 
                   <div className="mt-5 flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={() => setLeadModalOpen(true)}
-                      className="flex-1 h-[52px] rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition inline-flex items-center justify-center gap-2"
-                    >
-                      Send this to a designer
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
+                    {sentToDesigner ? (
+                      <div className="flex-1 h-[52px] rounded-[12px] bg-[#166534] text-white text-[14px] font-medium inline-flex items-center justify-center gap-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        Sent! We'll WhatsApp you within 24h
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleSendToDesigner}
+                        disabled={sendingToDesigner}
+                        className="flex-1 h-[52px] rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-60 inline-flex items-center justify-center gap-2"
                       >
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                        <polyline points="12 5 19 12 12 19" />
-                      </svg>
-                    </button>
+                        {sendingToDesigner ? "Sending..." : "Send this to a designer"}
+                        {!sendingToDesigner && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={handleReset}
                       className="h-[52px] px-5 rounded-[12px] border border-[#d8d3c8] bg-white text-[13px] text-[#6b6860] hover:bg-[#f5f1e8] transition"
@@ -687,13 +733,6 @@ export function RenderStudio() {
         </div>
       </div>
 
-      {/* Lead modal */}
-      <LeadModal
-        open={leadModalOpen}
-        onOpenChange={setLeadModalOpen}
-        taskId={currentTaskId}
-        resultUrl={currentResultUrl}
-      />
     </section>
   );
 }

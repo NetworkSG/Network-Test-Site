@@ -984,6 +984,8 @@ app.use("*", async (c, next) => {
 
 // Enable CORS — restricted to known origins
 const ALLOWED_ORIGINS = [
+  "https://www.networksg.net",
+  "https://networksg.net",
   "https://www.orangenetworkstudios.com",
   "https://orangenetworkstudios.com",
   "https://test-site.networksg.net",
@@ -2012,6 +2014,108 @@ app.get("/make-server-4808de5e/render-quota", async (c) => {
     });
   } catch (err) {
     console.log("Unexpected error in /render-quota:", err);
+    return c.json({ error: "Unexpected server error" }, 500);
+  }
+});
+
+// POST /render-lead-gate — called BEFORE the user accesses the render studio.
+// Collects contact info upfront, inserts into Quote Request + fires Zapier
+// so we have the lead even if they never complete a render.
+app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "render-task");
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests. Please wait a moment." }, 429);
+    }
+
+    const body = await c.req.json();
+    const { name, whatsapp, email, propertyType, budget, timeline } = body || {};
+
+    const cleanName = sanitizeString(name || "", 100);
+    const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
+    const cleanWhatsapp = sanitizeString(whatsapp || "", 20);
+    if (!cleanName || cleanName.length < 2) {
+      return c.json({ error: "Please enter your full name." }, 400);
+    }
+    if (!isValidEmail(cleanEmail)) {
+      return c.json({ error: "Please enter a valid email." }, 400);
+    }
+    if (!isValidWhatsapp(cleanWhatsapp)) {
+      return c.json({ error: "Please enter a valid 8-digit SG WhatsApp number." }, 400);
+    }
+    if (propertyType && !ALLOWED_PROPERTY_TYPES.includes(propertyType)) {
+      return c.json({ error: "Invalid property type" }, 400);
+    }
+    if (budget && !ALLOWED_BUDGETS.includes(budget)) {
+      return c.json({ error: "Invalid budget range" }, 400);
+    }
+    if (timeline && !ALLOWED_TIMELINES.includes(timeline)) {
+      return c.json({ error: "Invalid timeline" }, 400);
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const qrId = crypto.randomUUID();
+
+    try {
+      const insertPayload: Record<string, any> = {
+        "ID": qrId,
+        "Name": cleanName,
+        "Email": cleanEmail,
+        "Phone Number": cleanWhatsapp,
+        "Property Type": propertyType || "",
+        "Key Collection Date": timeline || "",
+        "Renovation Budget": budget || "",
+        "Inquiry": "Network 3D AI Render — gate sign-up (pre-render)",
+        "Lead Form": "Network 3D AI Render Gate",
+        "Created Date": new Date().toISOString(),
+        "Updated Date": new Date().toISOString(),
+      };
+      const { error: qrError } = await supabaseAdmin
+        .from("Quote Request")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (qrError) {
+        console.log("Quote Request insert error for render gate:", JSON.stringify(qrError));
+      }
+    } catch (qrErr) {
+      console.log("Quote Request insert exception (gate):", qrErr);
+    }
+
+    // Fire Zapier webhook
+    try {
+      const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
+      if (zapierUrl) {
+        fetch(zapierUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            Name: cleanName,
+            Email: cleanEmail,
+            "Phone Number": cleanWhatsapp,
+            "Property Type": propertyType || "",
+            "Key Collection Date": timeline || "",
+            "Renovation Budget": budget || "",
+            "Lead Form": "Network 3D AI Render Gate",
+            "Submitted At": new Date().toISOString(),
+          }),
+        }).catch((zErr) => console.log("Zapier render-gate webhook error:", zErr));
+      }
+    } catch (zapErr) {
+      console.log("Zapier webhook exception (gate):", zapErr);
+    }
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Unexpected error in /render-lead-gate:", err);
     return c.json({ error: "Unexpected server error" }, 500);
   }
 });

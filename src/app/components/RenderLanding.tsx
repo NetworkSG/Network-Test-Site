@@ -6,7 +6,7 @@ import { SiteNav } from "./SiteNav";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import imgBefore from "figma:asset/c280f9f6aaab4ae8bddb90591c886526cb64a9c8.png";
 import imgAfter from "figma:asset/f07ac02def74d08b83946b312fd388bd8374c28c.png";
-import { RenderStudio } from "./render/RenderStudio";
+import { LeadModal } from "./render/LeadModal";
 
 // ─── Animation helper ────────────────────────────────────────────
 function FadeIn({
@@ -140,14 +140,12 @@ function BeforeAfterSlider() {
 // ─── Main landing page ──────────────────────────────────────────
 export function RenderLanding() {
   const navigate = useNavigate();
+  const [leadOpen, setLeadOpen] = useState(false);
 
-  const scrollToStudio = () => {
-    document
-      .getElementById("render-studio")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const openLeadForm = () => setLeadOpen(true);
 
   return (
+    <>
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
       <div
         className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] relative overflow-x-clip"
@@ -185,7 +183,7 @@ export function RenderLanding() {
                 </p>
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={scrollToStudio}
+                    onClick={openLeadForm}
                     className="h-[56px] px-8 rounded-[14px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition inline-flex items-center justify-center gap-2"
                   >
                     Render my space
@@ -286,9 +284,6 @@ export function RenderLanding() {
             </div>
           </div>
         </section>
-
-        {/* ── STUDIO (the interactive part) ─────────────── */}
-        <RenderStudio />
 
         {/* ── WHY US ────────────────────────────────────── */}
         <section className="py-20 md:py-24 bg-white border-y border-[#e5e1d6]">
@@ -420,7 +415,7 @@ export function RenderLanding() {
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
                 <button
-                  onClick={scrollToStudio}
+                  onClick={openLeadForm}
                   className="h-[52px] px-7 rounded-[12px] bg-white text-[#0f0f0d] text-[14px] font-medium hover:bg-[#f5f1e8] transition"
                 >
                   Render my space
@@ -447,5 +442,9 @@ export function RenderLanding() {
         </footer>
       </div>
     </ReactLenis>
+
+    {/* Lead gate modal — rendered OUTSIDE ReactLenis + overflow-x-clip container */}
+    <LeadModal open={leadOpen} onOpenChange={setLeadOpen} />
+  </>
   );
 }

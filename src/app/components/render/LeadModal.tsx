@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import {
@@ -31,11 +33,15 @@ const TIMELINE_OPTIONS = [
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  taskId: string | null;
-  resultUrl: string | null;
+  /** When set, this is a "send render to designer" modal (post-render). When null, it's a gate modal (pre-render). */
+  taskId?: string | null;
+  resultUrl?: string | null;
 };
 
-export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
+export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null }: Props) {
+  const navigate = useNavigate();
+  const isGateMode = !taskId;
+
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [email, setEmail] = useState("");
@@ -48,7 +54,6 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit =
-    !!taskId &&
     name.trim().length >= 2 &&
     isValidPhone(whatsapp.trim()) &&
     isValidEmail(email.trim()) &&
@@ -56,43 +61,90 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || !taskId) return;
+    if (!canSubmit) return;
     setError(null);
     setSubmitting(true);
-    try {
-      const res = await fetch(`${API_BASE}/render-lead-submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({
-          taskId,
-          name: sanitizeInput(name, 100),
-          whatsapp: sanitizeInput(whatsapp, 20),
-          email: sanitizeEmail(email),
-          propertyType: propertyType || undefined,
-          budget: budget || undefined,
-          timeline: timeline || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Something went wrong. Please try again.");
+
+    if (isGateMode) {
+      // Gate mode: submit lead info to a gate-specific endpoint, then navigate to studio
+      try {
+        const res = await fetch(`${API_BASE}/render-lead-gate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({
+            name: sanitizeInput(name, 100),
+            whatsapp: sanitizeInput(whatsapp, 20),
+            email: sanitizeEmail(email),
+            propertyType: propertyType || undefined,
+            budget: budget || undefined,
+            timeline: timeline || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Something went wrong. Please try again.");
+          setSubmitting(false);
+          return;
+        }
+        // Save contact info for studio's "Send to designer" auto-submit
+        try {
+          sessionStorage.setItem(
+            "render-gate-contact",
+            JSON.stringify({
+              name: sanitizeInput(name, 100),
+              whatsapp: sanitizeInput(whatsapp, 20),
+              email: sanitizeEmail(email),
+              propertyType: propertyType || "",
+              budget: budget || "",
+              timeline: timeline || "",
+            }),
+          );
+        } catch { /* non-fatal */ }
+        // Navigate to studio page
+        setSubmitted(true);
+        setTimeout(() => navigate("/render-tool/studio"), 800);
+      } catch {
+        setError("Network error. Please try again.");
         setSubmitting(false);
-        return;
       }
-      setSubmitted(true);
-    } catch (err) {
-      setError("Network error. Please try again.");
-    } finally {
-      setSubmitting(false);
+    } else {
+      // Render mode: submit render to a designer
+      try {
+        const res = await fetch(`${API_BASE}/render-lead-submit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({
+            taskId,
+            name: sanitizeInput(name, 100),
+            whatsapp: sanitizeInput(whatsapp, 20),
+            email: sanitizeEmail(email),
+            propertyType: propertyType || undefined,
+            budget: budget || undefined,
+            timeline: timeline || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Something went wrong. Please try again.");
+          setSubmitting(false);
+          return;
+        }
+        setSubmitted(true);
+      } catch {
+        setError("Network error. Please try again.");
+        setSubmitting(false);
+      }
     }
   };
 
   const handleClose = (next: boolean) => {
     if (!next) {
-      // Reset form on close so the next open is clean
       setTimeout(() => {
         setName("");
         setWhatsapp("");
@@ -124,7 +176,9 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -181,18 +235,21 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
                     fontWeight: 400,
                   }}
                 >
-                  Your render is on its way.
+                  {isGateMode ? "You're all set!" : "Your render is on its way."}
                 </h2>
                 <p className="text-[14px] text-[#6b6860] mt-3 leading-[1.6]">
-                  A designer from NETWORK will WhatsApp you within 24 hours with
-                  real-world feedback and next steps.
+                  {isGateMode
+                    ? "Taking you to the render studio..."
+                    : "A designer from NETWORK will WhatsApp you within 24 hours with real-world feedback and next steps."}
                 </p>
-                <button
-                  onClick={() => handleClose(false)}
-                  className="mt-6 h-[44px] px-6 rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-medium hover:opacity-90 active:scale-[0.98] transition"
-                >
-                  Back to render
-                </button>
+                {!isGateMode && (
+                  <button
+                    onClick={() => handleClose(false)}
+                    className="mt-6 h-[44px] px-6 rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-medium hover:opacity-90 active:scale-[0.98] transition"
+                  >
+                    Back to render
+                  </button>
+                )}
               </div>
             ) : (
               <>
@@ -204,14 +261,17 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
                     letterSpacing: "-0.015em",
                   }}
                 >
-                  Send this render to a designer
+                  {isGateMode
+                    ? "Before you start rendering"
+                    : "Send this render to a designer"}
                 </h2>
                 <p className="text-[13px] text-[#6b6860] mt-2 leading-[1.5]">
-                  A NETWORK designer will reach out with real-world feedback —
-                  materials, costs, and what's actually buildable.
+                  {isGateMode
+                    ? "Tell us a bit about yourself so we can match you with the right designer when you're ready."
+                    : "A NETWORK designer will reach out with real-world feedback — materials, costs, and what's actually buildable."}
                 </p>
 
-            {resultUrl && (
+            {resultUrl && !isGateMode && (
               <div className="mt-4 rounded-[10px] overflow-hidden border border-[#e5e1d6]">
                 <img
                   src={resultUrl}
@@ -297,10 +357,16 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
                 disabled={!canSubmit}
                 className="w-full h-[48px] rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed mt-2"
               >
-                {submitting ? "Sending..." : "Send render to a designer"}
+                {submitting
+                  ? "Sending..."
+                  : isGateMode
+                    ? "Start rendering"
+                    : "Send render to a designer"}
               </button>
               <p className="text-[11px] text-[#9a9790] text-center leading-[1.5]">
-                We'll WhatsApp you within 24 hours. No spam, no pressure.
+                {isGateMode
+                  ? "Free to use. No credit card required."
+                  : "We'll WhatsApp you within 24 hours. No spam, no pressure."}
               </p>
             </form>
               </>
@@ -308,7 +374,8 @@ export function LeadModal({ open, onOpenChange, taskId, resultUrl }: Props) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
