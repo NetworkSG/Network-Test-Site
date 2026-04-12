@@ -2474,12 +2474,40 @@ app.post("/make-server-4808de5e/render-save-result", async (c) => {
   }
 });
 
-// Short image redirect — /i/:id → full signed URL
+// Short image proxy — /i/:id → fetch and stream the file directly
+// (Slack/Zapier can't follow 302 redirects for file uploads, so we proxy the bytes)
 app.get("/make-server-4808de5e/i/:id", async (c) => {
   const id = c.req.param("id");
   const url = await kv.get(`img:${id}`);
   if (!url) return c.json({ error: "Image not found or expired" }, 404);
-  return c.redirect(url as string, 302);
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const res = await fetch(url as string, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      // Fallback to redirect if fetch fails
+      return c.redirect(url as string, 302);
+    }
+
+    const contentType = res.headers.get("content-type") || "application/octet-stream";
+    const body = await res.arrayBuffer();
+
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(body.byteLength),
+        "Cache-Control": "public, max-age=86400",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch {
+    // Fallback to redirect on any error
+    return c.redirect(url as string, 302);
+  }
 });
 
 // Debug endpoint to inspect stored KV data for a render task
