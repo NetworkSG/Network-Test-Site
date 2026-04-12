@@ -57,6 +57,9 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
     name.trim().length >= 2 &&
     isValidPhone(whatsapp.trim()) &&
     isValidEmail(email.trim()) &&
+    propertyType !== "" &&
+    budget !== "" &&
+    timeline !== "" &&
     !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,9 +81,9 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
             name: sanitizeInput(name, 100),
             whatsapp: sanitizeInput(whatsapp, 20),
             email: sanitizeEmail(email),
-            propertyType: propertyType || undefined,
-            budget: budget || undefined,
-            timeline: timeline || undefined,
+            propertyType,
+            budget,
+            timeline,
           }),
         });
         const data = await res.json();
@@ -97,9 +100,9 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
               name: sanitizeInput(name, 100),
               whatsapp: sanitizeInput(whatsapp, 20),
               email: sanitizeEmail(email),
-              propertyType: propertyType || "",
-              budget: budget || "",
-              timeline: timeline || "",
+              propertyType,
+              budget,
+              timeline,
             }),
           );
         } catch { /* non-fatal */ }
@@ -124,9 +127,9 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
             name: sanitizeInput(name, 100),
             whatsapp: sanitizeInput(whatsapp, 20),
             email: sanitizeEmail(email),
-            propertyType: propertyType || undefined,
-            budget: budget || undefined,
-            timeline: timeline || undefined,
+            propertyType,
+            budget,
+            timeline,
           }),
         });
         const data = await res.json();
@@ -318,7 +321,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
                 </Field>
               </div>
 
-              <Field label="Property type (optional)">
+              <Field label="Property type">
                 <Select
                   value={propertyType}
                   onChange={setPropertyType}
@@ -328,7 +331,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
               </Field>
 
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Budget (optional)">
+                <Field label="Budget">
                   <Select
                     value={budget}
                     onChange={setBudget}
@@ -336,7 +339,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
                     placeholder="Select..."
                   />
                 </Field>
-                <Field label="Timeline (optional)">
+                <Field label="Timeline">
                   <Select
                     value={timeline}
                     onChange={setTimeline}

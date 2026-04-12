@@ -11,10 +11,7 @@ export function RenderStudioPage() {
   const navigate = useNavigate();
 
   return (
-    <div
-      className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]"
-      style={{ color: "#0f0f0d" }}
-    >
+    <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]" style={{ color: "#0f0f0d" }}>
       <SiteNav logoImg={imgNetworkLogo} onLogoClick={() => navigate("/")} />
       <RenderStudio />
     </div>

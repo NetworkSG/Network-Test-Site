@@ -2018,9 +2018,130 @@ app.get("/make-server-4808de5e/render-quota", async (c) => {
   }
 });
 
+// POST /render-suggest-prompt — uses GPT vision to analyze the uploaded image
+// and selected hint chips to generate a unique interior-design render prompt.
+app.post("/make-server-4808de5e/render-suggest-prompt", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "render-suggest-prompt");
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests", retryAfterMs: rl.retryAfterMs }, 429);
+    }
+
+    const body = await c.req.json();
+    const { imageUrl, hints } = body;
+
+    if (!imageUrl || typeof imageUrl !== "string") {
+      return c.json({ error: "imageUrl required" }, 400);
+    }
+
+    const apiKey = Deno.env.get("ai_model_keys");
+    if (!apiKey) {
+      return c.json({ error: "AI model API key not configured" }, 500);
+    }
+
+    // Build the system prompt for GPT vision
+    const styleHint = hints?.style ? `The user prefers a ${hints.style} design style.` : "";
+    const roomHint = hints?.room ? `This is a ${hints.room}.` : "";
+    const propertyHint = hints?.property ? `The property type is ${hints.property}.` : "";
+    const chipContext = [styleHint, roomHint, propertyHint].filter(Boolean).join(" ");
+
+    const systemPrompt =
+      "You are an expert interior designer helping homeowners in Singapore visualize their dream space. " +
+      "The user has uploaded a photo of their room. Based on the image, write a single creative, detailed " +
+      "interior design prompt (1-2 sentences, max 200 characters) describing how to transform this space. " +
+      "Include specific materials, colors, furniture, and lighting. " +
+      "Be vivid and varied — never repeat the same suggestion twice. " +
+      "Return ONLY the prompt text, no quotes, no explanation, no preamble. " +
+      (chipContext ? `Context from user selections: ${chipContext}` : "");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch("https://api.kie.ai/codex/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-5-4",
+        stream: false,
+        input: [
+          {
+            role: "system",
+            content: [{ type: "input_text", text: systemPrompt }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_image",
+                image_url: imageUrl,
+              },
+              {
+                type: "input_text",
+                text: "Analyze this room and suggest an interior design transformation. Be creative and specific.",
+              },
+            ],
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      console.log("GPT suggest-prompt failed:", res.status, await res.text().catch(() => ""));
+      return c.json({ error: "Failed to generate suggestion" }, 502);
+    }
+
+    const data = await res.json();
+
+    // Extract text from response (same pattern as moderation)
+    let raw: string | null = null;
+    if (typeof data?.output_text === "string") {
+      raw = data.output_text;
+    } else if (Array.isArray(data?.output)) {
+      for (const item of data.output) {
+        const parts = item?.content;
+        if (Array.isArray(parts)) {
+          for (const p of parts) {
+            if (typeof p?.text === "string") { raw = p.text; break; }
+            if (typeof p?.output_text === "string") { raw = p.output_text; break; }
+          }
+        }
+        if (raw) break;
+      }
+    } else if (Array.isArray(data?.choices)) {
+      raw = data.choices[0]?.message?.content ?? null;
+    }
+
+    if (!raw || raw.trim().length === 0) {
+      return c.json({ error: "No suggestion generated" }, 502);
+    }
+
+    // Clean up: strip quotes if GPT wrapped it
+    let prompt = raw.trim();
+    if ((prompt.startsWith('"') && prompt.endsWith('"')) || (prompt.startsWith("'") && prompt.endsWith("'"))) {
+      prompt = prompt.slice(1, -1);
+    }
+
+    return c.json({ success: true, prompt: prompt.slice(0, 500) });
+  } catch (err) {
+    console.log("Unexpected error in /render-suggest-prompt:", err);
+    return c.json({ error: "Unexpected server error" }, 500);
+  }
+});
+
 // POST /render-lead-gate — called BEFORE the user accesses the render studio.
-// Collects contact info upfront, inserts into Quote Request + fires Zapier
-// so we have the lead even if they never complete a render.
+// Validates contact info only. No database writes or webhooks here.
+// All data submission happens later via /render-lead-submit when user
+// clicks "Send to designer" after generating a render.
 app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
   try {
     if (!(await verifyAuth(c))) {
@@ -2055,62 +2176,6 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
     }
     if (timeline && !ALLOWED_TIMELINES.includes(timeline)) {
       return c.json({ error: "Invalid timeline" }, 400);
-    }
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const qrId = crypto.randomUUID();
-
-    try {
-      const insertPayload: Record<string, any> = {
-        "ID": qrId,
-        "Name": cleanName,
-        "Email": cleanEmail,
-        "Phone Number": cleanWhatsapp,
-        "Property Type": propertyType || "",
-        "Key Collection Date": timeline || "",
-        "Renovation Budget": budget || "",
-        "Inquiry": "Network 3D AI Render — gate sign-up (pre-render)",
-        "Lead Form": "Network 3D AI Render Gate",
-        "Created Date": new Date().toISOString(),
-        "Updated Date": new Date().toISOString(),
-      };
-      const { error: qrError } = await supabaseAdmin
-        .from("Quote Request")
-        .insert(insertPayload)
-        .select()
-        .single();
-
-      if (qrError) {
-        console.log("Quote Request insert error for render gate:", JSON.stringify(qrError));
-      }
-    } catch (qrErr) {
-      console.log("Quote Request insert exception (gate):", qrErr);
-    }
-
-    // Fire Zapier webhook
-    try {
-      const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
-      if (zapierUrl) {
-        fetch(zapierUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            Name: cleanName,
-            Email: cleanEmail,
-            "Phone Number": cleanWhatsapp,
-            "Property Type": propertyType || "",
-            "Key Collection Date": timeline || "",
-            "Renovation Budget": budget || "",
-            "Lead Form": "Network 3D AI Render Gate",
-            "Submitted At": new Date().toISOString(),
-          }),
-        }).catch((zErr) => console.log("Zapier render-gate webhook error:", zErr));
-      }
-    } catch (zapErr) {
-      console.log("Zapier webhook exception (gate):", zapErr);
     }
 
     return c.json({ success: true });

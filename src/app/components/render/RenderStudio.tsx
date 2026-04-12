@@ -9,7 +9,7 @@ const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808
 const AUTH_HEADERS = { Authorization: `Bearer ${publicAnonKey}` };
 
 // ─── Types ───────────────────────────────────────────────────────
-type Phase = "upload" | "idle" | "generating" | "result";
+type Phase = "home" | "uploading" | "idle" | "generating" | "result";
 
 type Hints = {
   style?: string;
@@ -25,7 +25,6 @@ type HistoryItem = {
 };
 
 // Suggestion chips — ALL values must match the backend whitelist exactly
-// (ALLOWED_DESIGN_STYLES, ALLOWED_ROOM_TYPES, ALLOWED_PROPERTY_TYPES in the edge function)
 const STYLE_CHIPS = [
   "Modern",
   "Japandi",
@@ -44,6 +43,82 @@ const ROOM_CHIPS = [
 ];
 
 const PROPERTY_CHIPS = ["HDB", "Condo", "Landed", "Commercial"];
+
+// ─── AI-style prompt suggestions based on chip selections ────────
+const PROMPT_TEMPLATES: Record<string, Record<string, string>> = {
+  Modern: {
+    "Living Room": "A sleek modern living room with clean lines, neutral tones, a low-profile sofa, and floor-to-ceiling windows letting in natural light",
+    "Kitchen": "A modern open-concept kitchen with handleless cabinetry, quartz countertops, integrated appliances, and pendant lighting over the island",
+    "Bedroom": "A modern master bedroom with a platform bed, soft ambient lighting, built-in wardrobes, and a calming neutral palette",
+    "Bathroom": "A modern bathroom with frameless glass shower, wall-mounted vanity, large format tiles, and recessed lighting",
+    "Dining Room": "A modern dining space with a marble-top table, upholstered chairs, a statement chandelier, and minimalist decor",
+  },
+  Japandi: {
+    "Living Room": "A Japandi living room blending Japanese minimalism with Scandinavian warmth — oak floors, low furniture, natural textiles, and indoor plants",
+    "Kitchen": "A Japandi kitchen with light wood cabinetry, open shelving, ceramic dishware on display, and natural stone countertops",
+    "Bedroom": "A serene Japandi bedroom with a low wooden bed frame, linen bedding, paper lantern lighting, and wabi-sabi accents",
+    "Bathroom": "A Japandi bathroom with soaking tub, wood and stone materials, minimal fixtures, and soft natural lighting",
+    "Dining Room": "A Japandi dining area with a solid wood table, handcrafted ceramics, woven pendant lights, and a warm earthy palette",
+  },
+  Scandinavian: {
+    "Living Room": "A bright Scandinavian living room with white walls, light oak floors, a cozy sectional sofa, sheepskin throws, and abundant natural light",
+    "Kitchen": "A Scandinavian kitchen with white cabinetry, butcher block counters, open shelving, and pops of muted color",
+    "Bedroom": "A Scandinavian bedroom with white linen, light wood furniture, soft textiles, and a gallery wall of simple art",
+    "Bathroom": "A Scandinavian bathroom with white subway tiles, warm wood accents, a freestanding bathtub, and brass fixtures",
+    "Dining Room": "A Scandinavian dining room with a round oak table, wishbone chairs, a linen table runner, and a simple pendant light",
+  },
+  "Wabi-sabi": {
+    "Living Room": "A wabi-sabi living room embracing imperfection — raw plaster walls, vintage furniture, handmade ceramics, and organic textures",
+    "Kitchen": "A wabi-sabi kitchen with hand-finished concrete counters, open wood shelving, aged brass hardware, and earthy pottery",
+    "Bedroom": "A wabi-sabi bedroom with an unmade linen bed, raw wood nightstand, dried flower arrangement, and textured walls",
+    "Bathroom": "A wabi-sabi bathroom with a stone basin, weathered wood vanity, muted earth tones, and handmade tiles",
+    "Dining Room": "A wabi-sabi dining space with a rustic reclaimed wood table, mismatched chairs, clay vases, and soft diffused lighting",
+  },
+  Minimalist: {
+    "Living Room": "A minimalist living room with a monochromatic palette, streamlined furniture, hidden storage, and one statement art piece",
+    "Kitchen": "A minimalist kitchen with flat-panel cabinets, integrated handles, clean countertops, and concealed appliances",
+    "Bedroom": "A minimalist bedroom with only essential furniture, built-in closets, a simple bed frame, and a single bedside light",
+    "Bathroom": "A minimalist bathroom with a floating vanity, wall-mounted toilet, frameless mirror, and a single accent material",
+    "Dining Room": "A minimalist dining room with a simple rectangular table, slim chairs, bare walls, and a single overhead light",
+  },
+  Industrial: {
+    "Living Room": "An industrial loft living room with exposed brick walls, steel beams, a worn leather sofa, Edison bulb lighting, and concrete floors",
+    "Kitchen": "An industrial kitchen with stainless steel counters, open metal shelving, exposed ductwork, and a large farmhouse sink",
+    "Bedroom": "An industrial bedroom with a metal bed frame, exposed brick, factory-style windows, and vintage trunk storage",
+    "Bathroom": "An industrial bathroom with concrete walls, black metal fixtures, a glass-enclosed shower, and pipe-style towel racks",
+    "Dining Room": "An industrial dining space with a reclaimed wood table, metal chairs, pendant cage lights, and a raw concrete floor",
+  },
+};
+
+function generateSuggestedPrompt(hints: Hints): string {
+  const { style, room, property } = hints;
+
+  // Try to find a specific template
+  if (style && room && PROMPT_TEMPLATES[style]?.[room]) {
+    const base = PROMPT_TEMPLATES[style][room];
+    return property ? `${base}, designed for a Singapore ${property}` : base;
+  }
+
+  // Build a generic prompt from whatever is selected
+  const parts: string[] = [];
+  if (style && room) {
+    parts.push(`A ${style.toLowerCase()} ${room.toLowerCase()}`);
+  } else if (style) {
+    parts.push(`A ${style.toLowerCase()} interior`);
+  } else if (room) {
+    parts.push(`A beautifully designed ${room.toLowerCase()}`);
+  }
+
+  if (parts.length === 0) return "";
+
+  const details = [
+    "with warm lighting",
+    "natural materials",
+    "and a cohesive color palette",
+  ];
+  const base = `${parts[0]} ${details.join(", ")}`;
+  return property ? `${base}, designed for a Singapore ${property}` : base;
+}
 
 // ─── Image compression (lifted from RenderToolForm) ─────────────
 function compressImage(
@@ -79,7 +154,7 @@ function compressImage(
 
 // ─── Component ───────────────────────────────────────────────────
 export function RenderStudio() {
-  const [phase, setPhase] = useState<Phase>("upload");
+  const [phase, setPhase] = useState<Phase>("home");
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [originalFileName, setOriginalFileName] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
@@ -87,6 +162,7 @@ export function RenderStudio() {
   const [userPrompt, setUserPrompt] = useState("");
   const [adjustmentDraft, setAdjustmentDraft] = useState("");
   const [hints, setHints] = useState<Hints>({});
+  const [showHints, setShowHints] = useState(false);
 
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [currentResultUrl, setCurrentResultUrl] = useState<string | null>(null);
@@ -98,10 +174,24 @@ export function RenderStudio() {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [sendingToDesigner, setSendingToDesigner] = useState(false);
+  const [suggestingPrompt, setSuggestingPrompt] = useState(false);
   const [sentToDesigner, setSentToDesigner] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const adjustRef = useRef<HTMLTextAreaElement>(null);
+
+  // Get user name from gate contact
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("render-gate-contact");
+      if (raw) {
+        const contact = JSON.parse(raw);
+        if (contact.name) setUserName(contact.name.split(" ")[0]);
+      }
+    } catch { /* noop */ }
+  }, []);
 
   // ── Hydrate remaining quota on mount ─────────────────────────────
   useEffect(() => {
@@ -155,7 +245,6 @@ export function RenderStudio() {
         if (data.resultUrl) {
           setCurrentResultUrl(data.resultUrl);
           setHistory((h) => {
-            // Avoid duplicates on fast re-poll
             if (h.some((item) => item.taskId === currentTaskId)) return h;
             return [
               ...h,
@@ -200,6 +289,7 @@ export function RenderStudio() {
     }
 
     setIsUploading(true);
+    setPhase("uploading");
     setOriginalFileName(file.name);
     try {
       const { base64, contentType } = await compressImage(file);
@@ -216,25 +306,21 @@ export function RenderStudio() {
       if (!res.ok || !data.url) {
         setError(data.error || "Upload failed. Please try again.");
         setIsUploading(false);
+        setPhase("home");
         return;
       }
       setUploadedImageUrl(data.url);
       setLocalPreview(`data:image/jpeg;base64,${base64}`);
       setPhase("idle");
-    } catch (err) {
+      // Auto-focus the prompt textarea after upload
+      setTimeout(() => promptRef.current?.focus(), 100);
+    } catch {
       setError("Upload failed. Please try again.");
+      setPhase("home");
     } finally {
       setIsUploading(false);
     }
   }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
-    },
-    [handleFile],
-  );
 
   // ── Generate (fresh render) ─────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -273,7 +359,7 @@ export function RenderStudio() {
         setRendersRemaining(data.rendersRemaining);
       }
       if (typeof data.rendersLimit === "number") setRendersLimit(data.rendersLimit);
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
       setPhase("idle");
     }
@@ -300,7 +386,7 @@ export function RenderStudio() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
         body: JSON.stringify({
-          imageUrl: uploadedImageUrl, // ← ORIGINAL image, not previous render
+          imageUrl: uploadedImageUrl,
           userPrompt: sanitizeInput(userPrompt, 500),
           adjustmentPrompt: sanitizeInput(adjustmentDraft, 300),
           hints,
@@ -319,7 +405,7 @@ export function RenderStudio() {
         setRendersRemaining(data.rendersRemaining);
       }
       setAdjustmentDraft("");
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
       setPhase("idle");
     }
@@ -334,9 +420,9 @@ export function RenderStudio() {
     rendersLimit,
   ]);
 
-  // ── Reset to upload step ────────────────────────────────────────
+  // ── Reset to home ──────────────────────────────────────────────
   const handleReset = useCallback(() => {
-    setPhase("upload");
+    setPhase("home");
     setUploadedImageUrl(null);
     setLocalPreview(null);
     setOriginalFileName(null);
@@ -346,7 +432,9 @@ export function RenderStudio() {
     setUserPrompt("");
     setAdjustmentDraft("");
     setHints({});
+    setShowHints(false);
     setError(null);
+    setSentToDesigner(false);
   }, []);
 
   // Auto-submit "Send to designer" using contact info saved during gate sign-up
@@ -396,254 +484,167 @@ export function RenderStudio() {
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
-  const quotaBadge =
-    rendersRemaining !== null
-      ? `${rendersRemaining} of ${rendersLimit} renders left today`
-      : `${rendersLimit} renders per day`;
+  // Handle prompt submit on Enter (without Shift)
+  const handlePromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleGenerate();
+    }
+  };
+
+  const handleAdjustKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAdjust();
+    }
+  };
+
+  // Auto-resize textareas
+  const autoResize = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  };
+
+  const isHome = phase === "home" || phase === "uploading";
+  const hasResult = phase === "result" && currentResultUrl;
 
   return (
-    <section
-      id="render-studio"
-      className="w-full py-20 md:py-28 bg-[#f5f1e8]"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
-    >
-      <div className="max-w-[1200px] mx-auto px-6">
-        <div className="text-center mb-10">
-          <h2
-            className="font-normal text-[#0f0f0d] leading-[1.05]"
-            style={{
-              fontFamily: "'EB Garamond', Georgia, serif",
-              fontSize: "clamp(36px, 5vw, 56px)",
-              letterSpacing: "-0.025em",
-            }}
-          >
-            Render your space
-            <span className="italic text-[#9a9790]"> in one prompt.</span>
-          </h2>
-          <p className="mt-4 text-[15px] text-[#6b6860] leading-[1.6] max-w-[600px] mx-auto">
-            Upload a floor plan or reference photo, describe the interior you imagine,
-            and we'll generate a photorealistic render in about a minute.
-          </p>
-          <div className="mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#fafaf8] border border-[#d8d3c8]">
-            <span className="w-[8px] h-[8px] rounded-full bg-[#22C55E]" />
-            <span className="text-[12px] text-[#6b6860] font-medium">{quotaBadge}</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#e5e1d6] rounded-[16px] shadow-[0_2px_20px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="grid md:grid-cols-2 gap-0">
-            {/* ── LEFT: Upload + Prompt ─────────────────── */}
-            <div className="p-8 md:p-10 border-r border-[#e5e1d6]">
-              {/* Upload dropzone */}
-              <label className="text-[12px] text-[#6b6860] font-medium uppercase tracking-wider">
-                1. Your reference image
-              </label>
-              <div
-                ref={dropRef}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-2 relative rounded-[12px] border-2 border-dashed border-[#d8d3c8] bg-[#fafaf8] hover:border-[#0f0f0d] hover:bg-[#f5f1e8] transition-all cursor-pointer min-h-[220px] flex items-center justify-center overflow-hidden"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                />
-                {localPreview ? (
-                  <>
-                    <img
-                      src={localPreview}
-                      alt="Upload preview"
-                      className="w-full h-full object-cover absolute inset-0"
-                    />
-                    <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="text-white text-[13px] font-medium">
-                        Click to replace
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center p-6">
-                    {isUploading ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-8 h-8 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" />
-                        <p className="text-[13px] text-[#6b6860]">Uploading...</p>
-                      </div>
-                    ) : (
-                      <>
-                        <svg
-                          className="mx-auto mb-3"
-                          width="32"
-                          height="32"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#6b6860"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        <p className="text-[14px] text-[#0f0f0d] font-medium">
-                          Drop your floor plan or reference photo
-                        </p>
-                        <p className="text-[12px] text-[#9a9790] mt-1">
-                          JPG, PNG or WebP · up to 20MB
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              {originalFileName && uploadedImageUrl && (
-                <p className="text-[11px] text-[#9a9790] mt-2 truncate">
-                  {originalFileName}
+    <div className="flex flex-col min-h-[calc(100vh-64px)]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      {/* ── MAIN CONTENT AREA ─────────────────────────────────── */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-40 pt-8">
+        <AnimatePresence mode="wait">
+          {/* ── HOME STATE: Greeting + upload prompt ──────────── */}
+          {isHome && (
+            <motion.div
+              key="home"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="text-center max-w-[640px] w-full"
+            >
+              {userName && (
+                <p className="text-[15px] text-[#6b6860] mb-2">
+                  Hi {userName}
                 </p>
               )}
-
-              {/* Prompt textarea */}
-              <label className="mt-6 block text-[12px] text-[#6b6860] font-medium uppercase tracking-wider">
-                2. Describe your interior
-              </label>
-              <textarea
-                value={userPrompt}
-                onChange={(e) => setUserPrompt(e.target.value.slice(0, 500))}
-                placeholder="Modern Japandi living room with oak floors, warm pendant lighting, and a beige linen sofa..."
-                className="mt-2 w-full min-h-[120px] rounded-[12px] border border-[#d8d3c8] bg-[#fafaf8] px-4 py-3 text-[14px] text-[#0f0f0d] leading-[1.5] focus:outline-none focus:border-[#0f0f0d] resize-none"
-              />
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-[11px] text-[#9a9790]">
-                  Interior design & architectural scenes only
-                </span>
-                <span className="text-[11px] text-[#9a9790] tabular-nums">
-                  {userPrompt.length}/500
-                </span>
-              </div>
-
-              {/* Hint chips */}
-              <div className="mt-5 space-y-3">
-                <ChipRow
-                  label="Style (optional)"
-                  options={STYLE_CHIPS}
-                  value={hints.style}
-                  onChange={(v) => setHints({ ...hints, style: v })}
-                />
-                <ChipRow
-                  label="Room (optional)"
-                  options={ROOM_CHIPS}
-                  value={hints.room}
-                  onChange={(v) => setHints({ ...hints, room: v })}
-                />
-                <ChipRow
-                  label="Property (optional)"
-                  options={PROPERTY_CHIPS}
-                  value={hints.property}
-                  onChange={(v) => setHints({ ...hints, property: v })}
-                />
-              </div>
-
-              {/* Error banner */}
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="mt-4 p-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#991b1b] leading-[1.5]"
-                  >
-                    {error}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Generate button */}
-              <button
-                onClick={handleGenerate}
-                disabled={
-                  !uploadedImageUrl ||
-                  !userPrompt.trim() ||
-                  phase === "generating" ||
-                  (rendersRemaining !== null && rendersRemaining <= 0)
-                }
-                className="mt-6 w-full h-[52px] rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
+              <h1
+                className="text-[#0f0f0d] leading-[1.1]"
+                style={{
+                  fontFamily: "'EB Garamond', Georgia, serif",
+                  fontSize: "clamp(32px, 5vw, 48px)",
+                  fontWeight: 400,
+                  letterSpacing: "-0.02em",
+                }}
               >
-                {phase === "generating"
-                  ? `Generating... ${formatTime(elapsed)}`
-                  : "Generate render"}
-              </button>
-            </div>
+                What should we render?
+              </h1>
+              <p className="mt-4 text-[15px] text-[#6b6860] leading-[1.6] max-w-[480px] mx-auto">
+                Upload a floor plan or reference photo, describe the interior you imagine,
+                and get a photorealistic render in about a minute.
+              </p>
 
-            {/* ── RIGHT: Result canvas ─────────────────── */}
-            <div className="p-8 md:p-10 bg-[#fafaf8]">
-              <label className="text-[12px] text-[#6b6860] font-medium uppercase tracking-wider">
-                3. Your render
-              </label>
+              {phase === "uploading" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-8 flex flex-col items-center gap-3"
+                >
+                  <div className="w-10 h-10 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-[13px] text-[#6b6860]">Uploading your image...</p>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
 
-              <div className="mt-2 relative aspect-[4/3] rounded-[12px] bg-[#e5e1d6] overflow-hidden flex items-center justify-center">
-                <AnimatePresence mode="wait">
-                  {phase === "upload" || phase === "idle" ? (
-                    <motion.div
-                      key="empty"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="text-center text-[#9a9790] p-6"
-                    >
-                      <svg
-                        className="mx-auto mb-3"
-                        width="40"
-                        height="40"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.25"
-                      >
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                      </svg>
-                      <p className="text-[13px]">
-                        Your render will appear here
-                      </p>
-                    </motion.div>
-                  ) : phase === "generating" ? (
-                    <motion.div
-                      key="gen"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="text-center"
-                    >
-                      <div className="w-10 h-10 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                      <p className="text-[14px] text-[#0f0f0d] font-medium">
-                        Rendering your space...
-                      </p>
-                      <p className="text-[12px] text-[#6b6860] mt-1 tabular-nums">
-                        Elapsed: {formatTime(elapsed)}
-                      </p>
-                    </motion.div>
-                  ) : currentResultUrl ? (
-                    <motion.img
-                      key={currentResultUrl}
-                      src={currentResultUrl}
-                      alt="AI render"
-                      className="w-full h-full object-cover"
-                      initial={{ opacity: 0, scale: 1.02 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.5 }}
-                    />
-                  ) : null}
-                </AnimatePresence>
+          {/* ── IDLE STATE: Image uploaded, shown as preview ── */}
+          {phase === "idle" && (
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[540px] text-center"
+            >
+              {/* Uploaded image — medium preview */}
+              <div className="relative rounded-[14px] overflow-hidden border border-[#e5e1d6] shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
+                {localPreview && (
+                  <img
+                    src={localPreview}
+                    alt="Your uploaded reference"
+                    className="w-full aspect-[3/2] object-cover"
+                  />
+                )}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-2 right-2 px-2.5 py-1 rounded-[6px] bg-black/60 text-white text-[11px] font-medium hover:bg-black/80 transition backdrop-blur-sm"
+                >
+                  Replace
+                </button>
+              </div>
+              <p className="mt-3 text-[13px] text-[#6b6860]">
+                Describe what you'd like this space to look like below.
+              </p>
+            </motion.div>
+          )}
+
+          {/* ── GENERATING STATE ──────────────────────────────── */}
+          {phase === "generating" && (
+            <motion.div
+              key="generating"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="text-center max-w-[640px]"
+            >
+              <div className="w-14 h-14 border-3 border-[#0f0f0d] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+              <h2
+                className="text-[#0f0f0d] leading-[1.15]"
+                style={{
+                  fontFamily: "'EB Garamond', Georgia, serif",
+                  fontSize: "clamp(24px, 4vw, 36px)",
+                  fontWeight: 400,
+                }}
+              >
+                Rendering your space...
+              </h2>
+              <p className="mt-3 text-[14px] text-[#6b6860] tabular-nums">
+                Elapsed: {formatTime(elapsed)}
+              </p>
+              <p className="mt-1 text-[12px] text-[#9a9790]">
+                This usually takes 30–90 seconds
+              </p>
+            </motion.div>
+          )}
+
+          {/* ── RESULT STATE ──────────────────────────────────── */}
+          {hasResult && (
+            <motion.div
+              key="result"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[800px]"
+            >
+              {/* Main result image */}
+              <div className="relative rounded-[16px] overflow-hidden border border-[#e5e1d6] shadow-[0_2px_20px_rgba(0,0,0,0.06)]">
+                <motion.img
+                  key={currentResultUrl}
+                  src={currentResultUrl}
+                  alt="AI render"
+                  className="w-full aspect-[4/3] object-cover"
+                  initial={{ opacity: 0, scale: 1.02 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                />
               </div>
 
               {/* History strip */}
               {history.length > 1 && (
-                <div className="mt-3 flex gap-2 overflow-x-auto">
+                <div className="mt-4 flex gap-2 overflow-x-auto justify-center">
                   {history.map((item) => (
                     <button
                       key={item.taskId}
@@ -651,7 +652,7 @@ export function RenderStudio() {
                         setCurrentResultUrl(item.resultUrl);
                         setCurrentTaskId(item.taskId);
                       }}
-                      className={`shrink-0 w-[64px] h-[64px] rounded-[8px] overflow-hidden border-2 transition ${
+                      className={`shrink-0 w-[56px] h-[56px] rounded-[10px] overflow-hidden border-2 transition ${
                         currentTaskId === item.taskId
                           ? "border-[#0f0f0d]"
                           : "border-transparent hover:border-[#d8d3c8]"
@@ -667,73 +668,311 @@ export function RenderStudio() {
                 </div>
               )}
 
-              {/* Adjustment row */}
-              {phase === "result" && currentResultUrl && (
-                <div className="mt-5">
-                  <label className="text-[12px] text-[#6b6860] font-medium uppercase tracking-wider">
-                    Refine your render
-                  </label>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      type="text"
-                      value={adjustmentDraft}
-                      onChange={(e) => setAdjustmentDraft(e.target.value.slice(0, 300))}
-                      placeholder="Make the sofa charcoal, add more plants..."
-                      className="flex-1 h-[46px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
-                    />
-                    <button
-                      onClick={handleAdjust}
-                      disabled={
-                        !adjustmentDraft.trim() ||
-                        (rendersRemaining !== null && rendersRemaining <= 0)
-                      }
-                      className="h-[46px] px-5 rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      Adjust
-                    </button>
+              {/* Action buttons */}
+              <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
+                {sentToDesigner ? (
+                  <div className="h-[48px] px-6 rounded-[12px] bg-[#166534] text-white text-[14px] font-medium inline-flex items-center justify-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Sent! We'll WhatsApp you within 24h
                   </div>
-                  <p className="text-[11px] text-[#9a9790] mt-1">
-                    Each adjustment uses one of your daily renders.
-                  </p>
+                ) : (
+                  <button
+                    onClick={handleSendToDesigner}
+                    disabled={sendingToDesigner}
+                    className="h-[48px] px-6 rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  >
+                    {sendingToDesigner ? "Sending..." : "Get matched"}
+                    {!sendingToDesigner && (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                        <polyline points="12 5 19 12 12 19" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+                <button
+                  onClick={handleReset}
+                  className="h-[48px] px-5 rounded-[12px] border border-[#d8d3c8] bg-white text-[13px] text-[#6b6860] hover:bg-[#f5f1e8] transition"
+                >
+                  Start over
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-                  <div className="mt-5 flex flex-col sm:flex-row gap-2">
-                    {sentToDesigner ? (
-                      <div className="flex-1 h-[52px] rounded-[12px] bg-[#166534] text-white text-[14px] font-medium inline-flex items-center justify-center gap-2">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        Sent! We'll WhatsApp you within 24h
-                      </div>
-                    ) : (
+        {/* Error banner — shown in any phase */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="mt-6 max-w-[600px] w-full p-3 rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#991b1b] leading-[1.5] text-center"
+            >
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* ── BOTTOM INPUT BAR ──────────────────────────────────── */}
+      <div className="fixed bottom-0 left-0 right-0 z-50">
+        {/* Fade gradient above the bar */}
+        <div className="h-8 bg-gradient-to-t from-[#f0ede6] to-transparent pointer-events-none" />
+        <div className="bg-[#f0ede6] px-6 pb-6">
+          <div className="max-w-[680px] mx-auto">
+            {/* Hint chips — togglable */}
+            <AnimatePresence>
+              {showHints && (phase === "home" || phase === "idle" || phase === "result") && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="mb-3 overflow-hidden"
+                >
+                  <div className="space-y-2 p-4 rounded-[14px] bg-[#fafaf8] border border-[#d8d3c8]">
+                    <ChipRow
+                      label="Style"
+                      options={STYLE_CHIPS}
+                      value={hints.style}
+                      onChange={(v) => setHints({ ...hints, style: v })}
+                    />
+                    <ChipRow
+                      label="Room"
+                      options={ROOM_CHIPS}
+                      value={hints.room}
+                      onChange={(v) => setHints({ ...hints, room: v })}
+                    />
+                    <ChipRow
+                      label="Property"
+                      options={PROPERTY_CHIPS}
+                      value={hints.property}
+                      onChange={(v) => setHints({ ...hints, property: v })}
+                    />
+                    {/* AI Suggest prompt button */}
+                    {(hints.style || hints.room) && (
                       <button
-                        onClick={handleSendToDesigner}
-                        disabled={sendingToDesigner}
-                        className="flex-1 h-[52px] rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                        onClick={async () => {
+                          if (suggestingPrompt) return;
+                          setSuggestingPrompt(true);
+                          try {
+                            const res = await fetch(`${API_BASE}/render-suggest-prompt`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+                              body: JSON.stringify({ imageUrl: uploadedImageUrl, hints }),
+                            });
+                            const data = await res.json();
+                            if (res.ok && data.prompt) {
+                              setUserPrompt(data.prompt);
+                              setShowHints(false);
+                              setTimeout(() => {
+                                if (promptRef.current) autoResize(promptRef.current);
+                              }, 50);
+                            } else {
+                              // Fallback to local generation
+                              const suggested = generateSuggestedPrompt(hints);
+                              if (suggested) {
+                                setUserPrompt(suggested);
+                                setShowHints(false);
+                                setTimeout(() => {
+                                  if (promptRef.current) autoResize(promptRef.current);
+                                }, 50);
+                              }
+                            }
+                          } catch {
+                            // Fallback to local generation on network error
+                            const suggested = generateSuggestedPrompt(hints);
+                            if (suggested) {
+                              setUserPrompt(suggested);
+                              setShowHints(false);
+                              setTimeout(() => {
+                                if (promptRef.current) autoResize(promptRef.current);
+                              }, 50);
+                            }
+                          } finally {
+                            setSuggestingPrompt(false);
+                          }
+                        }}
+                        disabled={suggestingPrompt}
+                        className="w-full mt-1 h-[36px] rounded-[8px] bg-[#0f0f0d] text-white text-[12px] font-medium hover:opacity-90 active:scale-[0.98] transition flex items-center justify-center gap-1.5 disabled:opacity-60"
                       >
-                        {sendingToDesigner ? "Sending..." : "Send this to a designer"}
-                        {!sendingToDesigner && (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                          </svg>
+                        {suggestingPrompt ? (
+                          <>
+                            <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                            </svg>
+                            Thinking...
+                          </>
+                        ) : (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26z" />
+                            </svg>
+                            Suggest a prompt
+                          </>
                         )}
                       </button>
                     )}
-                    <button
-                      onClick={handleReset}
-                      className="h-[52px] px-5 rounded-[12px] border border-[#d8d3c8] bg-white text-[13px] text-[#6b6860] hover:bg-[#f5f1e8] transition"
-                    >
-                      Start over
-                    </button>
                   </div>
-                </div>
+                </motion.div>
               )}
+            </AnimatePresence>
+
+            {/* Main input container */}
+            <div className="flex items-end gap-2 p-3 rounded-[16px] bg-[#fafaf8] border border-[#d8d3c8] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+              {/* Attach / Upload button */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 w-[40px] h-[40px] rounded-full flex items-center justify-center text-[#6b6860] hover:bg-[#f0ede6] transition"
+                title="Upload image"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
+              {/* Hint chips toggle */}
+              <button
+                onClick={() => setShowHints(!showHints)}
+                className={`shrink-0 w-[40px] h-[40px] rounded-full flex items-center justify-center transition ${
+                  showHints ? "bg-[#0f0f0d] text-white" : "text-[#6b6860] hover:bg-[#f0ede6]"
+                }`}
+                title="Style options"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+                  <line x1="4" y1="8" x2="20" y2="8" />
+                  <line x1="4" y1="16" x2="20" y2="16" />
+                  <circle cx="9" cy="8" r="2" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="16" r="2" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+
+              {/* Prompt / Adjust textarea */}
+              {phase === "result" ? (
+                <textarea
+                  ref={adjustRef}
+                  value={adjustmentDraft}
+                  onChange={(e) => {
+                    setAdjustmentDraft(e.target.value.slice(0, 300));
+                    autoResize(e.target);
+                  }}
+                  onKeyDown={handleAdjustKeyDown}
+                  placeholder="Refine your render — e.g. make the sofa charcoal, add more plants..."
+                  rows={1}
+                  className="flex-1 bg-transparent text-[14px] text-[#0f0f0d] leading-[1.5] resize-none focus:outline-none placeholder:text-[#9a9790] py-2"
+                />
+              ) : (
+                <textarea
+                  ref={promptRef}
+                  value={userPrompt}
+                  onChange={(e) => {
+                    setUserPrompt(e.target.value.slice(0, 500));
+                    autoResize(e.target);
+                  }}
+                  onKeyDown={handlePromptKeyDown}
+                  placeholder={
+                    uploadedImageUrl
+                      ? "Describe your dream interior — e.g. Modern Japandi living room with oak floors..."
+                      : "Upload an image first, then describe your interior..."
+                  }
+                  rows={1}
+                  disabled={phase === "generating"}
+                  className="flex-1 bg-transparent text-[14px] text-[#0f0f0d] leading-[1.5] resize-none focus:outline-none placeholder:text-[#9a9790] py-2 disabled:opacity-50"
+                />
+              )}
+
+              {/* Quota ring + Submit button */}
+              <QuotaRing used={rendersLimit - (rendersRemaining ?? rendersLimit)} limit={rendersLimit} />
+
+              <button
+                onClick={phase === "result" ? handleAdjust : handleGenerate}
+                disabled={
+                  phase === "generating" ||
+                  (phase === "result"
+                    ? !adjustmentDraft.trim()
+                    : !uploadedImageUrl || !userPrompt.trim()) ||
+                  (rendersRemaining !== null && rendersRemaining <= 0)
+                }
+                className="shrink-0 w-[40px] h-[40px] rounded-full bg-[#0f0f0d] text-white flex items-center justify-center hover:opacity-90 active:scale-[0.95] transition disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {phase === "generating" ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                )}
+              </button>
             </div>
+
+            {/* Character counter */}
+            {uploadedImageUrl && phase !== "home" && (
+              <div className="mt-1.5 flex justify-end">
+                <span className="text-[11px] text-[#9a9790] tabular-nums">
+                  {phase === "result" ? `${adjustmentDraft.length}/300` : `${userPrompt.length}/500`}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-    </section>
+// ─── Quota ring (circular progress) ─────────────────────────────
+function QuotaRing({ used, limit }: { used: number; limit: number }) {
+  const remaining = Math.max(0, limit - used);
+  const fraction = limit > 0 ? used / limit : 0;
+  const size = 40;
+  const stroke = 3.5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - fraction);
+
+  return (
+    <div className="shrink-0 relative w-[40px] h-[40px] flex items-center justify-center" title={`${remaining} of ${limit} renders left today`}>
+      <svg width={size} height={size} className="absolute inset-0 -rotate-90">
+        {/* Background track */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#d8d3c8"
+          strokeWidth={stroke}
+        />
+        {/* Used portion (orange) */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#E97315"
+          strokeWidth={stroke}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500"
+        />
+      </svg>
+      <span className="text-[12px] font-semibold text-[#0f0f0d] tabular-nums leading-none">
+        {remaining}
+      </span>
+    </div>
   );
 }
 
@@ -751,7 +990,7 @@ function ChipRow({
 }) {
   return (
     <div>
-      <p className="text-[11px] text-[#9a9790] mb-1.5">{label}</p>
+      <p className="text-[11px] text-[#9a9790] mb-1.5 font-medium uppercase tracking-wider">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
           const active = value === opt;
