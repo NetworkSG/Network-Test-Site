@@ -199,12 +199,7 @@ export function RenderLanding() {
                       <polyline points="12 5 19 12 12 19" />
                     </svg>
                   </button>
-                  <button
-                    onClick={() => navigate("/designers")}
-                    className="h-[56px] px-6 rounded-[14px] border border-[#d8d3c8] bg-white text-[13px] font-medium text-[#0f0f0d] hover:bg-[#fafaf8] transition"
-                  >
-                    Browse designers
-                  </button>
+                  {/* Browse designers button — hidden for now */}
                 </div>
                 <p className="mt-6 text-[12px] text-[#9a9790] leading-[1.5]">
                   5 renders per day · Interior design scenes only · Your prompts
@@ -312,7 +307,7 @@ export function RenderLanding() {
                 plan — with accurate materials, costs, and timelines.
               </p>
               <button
-                onClick={() => navigate("/get-matched")}
+                onClick={() => navigate("/")}
                 className="mt-8 h-[52px] px-7 rounded-[12px] border border-[#0f0f0d] bg-white text-[14px] font-medium text-[#0f0f0d] hover:bg-[#f5f1e8] transition"
               >
                 Get matched with a designer
@@ -409,7 +404,7 @@ export function RenderLanding() {
                 </span>
               </h2>
               <p className="mt-6 text-[15px] text-white/70 leading-[1.6] max-w-[600px] mx-auto">
-                A NETWORK designer will WhatsApp you within 24 hours with
+                A NETWORK designer will WhatsApp you within the day with
                 real-world feedback on what's buildable, what it'll cost, and
                 what to do next.
               </p>
@@ -420,12 +415,7 @@ export function RenderLanding() {
                 >
                   Render my space
                 </button>
-                <button
-                  onClick={() => navigate("/designers")}
-                  className="h-[52px] px-7 rounded-[12px] border border-white/20 text-white text-[14px] font-medium hover:bg-white/5 transition"
-                >
-                  Browse designers
-                </button>
+                {/* Browse designers button — hidden for now */}
               </div>
             </FadeIn>
           </div>
