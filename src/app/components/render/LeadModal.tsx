@@ -243,7 +243,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
                 <p className="text-[14px] text-[#6b6860] mt-3 leading-[1.6]">
                   {isGateMode
                     ? "Taking you to the render studio..."
-                    : "A designer from NETWORK will WhatsApp you within 24 hours with real-world feedback and next steps."}
+                    : "A designer from NETWORK will WhatsApp you within the day with real-world feedback and next steps."}
                 </p>
                 {!isGateMode && (
                   <button
@@ -369,7 +369,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
               <p className="text-[11px] text-[#9a9790] text-center leading-[1.5]">
                 {isGateMode
                   ? "Free to use. No credit card required."
-                  : "We'll WhatsApp you within 24 hours. No spam, no pressure."}
+                  : "We'll WhatsApp you within the day. No spam, no pressure."}
               </p>
             </form>
               </>
