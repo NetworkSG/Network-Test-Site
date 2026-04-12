@@ -4444,15 +4444,17 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
       console.log("Skipping Quote Request update — quoteRequestId:", quoteRequestId, "storageSignedUrl:", !!storageSignedUrl);
     }
 
-    // Generate short URL for the PDF
-    let finalPdfUrl = storageSignedUrl || pdfUrl;
-    if (finalPdfUrl) {
+    // Generate short URL for the PDF (for display/email)
+    const directPdfUrl = storageSignedUrl || pdfUrl;
+    let shortPdfUrl = directPdfUrl;
+    if (directPdfUrl) {
       const shortId = crypto.randomUUID().slice(0, 8);
-      await kv.set(`img:${shortId}`, finalPdfUrl);
+      await kv.set(`img:${shortId}`, directPdfUrl);
       const fnBase = Deno.env.get("SUPABASE_URL") + "/functions/v1/make-server-4808de5e";
-      finalPdfUrl = `${fnBase}/i/${shortId}`;
+      shortPdfUrl = `${fnBase}/i/${shortId}`;
     }
-    return c.json({ success: true, pdfUrl: finalPdfUrl });
+    // Return both: pdfUrl (short redirect) for links, directPdfUrl for Slack/Zapier file uploads
+    return c.json({ success: true, pdfUrl: shortPdfUrl, directPdfUrl });
   } catch (err) {
     console.log("Error in cost-guide-pdf generation:", err);
     return c.json({ error: "Failed to generate PDF: " + err }, 500);
