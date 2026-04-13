@@ -1,0 +1,32 @@
+name: Monthly Google Reviews Refresh
+
+on:
+  schedule:
+    # 1st of every month at 03:00 UTC
+    - cron: '0 3 1 * *'
+  workflow_dispatch: {} # manual trigger from GitHub Actions UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh all designer Google reviews
+        run: |
+          RESPONSE=$(curl -sf -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "https://hycxkpassywjvdqduzrx.supabase.co/functions/v1/make-server-4808de5e/google-reviews/cron-refresh-all")
+
+          echo "$RESPONSE" | jq .
+
+          # Check for errors in results
+          ERRORS=$(echo "$RESPONSE" | jq '[.results | to_entries[] | select(.value | startswith("error"))] | length' 2>/dev/null || echo "0")
+          if [ "$ERRORS" -gt "0" ]; then
+            echo "::warning::$ERRORS designers failed to refresh"
+          fi
+
+          SUCCESS=$(echo "$RESPONSE" | jq '.success' 2>/dev/null || echo "false")
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Refresh failed"
+            exit 1
+          fi

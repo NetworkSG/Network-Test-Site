@@ -1045,17 +1045,29 @@ app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
       return c.json({ error: "Invalid webhook identifier" }, 400);
     }
 
-    // Sanitize all string values in data before forwarding
-    const sanitizedData = new FormData();
+    // Sanitize all values in data before forwarding as JSON
+    const sanitizedData: Record<string, any> = {};
     if (data && typeof data === "object") {
       for (const [key, value] of Object.entries(data)) {
+        const cleanKey = sanitizeString(key, 50);
         if (typeof value === "string") {
-          sanitizedData.append(sanitizeString(key, 50), sanitizeString(value, 2000));
+          sanitizedData[cleanKey] = sanitizeString(value, 2000);
+        } else if (typeof value === "number" || typeof value === "boolean") {
+          sanitizedData[cleanKey] = value;
+        } else if (Array.isArray(value)) {
+          sanitizedData[cleanKey] = value.map((v: any) => typeof v === "string" ? sanitizeString(v, 500) : v).slice(0, 50);
+        } else if (value && typeof value === "object") {
+          sanitizedData[cleanKey] = JSON.stringify(value).slice(0, 2000);
         }
       }
     }
 
-    await fetch(ZAPIER_WEBHOOKS[hook], { method: "POST", body: sanitizedData });
+    console.log("Zapier proxy forwarding data:", JSON.stringify(sanitizedData).slice(0, 500));
+    await fetch(ZAPIER_WEBHOOKS[hook], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sanitizedData),
+    });
     return c.json({ success: true });
   } catch (err) {
     console.log("Zapier proxy error:", err);
@@ -3603,7 +3615,8 @@ async function getOrRefreshGoogleReviews(
   return fresh;
 }
 
-// GET cached Google reviews for a designer (read-through cache)
+// GET cached Google reviews for a designer (cache-only — NEVER calls Google API)
+// Google API calls only happen via cron-refresh-all or manual refresh endpoints.
 app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
   try {
     if (!(await verifyAuth(c))) {
@@ -3617,8 +3630,17 @@ app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
     if (!slug) return c.json({ error: "Invalid slug" }, 400);
 
-    const data = await getOrRefreshGoogleReviews(slug);
-    return c.json({ data });
+    // Read from KV cache only — serve stale data if expired, empty if missing
+    const cached = (await kv.get(`google-reviews:${slug}`)) as CachedGoogleReviews | null;
+    if (cached) {
+      const isStale = cached.expiresAt && new Date(cached.expiresAt).getTime() < Date.now();
+      return c.json({ data: cached, stale: !!isStale });
+    }
+
+    // No cache at all — return empty payload (cron will populate it)
+    const profile = await kv.get(`designer:${slug}`);
+    const placeId: string | null = profile?.googlePlaceId || null;
+    return c.json({ data: emptyGoogleReviewsPayload(placeId), stale: true });
   } catch (err) {
     console.log("Error in GET /google-reviews/:slug:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -3740,6 +3762,20 @@ app.post("/make-server-4808de5e/designers", async (c) => {
 
     await kv.mset(keys, values);
     console.log(`Designer profile saved: ${cleanSlug} (${keys.length} keys)`);
+
+    // Seed Google reviews cache if designer has a googlePlaceId and no cache exists yet
+    if (profile.googlePlaceId) {
+      const existingCache = await kv.get(`google-reviews:${cleanSlug}`);
+      if (!existingCache) {
+        try {
+          await getOrRefreshGoogleReviews(cleanSlug, { forceRefresh: true });
+          console.log(`Seeded Google reviews cache for new designer: ${cleanSlug}`);
+        } catch (seedErr) {
+          console.log(`Failed to seed Google reviews for ${cleanSlug}:`, seedErr);
+        }
+      }
+    }
+
     return c.json({ success: true, slug: cleanSlug, keysWritten: keys.length });
   } catch (err) {
     console.log("Unexpected error in POST /designers:", err);

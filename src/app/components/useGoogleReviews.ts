@@ -104,6 +104,20 @@ export function useGoogleReviews(slug: string | undefined) {
     setLoading(true);
     setError(null);
 
+    // Check sessionStorage first to avoid redundant edge function calls
+    const cacheKey = `google-reviews:${slug}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as CachedGoogleReviewsPayload;
+        if (parsed && Array.isArray(parsed.reviews)) {
+          setPayload(parsed);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch { /* sessionStorage unavailable or corrupt — continue to fetch */ }
+
     fetch(`${API}/google-reviews/${slug}`, {
       headers: { Authorization: `Bearer ${publicAnonKey}` },
     })
@@ -113,11 +127,15 @@ export function useGoogleReviews(slug: string | undefined) {
       })
       .then((json) => {
         if (cancelled) return;
-        setPayload(json?.data ?? null);
+        const data = json?.data ?? null;
+        setPayload(data);
         setLoading(false);
-        if (json?.data) {
+
+        // Cache in sessionStorage for this browsing session
+        if (data) {
+          try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* full or unavailable */ }
           console.log(
-            `Google reviews loaded for ${slug}: source=${json.data.source}, count=${json.data.reviews?.length ?? 0}, fetchedAt=${json.data.fetchedAt}`,
+            `Google reviews loaded for ${slug}: source=${data.source}, count=${data.reviews?.length ?? 0}, fetchedAt=${data.fetchedAt}`,
           );
         }
       })
