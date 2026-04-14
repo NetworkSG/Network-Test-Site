@@ -502,61 +502,50 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
         );
       })()}
 
-      {/* ═══ Know Your Users ═══ */}
+      {/* ═══ Devices, Browsers & OS ═══ */}
       <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
-        <SectionHeader title="Get to know your users" actionLabel="Go to User Overview" onAction={() => onNavigate?.("designers")} />
+        <SectionHeader title="Devices, Browsers & OS" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Projects by type */}
+          {/* Devices */}
           <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Projects by source</h4>
-            <div className="space-y-0 divide-y divide-[#f3f4f6]">
-              <SourceRow name="Blank canvas" type="New" change={6} value={3661} isPositive={true} />
-              <SourceRow name="From template" type="Import" change={-4} value={421} isPositive={false} />
-              <SourceRow name="Floor plan upload" type="AI" change={4} value={330} isPositive={true} />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Devices</h4>
+            {analytics?.devices?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.devices.slice(0, 6).map((d: any, i: number) => (
+                  <PageRow key={i} name={d.key || "Unknown"} change={0} value={d.total} color={["#3b82f6","#8b5cf6","#22c55e","#f59e0b","#ef4444","#06b6d4"][i % 6]} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel" : analytics ? "No device data yet" : "Loading..."}</p>
+            )}
           </div>
 
-          {/* Top templates */}
+          {/* Browsers */}
           <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Top templates used</h4>
-            <div className="space-y-0 divide-y divide-[#f3f4f6]">
-              <PageRow name="4-Room BTO Standard" change={12} value={89} color="#3b82f6" />
-              <PageRow name="5-Room Resale HDB" change={8} value={67} color="#8b5cf6" />
-              <PageRow name="3-Room BTO Compact" change={-3} value={45} color="#f59e0b" />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Browsers</h4>
+            {analytics?.browsers?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.browsers.slice(0, 6).map((b: any, i: number) => (
+                  <PageRow key={i} name={b.key || "Unknown"} change={0} value={b.total} color={["#3b82f6","#22c55e","#f59e0b","#8b5cf6","#ef4444","#06b6d4"][i % 6]} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel" : analytics ? "No browser data yet" : "Loading..."}</p>
+            )}
           </div>
 
-          {/* AI Platform usage */}
+          {/* Operating Systems */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="size-[12px] text-[#8b5cf6]" />
-              <h4 className="text-[13px] font-semibold text-[#101828]">AI Features usage</h4>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#fef3c7] text-[#d97706]">New</span>
-            </div>
-            <div className="flex items-baseline gap-2 mb-3">
-              <span className="text-[28px] font-bold text-[#101828]">{stats.totalRenders}</span>
-              <span className="text-[11px] font-medium text-[#22c55e]">↑ 105%</span>
-            </div>
-            <div className="space-y-2">
-              {[
-                { name: "AI Floor Plan Analysis", pct: "(100%)", count: stats.totalRenders },
-                { name: "Auto-Furnish", pct: "(87%)", count: Math.floor(stats.totalRenders * 0.87) },
-                { name: "Style Rendering", pct: "(65%)", count: Math.floor(stats.totalRenders * 0.65) },
-              ].map((item) => (
-                <div key={item.name} className="flex items-center justify-between text-[12px]">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="size-[6px] rounded-full bg-[#8b5cf6] shrink-0" />
-                    <span className="text-[#6a7282] truncate">{item.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[#9ca3af]">{item.pct}</span>
-                    <span className="font-semibold text-[#101828]">{item.count}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Operating Systems</h4>
+            {analytics?.os?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.os.slice(0, 6).map((o: any, i: number) => (
+                  <PageRow key={i} name={o.key || "Unknown"} change={0} value={o.total} color={["#3b82f6","#f59e0b","#22c55e","#8b5cf6","#ef4444","#06b6d4"][i % 6]} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel" : analytics ? "No OS data yet" : "Loading..."}</p>
+            )}
           </div>
         </div>
       </div>

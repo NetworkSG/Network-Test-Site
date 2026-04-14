@@ -1185,11 +1185,14 @@ app.get("/make-server-4808de5e/vercel-analytics", async (c) => {
     const headers = { Authorization: `Bearer ${VERCEL_TOKEN}` };
 
     // Fetch timeseries + groupBy breakdowns in parallel
-    const [overallRes, pagesRes, referrersRes, countriesRes] = await Promise.allSettled([
+    const [overallRes, pagesRes, referrersRes, countriesRes, devicesRes, browsersRes, osRes] = await Promise.allSettled([
       fetch(`${base}?${qs}`, { headers }),
       fetch(`${base}?${qs}&groupBy=path`, { headers }),
       fetch(`${base}?${qs}&groupBy=referrer`, { headers }),
       fetch(`${base}?${qs}&groupBy=country`, { headers }),
+      fetch(`${base}?${qs}&groupBy=device_type`, { headers }),
+      fetch(`${base}?${qs}&groupBy=client_name`, { headers }),
+      fetch(`${base}?${qs}&groupBy=os_name`, { headers }),
     ]);
 
     const extract = async (r: PromiseSettledResult<Response>) => {
@@ -1200,11 +1203,14 @@ app.get("/make-server-4808de5e/vercel-analytics", async (c) => {
       return null;
     };
 
-    const [overall, byPage, byReferrer, byCountry] = await Promise.all([
+    const [overall, byPage, byReferrer, byCountry, byDevice, byBrowser, byOS] = await Promise.all([
       extract(overallRes),
       extract(pagesRes),
       extract(referrersRes),
       extract(countriesRes),
+      extract(devicesRes),
+      extract(browsersRes),
+      extract(osRes),
     ]);
 
     // Transform grouped data into ranked lists
@@ -1230,6 +1236,9 @@ app.get("/make-server-4808de5e/vercel-analytics", async (c) => {
       pages: rankGroups(byPage),
       referrers: rankGroups(byReferrer),
       countries: rankGroups(byCountry),
+      devices: rankGroups(byDevice),
+      browsers: rankGroups(byBrowser),
+      os: rankGroups(byOS),
       meta: { from, to, tz },
     });
   } catch (err) {
