@@ -275,25 +275,32 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
   });
   const [dateRange] = useState("Last 30 days");
 
-  // Live visitor tracking
+  // Live visitor tracking — Vercel realtime + heartbeat detail
+  const [vercelRealtime, setVercelRealtime] = useState<{ total: number; devices: number; bounceRate?: number }>({ total: 0, devices: 0 });
   const [liveVisitors, setLiveVisitors] = useState<{ count: number; visitors: { visitorId: string; page: string; lastSeen: number }[] }>({ count: 0, visitors: [] });
 
-  const fetchLiveVisitors = useCallback(async () => {
+  const fetchLiveData = useCallback(async () => {
     try {
       const headers = await getAdminAuthHeaders();
-      const res = await fetch(`${API}/live-visitors`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setLiveVisitors(data);
+      // Fetch Vercel realtime + heartbeat visitors in parallel
+      const [realtimeRes, heartbeatRes] = await Promise.allSettled([
+        fetch(`${API}/vercel-realtime`, { headers }),
+        fetch(`${API}/live-visitors`, { headers }),
+      ]);
+      if (realtimeRes.status === "fulfilled" && realtimeRes.value.ok) {
+        setVercelRealtime(await realtimeRes.value.json());
+      }
+      if (heartbeatRes.status === "fulfilled" && heartbeatRes.value.ok) {
+        setLiveVisitors(await heartbeatRes.value.json());
       }
     } catch (_) {}
   }, []);
 
   useEffect(() => {
-    fetchLiveVisitors();
-    const interval = setInterval(fetchLiveVisitors, 15_000); // Poll every 15s
+    fetchLiveData();
+    const interval = setInterval(fetchLiveData, 15_000); // Poll every 15s
     return () => clearInterval(interval);
-  }, [fetchLiveVisitors]);
+  }, [fetchLiveData]);
 
   // Vercel Analytics data
   const [analytics, setAnalytics] = useState<any>(null);
@@ -385,42 +392,45 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
 
       {/* ═══ Live Activity + AI Search ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Live activity */}
+        {/* Live activity — Vercel realtime + heartbeat detail */}
         <div className="bg-white border border-[#e8eaed] rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-3">
             <div className="relative">
-              <div className={`size-[8px] rounded-full ${liveVisitors.count > 0 ? "bg-[#22c55e] animate-pulse" : "bg-[#d1d5db]"}`} />
+              <div className={`size-[8px] rounded-full ${vercelRealtime.devices > 0 ? "bg-[#22c55e] animate-pulse" : "bg-[#d1d5db]"}`} />
             </div>
-            <span className="text-[14px] font-semibold text-[#101828]">
-              {liveVisitors.count} live visitor{liveVisitors.count !== 1 ? "s" : ""}
-            </span>
-            <div className="size-[28px] rounded-full bg-[#3b82f6] flex items-center justify-center ml-auto">
+            <div className="flex-1 min-w-0">
+              <span className="text-[14px] font-semibold text-[#101828]">
+                {vercelRealtime.devices} live visitor{vercelRealtime.devices !== 1 ? "s" : ""}
+              </span>
+              <span className="text-[11px] text-[#9ca3af] ml-2">
+                {vercelRealtime.total} page view{vercelRealtime.total !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="size-[28px] rounded-full bg-[#3b82f6] flex items-center justify-center shrink-0">
               <Users className="size-[14px] text-white" />
             </div>
           </div>
-          {liveVisitors.visitors.length > 0 ? (
-            <div className="flex flex-col gap-1 mb-2 max-h-[100px] overflow-y-auto">
-              {liveVisitors.visitors.slice(0, 8).map((v, i) => {
+          {vercelRealtime.bounceRate !== undefined && vercelRealtime.bounceRate > 0 && (
+            <div className="flex items-center gap-4 mb-3 text-[11px]">
+              <span className="text-[#6a7282]">Bounce rate: <span className="font-semibold text-[#101828]">{vercelRealtime.bounceRate}%</span></span>
+            </div>
+          )}
+          {liveVisitors.visitors.length > 0 && (
+            <div className="flex flex-col gap-1 mb-2 max-h-[100px] overflow-y-auto border-t border-[#f3f4f6] pt-2">
+              <p className="text-[10px] font-medium text-[#9ca3af] uppercase tracking-wider mb-0.5">Recent page activity</p>
+              {liveVisitors.visitors.slice(0, 6).map((v, i) => {
                 const ago = Math.round((Date.now() - v.lastSeen) / 1000);
                 const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
                 return (
                   <p key={i} className="text-[12px] text-[#9ca3af] flex items-center justify-between gap-2">
-                    <span>
-                      <span className="text-[#6a7282]">{v.visitorId.length > 14 ? v.visitorId.slice(0, 14) + "…" : v.visitorId}</span>{" "}
-                      on <span className="text-[#3b82f6]">{v.page}</span>
-                    </span>
+                    <span className="text-[#3b82f6] truncate">{v.page}</span>
                     <span className="text-[10px] text-[#c4c4c4] shrink-0">{agoLabel}</span>
                   </p>
                 );
               })}
-              {liveVisitors.visitors.length > 8 && (
-                <p className="text-[11px] text-[#9ca3af]">+{liveVisitors.visitors.length - 8} more</p>
-              )}
             </div>
-          ) : (
-            <p className="text-[12px] text-[#9ca3af] mb-2">No active visitors in the last 5 min</p>
           )}
-          <button onClick={fetchLiveVisitors} className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
+          <button onClick={fetchLiveData} className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
         </div>
 
         {/* AI Search */}

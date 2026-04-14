@@ -1238,6 +1238,27 @@ app.get("/make-server-4808de5e/vercel-analytics", async (c) => {
   }
 });
 
+// Vercel real-time visitors — lightweight endpoint polled every 15s
+app.get("/make-server-4808de5e/vercel-realtime", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    if (!VERCEL_TOKEN) return c.json({ error: "VERCEL_TOKEN not configured" }, 500);
+
+    const headers = { Authorization: `Bearer ${VERCEL_TOKEN}` };
+    const qs = `projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}`;
+    const res = await fetch(`https://vercel.com/api/web-analytics/realtime?${qs}`, { headers });
+    if (!res.ok) {
+      console.log("Vercel realtime error:", res.status, await res.text().catch(() => ""));
+      return c.json({ total: 0, devices: 0 });
+    }
+    const data = await res.json();
+    return c.json(data);
+  } catch (err) {
+    console.log("Error in vercel-realtime:", err);
+    return c.json({ total: 0, devices: 0 });
+  }
+});
+
 // Submit quote request
 app.post("/make-server-4808de5e/quote-request", async (c) => {
   try {
