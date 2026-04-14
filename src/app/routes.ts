@@ -1,6 +1,10 @@
 import { createBrowserRouter, Outlet, useLocation } from "react-router";
 import { lazy, Suspense, createElement, useEffect, useRef, useState } from "react";
+import { inject } from "@vercel/analytics";
 import { useVisitorHeartbeat } from "./hooks/useVisitorHeartbeat";
+
+// Initialize Vercel Analytics (works for Vite/SPA — no React component needed)
+inject();
 import { HomepageV8 } from "./components/homepage/v8/HomepageV8";
 import { AdminGuard } from "./components/AdminGuard";
 
