@@ -3576,8 +3576,7 @@ function BusinessInfoEditCell({
 
 /* Multi-select dropdown for Quick Fact list-type fields ("Project types",
  * "Style specialisation"). Stores the selection back into businessInfo as a
- * comma-separated string so the public-page chip renderer (which already
- * splits on `,` / `·`) keeps working unchanged. */
+ * middle-dot (·) separated string matching the public-page chip renderer. */
 function BusinessInfoMultiSelect({
   value,
   label,
@@ -3594,13 +3593,34 @@ function BusinessInfoMultiSelect({
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   // Parse ·-separated value into a Set for fast lookups.
-  // NOTE: only split on middle dot (·), NOT commas — values like "HDB (BTO, Resale, Maisonette)" contain commas.
-  const selectedSet = new Set(
-    (value || "")
-      .split(/\s*\u00b7\s*/)
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
+  // Primary delimiter is middle dot (·). For backward compat with data saved
+  // using commas, also try extracting known options from the raw string.
+  const rawParts = (value || "")
+    .split(/\s*\u00b7\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // If the split produced a blob that doesn't match any option, try extracting
+  // known options from it (handles legacy comma-separated data where values
+  // like "HDB (BTO, Resale, Maisonette)" contain commas themselves).
+  const parsed: string[] = [];
+  for (const part of rawParts) {
+    if (options.includes(part)) {
+      parsed.push(part);
+    } else {
+      // Try to find known options within this part
+      let remaining = part;
+      let found = false;
+      for (const opt of options) {
+        if (remaining.includes(opt)) {
+          parsed.push(opt);
+          remaining = remaining.replace(opt, "");
+          found = true;
+        }
+      }
+      if (!found) parsed.push(part); // keep as-is (custom extra)
+    }
+  }
+  const selectedSet = new Set(parsed);
   // Anything the studio previously typed that isn't in the predefined options
   // (e.g. a custom style) — show it at the bottom so it isn't silently lost.
   const customExtras = Array.from(selectedSet).filter((s) => !options.includes(s));
@@ -3630,7 +3650,7 @@ function BusinessInfoMultiSelect({
     // currently selected predefined options in their canonical order.
     const orderedSelections = options.filter((o) => nextSelected.has(o));
     const finalList = [...orderedSelections, ...customExtras.filter((c) => nextSelected.has(c))];
-    const next = finalList.join(", ");
+    const next = finalList.join(" · ");
     if (next === value) return;
     setSaving(true);
     try {
@@ -4001,7 +4021,7 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
         // from a predefined set.
         if (MULTI_SELECT_OPTIONS[row.label]) {
           return (
-            <div className="mt-1 -ml-2">
+            <div className="mt-1">
               <BusinessInfoMultiSelect
                 value={row.value}
                 label={row.label}
@@ -4011,7 +4031,7 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
           );
         }
         return (
-          <div className="mt-1 -ml-2">
+          <div className="mt-1">
             <BusinessInfoEditCell index={row.biIndex} value={row.value} label={row.label} />
           </div>
         );
