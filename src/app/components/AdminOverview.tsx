@@ -390,72 +390,24 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
         </div>
       </div>
 
-      {/* ═══ Live Activity + AI Search ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Live activity — Vercel realtime + heartbeat detail */}
-        <div className="bg-white border border-[#e8eaed] rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="relative">
-              <div className={`size-[8px] rounded-full ${vercelRealtime.devices > 0 ? "bg-[#22c55e] animate-pulse" : "bg-[#d1d5db]"}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <span className="text-[14px] font-semibold text-[#101828]">
-                {vercelRealtime.devices} live visitor{vercelRealtime.devices !== 1 ? "s" : ""}
-              </span>
-              <span className="text-[11px] text-[#9ca3af] ml-2">
-                {vercelRealtime.total} page view{vercelRealtime.total !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="size-[28px] rounded-full bg-[#3b82f6] flex items-center justify-center shrink-0">
-              <Users className="size-[14px] text-white" />
-            </div>
-          </div>
-          {vercelRealtime.bounceRate !== undefined && vercelRealtime.bounceRate > 0 && (
-            <div className="flex items-center gap-4 mb-3 text-[11px]">
-              <span className="text-[#6a7282]">Bounce rate: <span className="font-semibold text-[#101828]">{vercelRealtime.bounceRate}%</span></span>
-            </div>
-          )}
-          {liveVisitors.visitors.length > 0 && (
-            <div className="flex flex-col gap-1 mb-2 max-h-[100px] overflow-y-auto border-t border-[#f3f4f6] pt-2">
-              <p className="text-[10px] font-medium text-[#9ca3af] uppercase tracking-wider mb-0.5">Recent page activity</p>
-              {liveVisitors.visitors.slice(0, 6).map((v, i) => {
-                const ago = Math.round((Date.now() - v.lastSeen) / 1000);
-                const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
-                return (
-                  <p key={i} className="text-[12px] text-[#9ca3af] flex items-center justify-between gap-2">
-                    <span className="text-[#3b82f6] truncate">{v.page}</span>
-                    <span className="text-[10px] text-[#c4c4c4] shrink-0">{agoLabel}</span>
-                  </p>
-                );
-              })}
-            </div>
-          )}
-          <button onClick={fetchLiveData} className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
+      {/* ═══ Live Activity ═══ */}
+      <div className="bg-white border border-[#e8eaed] rounded-xl p-5 flex items-center gap-5">
+        <div className="relative">
+          <div className={`size-[12px] rounded-full ${vercelRealtime.devices > 0 ? "bg-[#22c55e] animate-pulse" : "bg-[#d1d5db]"}`} />
         </div>
-
-        {/* AI Search */}
-        <div className="bg-white border border-[#e8eaed] rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="size-[14px] text-[#3b82f6]" />
-            <span className="text-[14px] font-semibold text-[#101828]">Find stats with the help of AI</span>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Which page has the highest bounce rate?"
-              className="flex-1 h-[36px] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-3 text-[13px] text-[#101828] placeholder:text-[#99A1AF] outline-none focus:border-[#3b82f6] transition-colors"
-            />
-            <button className="px-4 h-[36px] bg-[#3b82f6] text-white rounded-lg text-[13px] font-semibold hover:bg-[#2563eb] transition-colors cursor-pointer">
-              Start Chat
-            </button>
-          </div>
-          <div className="flex gap-2 mt-2 overflow-x-auto">
-            {["Which pages have the highest bounce rate?", "What are the top traffic sources?"].map((q) => (
-              <button key={q} className="shrink-0 px-3 py-1 rounded-full border border-[#e5e7eb] bg-[#f9fafb] text-[11px] text-[#6a7282] hover:bg-[#f3f4f6] transition-colors cursor-pointer truncate max-w-[280px]">
-                {q}
-              </button>
-            ))}
-          </div>
+        <span className="text-[32px] font-bold text-[#101828] tracking-tight leading-none">
+          {vercelRealtime.devices}
+        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[14px] font-semibold text-[#101828]">
+            live visitor{vercelRealtime.devices !== 1 ? "s" : ""}
+          </span>
+          <span className="text-[12px] text-[#9ca3af]">
+            {vercelRealtime.total} page view{vercelRealtime.total !== 1 ? "s" : ""}
+            {vercelRealtime.bounceRate !== undefined && vercelRealtime.bounceRate > 0 && (
+              <> &middot; {vercelRealtime.bounceRate}% bounce</>
+            )}
+          </span>
         </div>
       </div>
 
