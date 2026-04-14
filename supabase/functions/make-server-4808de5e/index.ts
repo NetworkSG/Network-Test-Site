@@ -1161,6 +1161,83 @@ app.get("/make-server-4808de5e/live-visitors", async (c) => {
   }
 });
 
+// =============================================
+// VERCEL ANALYTICS PROXY
+// =============================================
+const VERCEL_TOKEN = Deno.env.get("VERCEL_TOKEN") || "";
+const VERCEL_PROJECT_ID = "prj_KcWg8PKziCzC2Slto8BoFWbTimQy";
+const VERCEL_TEAM_ID = "team_ZbvmQZ8nr6yUnIMsCjMTq7At";
+
+// Proxy Vercel Web Analytics API — admin only
+// Uses the timeseries endpoint with groupBy for breakdowns
+app.get("/make-server-4808de5e/vercel-analytics", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    if (!VERCEL_TOKEN) return c.json({ error: "VERCEL_TOKEN not configured" }, 500);
+
+    const url = new URL(c.req.url);
+    const from = url.searchParams.get("from") || new Date(Date.now() - 30 * 86400000).toISOString();
+    const to = url.searchParams.get("to") || new Date().toISOString();
+    const tz = url.searchParams.get("tz") || "Asia/Singapore";
+
+    const base = "https://vercel.com/api/web-analytics/timeseries";
+    const qs = `projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&timezone=${encodeURIComponent(tz)}&environment=production&latest=true`;
+    const headers = { Authorization: `Bearer ${VERCEL_TOKEN}` };
+
+    // Fetch timeseries + groupBy breakdowns in parallel
+    const [overallRes, pagesRes, referrersRes, countriesRes] = await Promise.allSettled([
+      fetch(`${base}?${qs}`, { headers }),
+      fetch(`${base}?${qs}&groupBy=path`, { headers }),
+      fetch(`${base}?${qs}&groupBy=referrer`, { headers }),
+      fetch(`${base}?${qs}&groupBy=country`, { headers }),
+    ]);
+
+    const extract = async (r: PromiseSettledResult<Response>) => {
+      if (r.status === "fulfilled" && r.value.ok) return r.value.json();
+      if (r.status === "fulfilled") {
+        console.log("Vercel API error:", r.value.status, await r.value.text().catch(() => ""));
+      }
+      return null;
+    };
+
+    const [overall, byPage, byReferrer, byCountry] = await Promise.all([
+      extract(overallRes),
+      extract(pagesRes),
+      extract(referrersRes),
+      extract(countriesRes),
+    ]);
+
+    // Transform grouped data into ranked lists
+    // Each group key maps to an array of daily entries — sum the totals for ranking
+    const rankGroups = (data: any) => {
+      if (!data?.data?.groups) return [];
+      const groups = data.data.groups;
+      return Object.entries(groups)
+        .map(([key, entries]: [string, any]) => ({
+          key: key || "(direct)",
+          total: (entries as any[]).reduce((s: number, e: any) => s + (e.total || 0), 0),
+          devices: (entries as any[]).reduce((s: number, e: any) => s + (e.devices || 0), 0),
+        }))
+        .filter((g) => g.total > 0)
+        .sort((a, b) => b.total - a.total);
+    };
+
+    // Overall timeseries: data.groups.all[]
+    const timeseries = overall?.data?.groups?.all || [];
+
+    return c.json({
+      timeseries,
+      pages: rankGroups(byPage),
+      referrers: rankGroups(byReferrer),
+      countries: rankGroups(byCountry),
+      meta: { from, to, tz },
+    });
+  } catch (err) {
+    console.log("Error in vercel-analytics proxy:", err);
+    return c.json({ error: "Failed to fetch analytics" }, 500);
+  }
+});
+
 // Submit quote request
 app.post("/make-server-4808de5e/quote-request", async (c) => {
   try {

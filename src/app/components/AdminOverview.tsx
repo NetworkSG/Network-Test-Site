@@ -295,17 +295,29 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
     return () => clearInterval(interval);
   }, [fetchLiveVisitors]);
 
-  // Generate mock data once
-  const [dailyData] = useState(() => generateDailyData(30));
-  const [sparkProjects] = useState(() => generateSparkline(120, 30));
+  // Vercel Analytics data
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [analyticsError, setAnalyticsError] = useState(false);
+
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const headers = await getAdminAuthHeaders();
+      const from = new Date(Date.now() - 30 * 86400000).toISOString();
+      const to = new Date().toISOString();
+      const res = await fetch(`${API}/vercel-analytics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.error) { setAnalyticsError(true); } else { setAnalytics(data); }
+      } else { setAnalyticsError(true); }
+    } catch (_) { setAnalyticsError(true); }
+  }, []);
+
+  // Generate fallback sparklines for non-analytics stats
   const [sparkTemplates] = useState(() => generateSparkline(24, 8));
-  const [sparkRenders] = useState(() => generateSparkline(45, 15));
-  const [sparkLeads] = useState(() => generateSparkline(85, 25));
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
-      const headers = await getAdminAuthHeaders();
       // Fetch multiple endpoints in parallel
       const [templatesRes, designersRes] = await Promise.allSettled([
         fetch(`${API}/fp3d/templates?all=true`, { headers: AUTH }),
@@ -327,11 +339,11 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
       }
 
       setStats({
-        totalProjects: Math.floor(Math.random() * 200 + 150), // Simulated - would need a real admin endpoint
+        totalProjects: 0,
         totalTemplates,
         totalDesigners,
-        totalRenders: Math.floor(Math.random() * 100 + 50),
-        totalLeads: Math.floor(Math.random() * 300 + 100),
+        totalRenders: 0,
+        totalLeads: 0,
         activeTemplates,
       });
     } catch (e) {
@@ -340,7 +352,7 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { fetchStats(); fetchAnalytics(); }, [fetchStats, fetchAnalytics]);
 
   if (loading) {
     return (
@@ -437,59 +449,81 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
           <span className="font-medium">{dateRange}</span>
           <ChevronDown className="size-3" />
         </div>
-        <span className="text-[#9ca3af]">~</span>
-        <span>compared to previous period (Feb 16 - Mar 17, 2026)</span>
+        {analytics?.meta && (
+          <>
+            <span className="text-[#9ca3af]">~</span>
+            <span>{new Date(analytics.meta.from).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {new Date(analytics.meta.to).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+          </>
+        )}
       </div>
 
-      {/* ═══ Key Stats ═══ */}
-      <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-[15px] text-[#101828]">Key stats</h3>
-          <div className="flex items-center gap-2">
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer flex items-center gap-1">
-              <Activity className="size-3" /> Create Alert
-            </button>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer flex items-center gap-1 ml-4">
-              + Add Stats
-            </button>
+      {/* ═══ Key Stats from Vercel Analytics ═══ */}
+      {(() => {
+        // Compute totals from timeseries (Vercel uses "total" for page views, "devices" for unique visitors)
+        const ts = analytics?.timeseries || [];
+        const totalPageViews = ts.reduce((s: number, d: any) => s + (d.total || 0), 0);
+        const totalVisitors = ts.reduce((s: number, d: any) => s + (d.devices || 0), 0);
+        const sparkPV = ts.length > 1 ? ts.map((d: any) => d.total || 0) : generateSparkline(50, 15);
+        const sparkV = ts.length > 1 ? ts.map((d: any) => d.devices || 0) : generateSparkline(30, 10);
+
+        // Compute % change (first half vs second half)
+        const half = Math.floor(ts.length / 2);
+        const firstHalfPV = ts.slice(0, half).reduce((s: number, d: any) => s + (d.total || 0), 0);
+        const secondHalfPV = ts.slice(half).reduce((s: number, d: any) => s + (d.total || 0), 0);
+        const pvChange = firstHalfPV > 0 ? Math.round(((secondHalfPV - firstHalfPV) / firstHalfPV) * 100) : 0;
+        const firstHalfV = ts.slice(0, half).reduce((s: number, d: any) => s + (d.devices || 0), 0);
+        const secondHalfV = ts.slice(half).reduce((s: number, d: any) => s + (d.devices || 0), 0);
+        const vChange = firstHalfV > 0 ? Math.round(((secondHalfV - firstHalfV) / firstHalfV) * 100) : 0;
+
+        return (
+          <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-[15px] text-[#101828]">
+                Key stats
+                {analytics && <span className="text-[11px] font-normal text-[#22c55e] ml-2">Live from Vercel</span>}
+                {analyticsError && <span className="text-[11px] font-normal text-[#f59e0b] ml-2">Vercel not connected</span>}
+              </h3>
+              <button onClick={fetchAnalytics} className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer flex items-center gap-1">
+                <Activity className="size-3" /> Refresh
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                label="Page views"
+                value={totalPageViews}
+                change={pvChange}
+                changeLabel="last 30 days"
+                sparkData={sparkPV}
+                color="#3b82f6"
+              />
+              <StatCard
+                label="Unique visitors"
+                value={totalVisitors}
+                change={vChange}
+                changeLabel="last 30 days"
+                sparkData={sparkV}
+                color="#8b5cf6"
+              />
+              <StatCard
+                label="Active templates"
+                value={stats.activeTemplates}
+                change={0}
+                changeLabel={`${stats.totalTemplates} total`}
+                sparkData={sparkTemplates}
+                color="#22c55e"
+              />
+              <StatCard
+                label="Designer profiles"
+                value={stats.totalDesigners}
+                change={0}
+                changeLabel="total listed"
+                sparkData={generateSparkline(stats.totalDesigners || 5, 2)}
+                color="#f59e0b"
+              />
+            </div>
           </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            label="Total projects"
-            value={stats.totalProjects}
-            change={4}
-            changeLabel={`${Math.floor(stats.totalProjects * 0.03)} today`}
-            sparkData={sparkProjects}
-            color="#3b82f6"
-          />
-          <StatCard
-            label="AI renders"
-            value={stats.totalRenders}
-            change={23}
-            changeLabel="0 today"
-            sparkData={sparkRenders}
-            color="#8b5cf6"
-            tag="AI"
-          />
-          <StatCard
-            label="Active templates"
-            value={stats.activeTemplates}
-            change={7}
-            changeLabel={`${stats.totalTemplates} total`}
-            sparkData={sparkTemplates}
-            color="#22c55e"
-          />
-          <StatCard
-            label="Leads captured"
-            value={stats.totalLeads}
-            change={-2}
-            changeLabel="via contact forms"
-            sparkData={sparkLeads}
-            color="#f59e0b"
-          />
-        </div>
-      </div>
+        );
+      })()}
 
       {/* ═══ Know Your Users ═══ */}
       <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
@@ -550,56 +584,50 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
         </div>
       </div>
 
-      {/* ═══ Visitor Engagement ═══ */}
+      {/* ═══ Visitor Engagement (Vercel Analytics) ═══ */}
       <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
-        <SectionHeader title="Explore platform engagement" actionLabel="Go to Behavior Overview" />
+        <SectionHeader title="Explore platform engagement" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Most visited pages */}
+          {/* Top Pages — from Vercel */}
           <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Most active features</h4>
-            <div className="space-y-0 divide-y divide-[#f3f4f6]">
-              <PageRow name="/floorplan3d/dashboard" change={6} value={4822} color="#3b82f6" />
-              <PageRow name="/floorplan3d/editor" change={9} value={232} color="#22c55e" />
-              <PageRow name="/designer/*" change={17} value={194} color="#f59e0b" />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Top pages</h4>
+            {analytics?.pages?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.pages.slice(0, 6).map((p: any, i: number) => (
+                  <PageRow key={i} name={p.key} change={0} value={p.total} color={["#3b82f6","#8b5cf6","#22c55e","#f59e0b","#ef4444","#06b6d4"][i % 6]} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel to see top pages" : analytics ? "No page data yet" : "Loading..."}</p>
+            )}
           </div>
 
-          {/* Engagement stats */}
+          {/* Top Referrers — from Vercel */}
           <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Engagement stats</h4>
-            <div className="divide-y divide-[#f3f4f6]">
-              <EngagementStat
-                icon={<Eye className="size-[14px]" />}
-                label="Avg pages per session"
-                value="1.3"
-                change={7}
-              />
-              <EngagementStat
-                icon={<Clock className="size-[14px]" />}
-                label="Avg session duration"
-                value="2m 17s"
-                change={28}
-              />
-              <EngagementStat
-                icon={<Zap className="size-[14px]" />}
-                label="Bounce rate"
-                value="87.9%"
-                change={-1}
-              />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Top referrers</h4>
+            {analytics?.referrers?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.referrers.slice(0, 6).map((r: any, i: number) => (
+                  <SourceRow key={i} name={r.key} change={0} value={r.total} isPositive={true} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel to see referrers" : analytics ? "No referrer data yet" : "Loading..."}</p>
+            )}
           </div>
 
-          {/* Most clicked buttons */}
+          {/* Countries — from Vercel */}
           <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Most clicked buttons</h4>
-            <div className="divide-y divide-[#f3f4f6]">
-              <ButtonClickRow label="New Project" sublabel="/floorplan3d/dashboard" count={65} />
-              <ButtonClickRow label="Get Matched" sublabel="/floorplan3d/editor" count={53} />
-              <ButtonClickRow label="Start my Cost Guide" sublabel="/cost-guide" count={31} />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
+            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Visitors by country</h4>
+            {analytics?.countries?.length > 0 ? (
+              <div className="space-y-0 divide-y divide-[#f3f4f6]">
+                {analytics.countries.slice(0, 6).map((c: any, i: number) => (
+                  <PageRow key={i} name={c.key} change={0} value={c.total} color={["#3b82f6","#22c55e","#f59e0b","#8b5cf6","#ef4444","#06b6d4"][i % 6]} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#9ca3af]">{analyticsError ? "Connect Vercel to see countries" : analytics ? "No country data yet" : "Loading..."}</p>
+            )}
           </div>
         </div>
       </div>
@@ -682,60 +710,50 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
         </div>
       </div>
 
-      {/* ═══ Activity Chart ═══ */}
+      {/* ═══ Traffic Over Time (Vercel Analytics) ═══ */}
       <div className="bg-white border border-[#e8eaed] rounded-xl p-5">
-        <SectionHeader title="Monitor platform activity" actionLabel="Go to Activity Overview" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Blog-style table */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-[13px] font-semibold text-[#101828]">
-                Recent activity by <button className="text-[#3b82f6] underline cursor-pointer">date</button> ↓
-              </h4>
-              <div className="flex items-center gap-6 text-[11px] font-medium text-[#9ca3af]">
-                <span>Projects</span>
-                <span>Renders</span>
-                <span>Avg. time</span>
+        <SectionHeader title="Traffic over time" />
+        {(() => {
+          const ts = analytics?.timeseries || [];
+          const chartData = ts.map((d: any) => ({
+            date: new Date(d.key).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            pageViews: d.total || 0,
+            visitors: d.devices || 0,
+          }));
+          if (chartData.length === 0) return (
+            <p className="text-[13px] text-[#9ca3af] py-8 text-center">{analyticsError ? "Connect Vercel Analytics to see traffic data" : "Loading traffic data..."}</p>
+          );
+          return (
+            <div>
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="pvGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.15} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="vGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.15} />
+                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} interval={Math.max(0, Math.floor(chartData.length / 7) - 1)} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
+                    <Tooltip contentStyle={{ background: "white", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} />
+                    <Area type="monotone" dataKey="pageViews" name="Page Views" stroke="#3b82f6" strokeWidth={2} fill="url(#pvGrad)" />
+                    <Area type="monotone" dataKey="visitors" name="Visitors" stroke="#8b5cf6" strokeWidth={2} fill="url(#vGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-2 text-[11px]">
+                <div className="flex items-center gap-1.5"><div className="size-[8px] rounded-sm bg-[#3b82f6]" /> Page Views</div>
+                <div className="flex items-center gap-1.5"><div className="size-[8px] rounded-sm bg-[#8b5cf6]" /> Visitors</div>
               </div>
             </div>
-            <div>
-              <BlogRow title="How to Tell if a Renovation Quote is Overpriced (and W..." date="Dec 24, 2025" views={14} viewsChange={22} clicks={3} avgRead="2m 30s" />
-              <BlogRow title="Interior Designer vs Contractor in Singapore: Which On..." date="Dec 24, 2025" views={4} viewsChange={-23} clicks={1} avgRead="1m 36s" />
-              <BlogRow title="2026 Renovation Cost in Singapore: The Complete Guide" date="Dec 24, 2025" views={9} viewsChange={-18} clicks={3} avgRead="1m 15s" />
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
-          </div>
-
-          {/* Activity Chart */}
-          <div>
-            <h4 className="text-[13px] font-semibold text-[#101828] mb-3">Projects created by time of day</h4>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyData.slice(-7)} barSize={20}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
-                  <Tooltip
-                    contentStyle={{
-                      background: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      fontSize: "12px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                    }}
-                  />
-                  <Bar dataKey="projects" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="renders" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex items-center justify-center gap-4 mt-2 text-[11px]">
-              <div className="flex items-center gap-1.5"><div className="size-[8px] rounded-sm bg-[#3b82f6]" /> Projects</div>
-              <div className="flex items-center gap-1.5"><div className="size-[8px] rounded-sm bg-[#e2e8f0]" /> Renders</div>
-            </div>
-            <button className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer mt-3">View Report</button>
-          </div>
-        </div>
+          );
+        })()}
       </div>
     </div>
   );
