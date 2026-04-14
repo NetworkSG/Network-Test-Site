@@ -399,19 +399,26 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
             </div>
           </div>
           {liveVisitors.visitors.length > 0 ? (
-            <div className="flex flex-col gap-1 mb-2 max-h-[80px] overflow-y-auto">
-              {liveVisitors.visitors.slice(0, 5).map((v, i) => (
-                <p key={i} className="text-[12px] text-[#9ca3af]">
-                  <span className="text-[#6a7282]">{v.visitorId.slice(0, 12)}...</span> is viewing{" "}
-                  <span className="text-[#3b82f6]">{v.page}</span>
-                </p>
-              ))}
-              {liveVisitors.visitors.length > 5 && (
-                <p className="text-[11px] text-[#9ca3af]">+{liveVisitors.visitors.length - 5} more</p>
+            <div className="flex flex-col gap-1 mb-2 max-h-[100px] overflow-y-auto">
+              {liveVisitors.visitors.slice(0, 8).map((v, i) => {
+                const ago = Math.round((Date.now() - v.lastSeen) / 1000);
+                const agoLabel = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+                return (
+                  <p key={i} className="text-[12px] text-[#9ca3af] flex items-center justify-between gap-2">
+                    <span>
+                      <span className="text-[#6a7282]">{v.visitorId.length > 14 ? v.visitorId.slice(0, 14) + "…" : v.visitorId}</span>{" "}
+                      on <span className="text-[#3b82f6]">{v.page}</span>
+                    </span>
+                    <span className="text-[10px] text-[#c4c4c4] shrink-0">{agoLabel}</span>
+                  </p>
+                );
+              })}
+              {liveVisitors.visitors.length > 8 && (
+                <p className="text-[11px] text-[#9ca3af]">+{liveVisitors.visitors.length - 8} more</p>
               )}
             </div>
           ) : (
-            <p className="text-[12px] text-[#9ca3af] mb-2">No active visitors right now</p>
+            <p className="text-[12px] text-[#9ca3af] mb-2">No active visitors in the last 5 min</p>
           )}
           <button onClick={fetchLiveVisitors} className="text-[12px] font-medium text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
         </div>

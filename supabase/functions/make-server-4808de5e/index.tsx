@@ -1078,7 +1078,7 @@ app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
 // =============================================
 // LIVE VISITOR TRACKING
 // =============================================
-const VISITOR_TTL_MS = 45_000; // Visitor considered gone after 45s without heartbeat
+const VISITOR_TTL_MS = 5 * 60_000; // Visitor considered gone after 5 minutes without heartbeat
 
 // Heartbeat — called every 30s by the client (no auth required, public pages only)
 app.post("/make-server-4808de5e/visitor-heartbeat", async (c) => {
