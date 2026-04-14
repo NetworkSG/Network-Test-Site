@@ -3413,12 +3413,15 @@ app.get("/make-server-4808de5e/designers", async (c) => {
     }
 
     const allDesigners = data?.map((d: any) => d.value) ?? [];
+    // Filter out inactive designers for public listing (admin uses /admin/designers)
+    const showAll = c.req.query("showAll") === "true";
+    const activeDesigners = showAll ? allDesigners : allDesigners.filter((d: any) => d.active !== false);
     // Pagination — limit response size to prevent bulk scraping
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
-    const designers = allDesigners.slice(offset, offset + limit);
-    console.log(`Returning ${designers.length} of ${allDesigners.length} designers`);
-    return c.json({ count: allDesigners.length, data: designers, limit, offset });
+    const designers = activeDesigners.slice(offset, offset + limit);
+    console.log(`Returning ${designers.length} of ${activeDesigners.length} active designers (${allDesigners.length} total)`);
+    return c.json({ count: activeDesigners.length, data: designers, limit, offset });
   } catch (err) {
     console.log("Unexpected error in GET /designers:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -5181,6 +5184,30 @@ function mapPipelineToDesignerData(fields: any, slug: string): any {
   const financing = fields["Renovation Financing"] || "";
   const classification = fields["Classification"] || "";
 
+  // Combine budget ranges into "lowest – highest" (e.g. "Under $30K – $120K+")
+  const combineBudgetRange = (ranges: string[]): string => {
+    if (ranges.length === 0) return "";
+    if (ranges.length === 1) {
+      // Single range like "Under $30K – Partial Renovation" → just the budget part
+      return ranges[0].split("–")[0].trim();
+    }
+    // Extract the first dollar amount from each range for sorting
+    const parsed = ranges.map(r => {
+      const label = r.split("–")[0].trim(); // "Under $30K – Partial Renovation" → "Under $30K"
+      const numMatch = label.match(/\$?(\d+)/);
+      const num = numMatch ? parseInt(numMatch[1], 10) : 0;
+      const isUnder = /under/i.test(label);
+      const isPlus = /\+/.test(label);
+      return { label, num, isUnder, isPlus };
+    });
+    parsed.sort((a, b) => a.num - b.num);
+    const lowest = parsed[0];
+    const highest = parsed[parsed.length - 1];
+    const lowStr = lowest.isUnder ? `Under $${lowest.num}K` : `$${lowest.num}K`;
+    const highStr = `$${highest.num}K${highest.isPlus ? "+" : "+"}`;
+    return `${lowStr} – ${highStr}`;
+  };
+
   // Parse project types for credentials
   const hasHdb = projectTypes.some((t: string) => /hdb/i.test(t));
   const hasLanded = landed === "Landed Homes" || projectTypes.some((t: string) => /landed/i.test(t));
@@ -5192,7 +5219,7 @@ function mapPipelineToDesignerData(fields: any, slug: string): any {
   if (financing) businessInfo.push({ label: "Financing", value: financing });
   if (projectTypes.length) businessInfo.push({ label: "Project types", value: projectTypes.join(" · ") });
   if (styles.length) businessInfo.push({ label: "Style specialisation", value: styles.join(" · ") });
-  if (budgetRange.length) businessInfo.push({ label: "Budget range", value: budgetRange.join(" · ") });
+  if (budgetRange.length) businessInfo.push({ label: "Budget range", value: combineBudgetRange(budgetRange) });
   if (serviceAreaArr.length) businessInfo.push({ label: "Service area", value: serviceAreaArr.join(" · ") });
   if (specialization.length) businessInfo.push({ label: "Specialisation", value: specialization.join(" · ") });
   if (services.length) businessInfo.push({ label: "Services", value: services.join(" · ") });
@@ -5403,6 +5430,44 @@ app.post("/make-server-4808de5e/portal-logout", async (c) => {
     return c.json({ success: true });
   } catch (err) {
     console.log("Unexpected error in POST /portal-logout:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// =============================================
+// BULK SET ACTIVE/INACTIVE for all designers
+// POST /admin/bulk-set-active?active=false  (or true)
+// Protected by CRON_SECRET
+// =============================================
+app.post("/make-server-4808de5e/admin/bulk-set-active", async (c) => {
+  try {
+    const cronSecret = c.req.header("x-cron-secret");
+    const expected = Deno.env.get("CRON_SECRET");
+    if (!cronSecret || !expected || cronSecret !== expected) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const activeParam = c.req.query("active");
+    if (activeParam !== "true" && activeParam !== "false") {
+      return c.json({ error: "Query param ?active=true or ?active=false required" }, 400);
+    }
+    const newActive = activeParam === "true";
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data, error } = await supabase.from("kv_store_4808de5e").select("key, value").like("key", "designer:%").not("key", "like", "%:%:%");
+    if (error) return c.json({ error: error.message }, 500);
+
+    let updated = 0;
+    for (const row of data || []) {
+      const designer = row.value as any;
+      if (designer.active !== newActive) {
+        designer.active = newActive;
+        await supabase.from("kv_store_4808de5e").update({ value: designer }).eq("key", row.key);
+        updated++;
+      }
+    }
+    console.log(`Bulk set active=${newActive}: updated ${updated} of ${data?.length || 0} designers`);
+    return c.json({ success: true, active: newActive, updated, total: data?.length || 0 });
+  } catch (err) {
+    console.log("Error in bulk-set-active:", err);
     return c.json({ error: "Internal server error" }, 500);
   }
 });

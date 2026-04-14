@@ -2448,8 +2448,8 @@ export function HomeownersSay() {
   const hasGoogleH = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
   const rating = hasGoogleH ? String(ctx!.googleMeta!.rating) : (ctx?.profile?.stats?.rating || "4.9");
 
-  // Hide on live page when no reviews exist
-  if (!editCtx && !rData.length) return null;
+  // Hide on live page when no reviews and no Google data exist
+  if (!editCtx && !rData.length && !hasGoogleH) return null;
 
   return (
     <section className="py-[40px] md:py-[64px] px-4 md:px-8">
@@ -3298,7 +3298,7 @@ export function RatingBreakdown() {
     { label: "Workmanship", score: rating },
   ];
 
-  if (!editCtx && !reviewCount && !ctx?.profile?.stats?.rating) return null;
+  if (!editCtx && !reviewCount && !hasGoogle && !ctx?.profile?.stats?.rating) return null;
 
   return (
     <section className="py-[40px] md:py-[64px]">
@@ -3810,7 +3810,7 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
     }
   };
 
-  const CHIP_FIELDS = new Set(["Project types", "Style specialisation", "Service area", "Specialisation", "Services", "Budget range"]);
+  const CHIP_FIELDS = new Set(["Project types", "Style specialisation", "Service area", "Specialisation", "Services"]);
   const isChipField = (label: string) => CHIP_FIELDS.has(label);
 
   // Predefined option lists for the multi-select dropdown fields. Add to these
@@ -3858,13 +3858,6 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
       "Design-Only Services",
       "Project management",
       "Consultation",
-    ],
-    "Budget range": [
-      "$30k – $50k",
-      "$50k – $80k",
-      "$80k – $120k",
-      "$120k – $200k",
-      "$200k+",
     ],
   };
 

@@ -1745,7 +1745,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const fetchDesigners = useCallback(async () => {
     setLoadingList(true);
     try {
-      const res = await fetch(`${API}/designers`, { headers: AUTH });
+      const res = await fetch(`${API}/designers?showAll=true`, { headers: AUTH });
       const json = await res.json();
       setDesigners(json.data || []);
     } catch (err) {

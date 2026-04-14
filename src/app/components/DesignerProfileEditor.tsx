@@ -126,7 +126,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, slug: string) => vo
               letterSpacing: "-0.01em",
             }}
           >
-            Edit your profile
+            Interior Designer Profile
           </h1>
           <p className="mt-2 text-[14px]" style={{ color: C.gray }}>
             Sign in with your portal credentials
