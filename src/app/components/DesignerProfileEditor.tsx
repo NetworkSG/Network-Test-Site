@@ -1200,6 +1200,41 @@ interface NewProjectDraft {
   designerName: string;
 }
 
+/** Auto-format a cost string: strip non-digits, add $ prefix and thousand separators */
+function formatCost(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return "$" + Number(digits).toLocaleString("en-US");
+}
+
+const SIZE_UNITS = ["sqft", "sqm", "m²"] as const;
+type SizeUnit = (typeof SIZE_UNITS)[number];
+
+/** Extract numeric digits from a size string */
+function parseSizeDigits(raw: string): string {
+  return raw.replace(/[^0-9]/g, "");
+}
+
+/** Format size: number with thousand separators */
+function formatSizeNumber(raw: string): string {
+  const digits = parseSizeDigits(raw);
+  if (!digits) return "";
+  return Number(digits).toLocaleString("en-US");
+}
+
+/** Detect the unit suffix in a size string, default sqft */
+function detectSizeUnit(raw: string): SizeUnit {
+  if (raw.includes("m²")) return "m²";
+  if (raw.toLowerCase().includes("sqm")) return "sqm";
+  return "sqft";
+}
+
+/** Combine number + unit into display string — always keeps unit so dropdown persists */
+function buildSizeString(num: string, unit: SizeUnit): string {
+  if (!num) return unit; // store unit even when no number yet
+  return `${num} ${unit}`;
+}
+
 function AddProjectModal({
   open,
   onClose,
@@ -1318,7 +1353,7 @@ function AddProjectModal({
   const errors: Record<string, string> = {};
   if (!draft.title.trim()) errors.title = "Project title is required";
   if (!draft.cost.trim()) errors.cost = "Renovation cost is required";
-  if (!draft.size.trim()) errors.size = "Area size is required";
+  if (!parseSizeDigits(draft.size)) errors.size = "Area size is required";
   if (!draft.year.trim()) errors.year = "Year is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
@@ -1480,8 +1515,8 @@ function AddProjectModal({
                 <input
                   type="text"
                   value={draft.cost}
-                  placeholder="e.g. S$120,000"
-                  onChange={(e) => patch({ cost: e.target.value })}
+                  placeholder="e.g. $120,000"
+                  onChange={(e) => patch({ cost: formatCost(e.target.value) })}
                   style={inputStyle}
                   onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
@@ -1489,15 +1524,31 @@ function AddProjectModal({
               </div>
               <div>
                 <label style={labelStyle}>Area Size <span style={{ color: "#c14" }}>*</span></label>
-                <input
-                  type="text"
-                  value={draft.size}
-                  placeholder="e.g. 1,450 sqft"
-                  onChange={(e) => patch({ size: e.target.value })}
-                  style={inputStyle}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
-                />
+                <div className="flex gap-0">
+                  <input
+                    type="text"
+                    value={formatSizeNumber(draft.size)}
+                    placeholder="e.g. 1,450"
+                    onChange={(e) => {
+                      const num = formatSizeNumber(e.target.value);
+                      const unit = detectSizeUnit(draft.size);
+                      patch({ size: buildSizeString(num, unit) });
+                    }}
+                    style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+                  />
+                  <select
+                    value={detectSizeUnit(draft.size)}
+                    onChange={(e) => {
+                      const num = formatSizeNumber(draft.size);
+                      patch({ size: buildSizeString(num, e.target.value as SizeUnit) });
+                    }}
+                    style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}
+                  >
+                    {SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1614,14 +1665,6 @@ function AddProjectModal({
                     }}
                   >
                     <img src={img.src} alt="" className="w-full h-full object-cover" />
-                    <input
-                      type="text"
-                      value={img.caption}
-                      placeholder="Caption"
-                      onChange={(e) => updateGalleryCaption(i, e.target.value)}
-                      className="absolute bottom-0 left-0 right-0 h-7 px-2 text-[11px] outline-none"
-                      style={{ background: "rgba(255,255,255,0.92)", color: C.black, fontFamily: sans, borderTop: `1px solid ${C.creamBorder}` }}
-                    />
                     <button
                       type="button"
                       onClick={() => removeGalleryImage(i)}
@@ -1797,7 +1840,7 @@ function EditProjectModal({
   const errors: Record<string, string> = {};
   if (!draft.title.trim()) errors.title = "Project title is required";
   if (!draft.cost.trim()) errors.cost = "Renovation cost is required";
-  if (!draft.size.trim()) errors.size = "Area size is required";
+  if (!parseSizeDigits(draft.size)) errors.size = "Area size is required";
   if (!draft.year.trim()) errors.year = "Year is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
@@ -1883,11 +1926,14 @@ function EditProjectModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>Renovation Cost <span style={{ color: "#c14" }}>*</span></label>
-                <input type="text" value={draft.cost} placeholder="e.g. S$120,000" onChange={(e) => patch({ cost: e.target.value })} style={inputStyle} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
+                <input type="text" value={draft.cost} placeholder="e.g. $120,000" onChange={(e) => patch({ cost: formatCost(e.target.value) })} style={inputStyle} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
               </div>
               <div>
                 <label style={labelStyle}>Area Size <span style={{ color: "#c14" }}>*</span></label>
-                <input type="text" value={draft.size} placeholder="e.g. 1,450 sqft" onChange={(e) => patch({ size: e.target.value })} style={inputStyle} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
+                <div className="flex gap-0">
+                  <input type="text" value={formatSizeNumber(draft.size)} placeholder="e.g. 1,450" onChange={(e) => { const num = formatSizeNumber(e.target.value); const unit = detectSizeUnit(draft.size); patch({ size: buildSizeString(num, unit) }); }} style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
+                  <select value={detectSizeUnit(draft.size)} onChange={(e) => { const num = formatSizeNumber(draft.size); patch({ size: buildSizeString(num, e.target.value as SizeUnit) }); }} style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}>{SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                </div>
               </div>
             </div>
 
@@ -1950,7 +1996,6 @@ function EditProjectModal({
                 {draft.gallery.map((img, i) => (
                   <div key={i} className="relative overflow-hidden" style={{ aspectRatio: "1/1", background: C.cream, border: `1px solid ${C.creamBorder}`, borderRadius: "10px" }}>
                     <img src={img.src} alt="" className="w-full h-full object-cover" />
-                    <input type="text" value={img.caption} placeholder="Caption" onChange={(e) => updateGalleryCaption(i, e.target.value)} className="absolute bottom-0 left-0 right-0 h-7 px-2 text-[11px] outline-none" style={{ background: "rgba(255,255,255,0.92)", color: C.black, fontFamily: sans, borderTop: `1px solid ${C.creamBorder}` }} />
                     <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
                   </div>
                 ))}
@@ -4115,7 +4160,7 @@ function EditorView({ slug }: { slug: string }) {
         <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]" style={{ color: C.black }}>
           {/* Floating editor toolbar */}
           <div
-            className="fixed top-4 right-4 md:right-6 z-[60] flex items-center gap-2 px-3 py-2"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-3 py-2"
             style={{
               background: C.white,
               border: `1px solid ${C.creamBorder}`,

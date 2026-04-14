@@ -892,7 +892,6 @@ export function TeamAvatars() {
   const reelContainerRef = useRef<HTMLDivElement>(null);
 
   // Edit-mode helpers
-  const addMemberFileRef = useRef<HTMLInputElement>(null);
   const addStoryFileRef = useRef<HTMLInputElement>(null);
   const [uploadingMember, setUploadingMember] = useState(false);
   const [uploadingStory, setUploadingStory] = useState(false);
@@ -902,13 +901,15 @@ export function TeamAvatars() {
   // existing fields, but write `image` (not the resolved `img`) so URLs persist.
   const serializeTeam = (next: any[]) => next.map(({ img, ...rest }: any) => ({ ...rest, image: rest.image ?? img ?? "" }));
 
-  const handleAddMember = async (file: File) => {
+  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false);
+
+  const handleAddMember = async (file: File, name: string, designation: string) => {
     if (!editCtx?.uploadImage || !editCtx?.saveCollection) return;
     setUploadingMember(true);
     try {
       const url = await editCtx.uploadImage(file);
       if (!url) return;
-      const newMember = { name: "New Member", image: url, type: "person", role: "Designer", specialty: "", projects: 0, experience: "", bio: "", designs: [] };
+      const newMember = { name, image: url, type: "person", role: designation || "Designer", specialty: "", projects: 0, experience: "", bio: "", designs: [] };
       await editCtx.saveCollection("team", serializeTeam([...members, newMember]));
     } finally { setUploadingMember(false); }
   };
@@ -1006,7 +1007,7 @@ export function TeamAvatars() {
             {/* Add Member */}
             <div
               className="flex flex-col items-center gap-2 shrink-0 cursor-pointer"
-              onClick={() => addMemberFileRef.current?.click()}
+              onClick={() => setAddMemberModalOpen(true)}
               title="Add a team member"
             >
               <div className="rounded-full size-[74px] md:size-[80px] border-[3px] border-dashed border-[#e4e4e7] bg-[#f6f6f6] flex items-center justify-center hover:border-[#0f0f0d] hover:bg-white transition-colors">
@@ -1020,13 +1021,6 @@ export function TeamAvatars() {
                 )}
               </div>
               <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#71717a]">Add member</span>
-              <input
-                ref={addMemberFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddMember(f); e.currentTarget.value = ""; }}
-              />
             </div>
 
             {/* Add Story / Reel */}
@@ -1054,6 +1048,19 @@ export function TeamAvatars() {
           </>
         )}
       </div>
+
+      {/* Add Member Modal */}
+      {addMemberModalOpen && createPortal(
+        <AddMemberModal
+          onClose={() => setAddMemberModalOpen(false)}
+          onSave={async (file, name, designation) => {
+            await handleAddMember(file, name, designation);
+            setAddMemberModalOpen(false);
+          }}
+          saving={uploadingMember}
+        />,
+        document.body
+      )}
 
       {/* Add Story Modal */}
       {storyModalOpen && createPortal(
@@ -1141,19 +1148,6 @@ export function TeamAvatars() {
                 <div className="text-center flex-1">
                   <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"projects" in selectedMember ? selectedMember.projects : 0}</p>
                   <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Projects</p>
-                </div>
-                <div className="w-px bg-[#e4e4e7]" />
-                <div className="text-center flex-1">
-                  <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">{"experience" in selectedMember ? selectedMember.experience : ""}</p>
-                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Experience</p>
-                </div>
-                <div className="w-px bg-[#e4e4e7]" />
-                <div className="text-center flex-1">
-                  <p className="font-['DM_Sans',sans-serif] font-bold text-[17px] text-[#0f0f0d]">
-                    <svg className="inline size-[13px] text-[#0f0f0d] mr-0.5 -mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-                    4.9
-                  </p>
-                  <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#71717a]">Rating</p>
                 </div>
               </div>
             </div>
@@ -2244,6 +2238,131 @@ const reviewTabs = [
   { label: "Network Reviews", icon: "network" as const },
   { label: "Google Reviews", icon: "google" as const },
 ];
+
+function AddMemberModal({
+  onClose,
+  onSave,
+  saving,
+}: {
+  onClose: () => void;
+  onSave: (file: File, name: string, designation: string) => Promise<void>;
+  saving: boolean;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [designation, setDesignation] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !saving) onClose(); };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [onClose, saving]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = () => setPreview(reader.result as string);
+    reader.readAsDataURL(f);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file || !name.trim() || saving) return;
+    await onSave(file, name.trim(), designation.trim());
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", height: "44px", padding: "0 14px", background: "#f6f6f6",
+    border: "1px solid #e4e4e7", borderRadius: "10px", color: "#0f0f0d",
+    fontFamily: "'DM Sans', sans-serif", fontSize: "14px", outline: "none",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
+    color: "#9a9790", fontFamily: "'DM Sans', sans-serif", display: "block", marginBottom: "6px",
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: "rgba(15,15,13,0.55)" }}
+      onClick={() => !saving && onClose()}
+    >
+      <div
+        className="relative w-full max-w-[420px] overflow-hidden flex flex-col"
+        style={{ background: "#fff", border: "1px solid #e4e4e7", borderRadius: "16px", boxShadow: "0 24px 60px rgba(15,15,13,0.25)", fontFamily: "'DM Sans', sans-serif" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid #e4e4e7", background: "#f6f6f6" }}>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#9a9790" }}>Team</div>
+            <h2 className="mt-0.5" style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: "22px", color: "#0f0f0d", lineHeight: 1.2 }}>Add Team Member</h2>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-75 transition-opacity cursor-pointer disabled:opacity-40" style={{ background: "#fff", border: "1px solid #e4e4e7", color: "#71717a" }} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-5">
+          {/* Photo upload */}
+          <div>
+            <label style={labelStyle}>Photo <span style={{ color: "#c14" }}>*</span></label>
+            <div
+              className="flex items-center gap-4 cursor-pointer"
+              onClick={() => fileRef.current?.click()}
+            >
+              <div
+                className="size-[72px] rounded-full shrink-0 flex items-center justify-center overflow-hidden"
+                style={{ background: preview ? "transparent" : "#f6f6f6", border: preview ? "3px solid #0f0f0d" : "2px dashed #d8d3c8" }}
+              >
+                {preview ? (
+                  <img src={preview} alt="Preview" className="size-full object-cover rounded-full" />
+                ) : (
+                  <svg className="size-6 text-[#9a9790]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <p className="text-[14px] font-medium" style={{ color: "#0f0f0d" }}>{preview ? "Change photo" : "Upload a photo"}</p>
+                <p className="text-[12px]" style={{ color: "#9a9790" }}>JPG, PNG — square recommended</p>
+              </div>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+          </div>
+
+          {/* Name */}
+          <div>
+            <label style={labelStyle}>Name <span style={{ color: "#c14" }}>*</span></label>
+            <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sarah Tan" />
+          </div>
+
+          {/* Designation */}
+          <div>
+            <label style={labelStyle}>Designation</label>
+            <input style={inputStyle} value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Senior Designer" />
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={!file || !name.trim() || saving}
+            className="h-[48px] rounded-[12px] text-[14px] font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            style={{ background: "#0f0f0d", color: "#fafaf8", fontFamily: "'DM Sans', sans-serif" }}
+          >
+            {saving ? "Saving…" : "Add Member"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function AddStoryModal({
   onClose,
