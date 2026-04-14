@@ -456,7 +456,7 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
                 <Activity className="size-3" /> Refresh
               </button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatCard
                 label="Page views"
                 value={totalPageViews}
@@ -473,22 +473,30 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
                 sparkData={sparkV}
                 color="#8b5cf6"
               />
-              <StatCard
-                label="Active templates"
-                value={stats.activeTemplates}
-                change={0}
-                changeLabel={`${stats.totalTemplates} total`}
-                sparkData={sparkTemplates}
-                color="#22c55e"
-              />
-              <StatCard
-                label="Designer profiles"
-                value={stats.totalDesigners}
-                change={0}
-                changeLabel="total listed"
-                sparkData={generateSparkline(stats.totalDesigners || 5, 2)}
-                color="#f59e0b"
-              />
+              {(() => {
+                // Compute average bounce rate from timeseries
+                const withBounce = ts.filter((d: any) => d.bounceRate !== undefined && d.total > 0);
+                const avgBounce = withBounce.length > 0
+                  ? Math.round(withBounce.reduce((s: number, d: any) => s + (d.bounceRate || 0), 0) / withBounce.length)
+                  : 0;
+                const sparkBounce = ts.length > 1 ? ts.map((d: any) => d.bounceRate || 0) : generateSparkline(50, 15);
+                // Bounce rate change (first half vs second half)
+                const firstHalfB = ts.slice(0, half).filter((d: any) => d.total > 0);
+                const secondHalfB = ts.slice(half).filter((d: any) => d.total > 0);
+                const avgFirst = firstHalfB.length > 0 ? firstHalfB.reduce((s: number, d: any) => s + (d.bounceRate || 0), 0) / firstHalfB.length : 0;
+                const avgSecond = secondHalfB.length > 0 ? secondHalfB.reduce((s: number, d: any) => s + (d.bounceRate || 0), 0) / secondHalfB.length : 0;
+                const bChange = avgFirst > 0 ? Math.round(((avgSecond - avgFirst) / avgFirst) * 100) : 0;
+                return (
+                  <StatCard
+                    label="Bounce rate"
+                    value={`${avgBounce}%`}
+                    change={bChange}
+                    changeLabel="last 30 days"
+                    sparkData={sparkBounce}
+                    color="#f59e0b"
+                  />
+                );
+              })()}
             </div>
           </div>
         );
