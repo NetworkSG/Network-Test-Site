@@ -14,6 +14,7 @@ export type CachedGoogleReview = {
   text: string;
   relativeTime: string;
   profilePhoto: string | null;
+  photoUrl: string | null;
   time: number;
 };
 
@@ -43,6 +44,7 @@ export type UiReview = {
   text: string;
   fullText: string;
   date: string;
+  rating: number;
   // Optional media (Google reviews don't supply project images)
   img?: string;
   hasVideo?: boolean;
@@ -83,7 +85,8 @@ export function transformGoogleReviewsToUi(payload: CachedGoogleReviewsPayload |
       text: r.text || "",
       fullText: r.text || "",
       date: r.relativeTime || "",
-      img: undefined,
+      rating: typeof r.rating === "number" ? r.rating : 5,
+      img: r.photoUrl || undefined,
       hasVideo: false,
     };
   });

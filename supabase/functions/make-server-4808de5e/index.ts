@@ -3459,16 +3459,18 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
     }
 
     console.log(`Fetched designer profile: ${slug}`);
+    // Section KV keys override profile-level data, but fall back to profile data
+    // (e.g. pipeline-synced businessInfo lives in the profile KV until manually edited)
     return c.json({
       data: {
         ...profile,
-        team: team || [],
-        projects: projects || [],
-        caseStudies: caseStudies || [],
-        reviews: reviews || [],
-        latestReviews: latestReviews || [],
-        serviceArea: serviceArea || {},
-        businessInfo: businessInfo || [],
+        team: team || profile.team || [],
+        projects: projects || profile.projects || [],
+        caseStudies: caseStudies || profile.caseStudies || [],
+        reviews: reviews || profile.reviews || [],
+        latestReviews: latestReviews || profile.latestReviews || [],
+        serviceArea: serviceArea || profile.serviceArea || {},
+        businessInfo: businessInfo || profile.businessInfo || [],
       },
     });
   } catch (err) {
@@ -3502,6 +3504,7 @@ type CachedGoogleReview = {
   text: string;
   relativeTime: string;
   profilePhoto: string | null;
+  photoUrl: string | null;
   time: number;
 };
 
@@ -3532,37 +3535,62 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
   const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
   if (!apiKey || !placeId) return null;
   try {
-    const url =
-      `https://maps.googleapis.com/maps/api/place/details/json` +
-      `?place_id=${encodeURIComponent(placeId)}` +
-      `&fields=name,rating,user_ratings_total,reviews` +
-      `&key=${apiKey}`;
-    const res = await fetch(url);
+    // Use Places API (New) — requires X-Goog-Api-Key and X-Goog-FieldMask headers
+    const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
+    const res = await fetch(url, {
+      headers: {
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "displayName,rating,userRatingCount,reviews,photos",
+      },
+    });
     if (!res.ok) {
-      console.log(`Google Places fetch failed: HTTP ${res.status}`);
+      const errBody = await res.text();
+      console.log(`Google Places (New) fetch failed: HTTP ${res.status}`, errBody);
       return null;
     }
     const json: any = await res.json();
-    if (json.status !== "OK") {
-      console.log(`Google Places API status: ${json.status} ${json.error_message || ""}`);
+    if (json.error) {
+      console.log(`Google Places (New) API error:`, json.error.message || json.error);
       return null;
     }
-    const r = json.result || {};
+
+    // Resolve photo URLs from the photos array
+    // The Places Photos API (New) URI: GET /v1/{name}/media?maxHeightPx=400&key=...
+    const photoNames: string[] = (json.photos || []).map((p: any) => p.name).filter(Boolean);
+    const resolvedPhotoUrls: string[] = [];
+    for (const photoName of photoNames.slice(0, 10)) {
+      try {
+        const photoApiUrl = `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=600&key=${apiKey}`;
+        const photoRes = await fetch(photoApiUrl, { redirect: "follow" });
+        if (photoRes.ok || photoRes.url) {
+          resolvedPhotoUrls.push(photoRes.url || photoApiUrl);
+        }
+      } catch {
+        // Skip failed photo resolution
+      }
+    }
+
     const now = Date.now();
     return {
       source: "google",
       placeId,
-      rating: typeof r.rating === "number" ? r.rating : 0,
-      totalRatings: typeof r.user_ratings_total === "number" ? r.user_ratings_total : 0,
-      reviews: (r.reviews || []).map((rv: any): CachedGoogleReview => ({
-        author: rv.author_name || "Anonymous",
-        initial: ((rv.author_name || "?").trim().charAt(0) || "?").toUpperCase(),
-        rating: typeof rv.rating === "number" ? rv.rating : 5,
-        text: rv.text || "",
-        relativeTime: rv.relative_time_description || "",
-        profilePhoto: rv.profile_photo_url || null,
-        time: typeof rv.time === "number" ? rv.time : 0,
-      })),
+      rating: typeof json.rating === "number" ? json.rating : 0,
+      totalRatings: typeof json.userRatingCount === "number" ? json.userRatingCount : 0,
+      reviews: (json.reviews || []).map((rv: any, idx: number): CachedGoogleReview => {
+        const authorName = rv.authorAttribution?.displayName || "Anonymous";
+        const reviewText = rv.text?.text || rv.originalText?.text || "";
+        const publishTime = rv.publishTime ? new Date(rv.publishTime).getTime() / 1000 : 0;
+        return {
+          author: authorName,
+          initial: (authorName.trim().charAt(0) || "?").toUpperCase(),
+          rating: typeof rv.rating === "number" ? rv.rating : 5,
+          text: reviewText,
+          relativeTime: rv.relativePublishTimeDescription || "",
+          profilePhoto: rv.authorAttribution?.photoUri || null,
+          photoUrl: resolvedPhotoUrls[idx] || null,
+          time: Math.floor(publishTime),
+        };
+      }),
       fetchedAt: new Date(now).toISOString(),
       expiresAt: new Date(now + GOOGLE_REVIEWS_TTL_MS).toISOString(),
     };
@@ -3586,8 +3614,10 @@ async function getOrRefreshGoogleReviews(
   }
 
   // Cache stale or missing — try Google API
-  const profile = await kv.get(`designer:${slug}`);
-  const placeId: string | null = profile?.googlePlaceId || null;
+  // Read googlePlaceId from the designers table (not KV)
+  const supabaseForProfile = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: designerRow } = await supabaseForProfile.from("designers").select("data").eq("slug", slug).maybeSingle();
+  const placeId: string | null = designerRow?.data?.googlePlaceId || null;
 
   let fresh: CachedGoogleReviews | null = null;
   if (placeId) {
@@ -3615,6 +3645,119 @@ async function getOrRefreshGoogleReviews(
   return fresh;
 }
 
+// POST resolve a Google Maps URL to a Place ID
+// Accepts a Google Maps link and returns the Place ID using text search
+app.post("/make-server-4808de5e/google-reviews/resolve-url", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+    if (!apiKey) return c.json({ error: "Google API not configured" }, 500);
+
+    const body = await c.req.json();
+    const url: string = (body.url || "").trim();
+    if (!url) return c.json({ error: "Missing url" }, 400);
+
+    // Helper: given a Place ID, fetch full details (name, location, address) and return
+    const fetchPlaceDetails = async (placeId: string) => {
+      const detailRes = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+        headers: {
+          "X-Goog-Api-Key": apiKey!,
+          "X-Goog-FieldMask": "displayName,location,formattedAddress,shortFormattedAddress",
+        },
+      });
+      if (!detailRes.ok) return { name: null, lat: null, lng: null, address: null };
+      const d: any = await detailRes.json();
+      return {
+        name: d.displayName?.text || null,
+        lat: d.location?.latitude || null,
+        lng: d.location?.longitude || null,
+        address: d.shortFormattedAddress || d.formattedAddress || null,
+      };
+    };
+
+    // Strategy 1: Extract Place ID directly from URL if present (e.g. place_id=ChIJ... or /place/.../@...!...1sChIJ...)
+    const directMatch = url.match(/place_id[=:]([A-Za-z0-9_-]+)/i) || url.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
+    if (directMatch) {
+      const details = await fetchPlaceDetails(directMatch[1]);
+      return c.json({ placeId: directMatch[1], ...details });
+    }
+
+    // Strategy 2: Follow the URL to get the final resolved URL, then try to extract a Place ID or business name
+    let finalUrl = url;
+    try {
+      const headRes = await fetch(url, { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" } });
+      finalUrl = headRes.url || url;
+      // Check if the final URL has a place ID
+      const resolvedMatch = finalUrl.match(/place_id[=:]([A-Za-z0-9_-]+)/i) || finalUrl.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
+      if (resolvedMatch) {
+        const details = await fetchPlaceDetails(resolvedMatch[1]);
+        return c.json({ placeId: resolvedMatch[1], ...details });
+      }
+    } catch {
+      // URL follow failed — continue to text search
+    }
+
+    // Strategy 3: Extract the business name from the URL and use Text Search to find the Place ID
+    // Typical formats:
+    //   /maps/place/Business+Name/...
+    //   /maps?q=Business+Name
+    //   /maps/search/Business+Name
+    let searchQuery = "";
+    const placeNameMatch = finalUrl.match(/\/place\/([^/@]+)/);
+    if (placeNameMatch) {
+      searchQuery = decodeURIComponent(placeNameMatch[1].replace(/\+/g, " "));
+    }
+    if (!searchQuery) {
+      const qMatch = finalUrl.match(/[?&]q=([^&]+)/);
+      if (qMatch) searchQuery = decodeURIComponent(qMatch[1].replace(/\+/g, " "));
+    }
+    if (!searchQuery) {
+      const searchMatch = finalUrl.match(/\/search\/([^/@]+)/);
+      if (searchMatch) searchQuery = decodeURIComponent(searchMatch[1].replace(/\+/g, " "));
+    }
+    // Also try the CID (customer ID) from the URL for direct lookup
+    const cidMatch = finalUrl.match(/cid[=:](\d+)/i) || url.match(/cid[=:](\d+)/i);
+
+    if (!searchQuery && !cidMatch) {
+      return c.json({ error: "Could not extract a business name from this link. Please try a different Google Maps URL." }, 400);
+    }
+
+    // Use Places API (New) Text Search to find the place
+    const textSearchUrl = "https://places.googleapis.com/v1/places:searchText";
+    const searchRes = await fetch(textSearchUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.formattedAddress,places.shortFormattedAddress",
+      },
+      body: JSON.stringify({ textQuery: searchQuery || `cid:${cidMatch![1]}` }),
+    });
+
+    if (!searchRes.ok) {
+      console.log("Text search failed:", await searchRes.text());
+      return c.json({ error: "Failed to search Google Places" }, 500);
+    }
+
+    const searchData: any = await searchRes.json();
+    const firstPlace = searchData.places?.[0];
+    if (!firstPlace?.id) {
+      return c.json({ error: `No Google Places results found for "${searchQuery}". Try searching for your exact business name on Google Maps and pasting that link.` }, 404);
+    }
+
+    return c.json({
+      placeId: firstPlace.id,
+      name: firstPlace.displayName?.text || null,
+      lat: firstPlace.location?.latitude || null,
+      lng: firstPlace.location?.longitude || null,
+      address: firstPlace.shortFormattedAddress || firstPlace.formattedAddress || null,
+    });
+  } catch (err) {
+    console.log("Error in POST /google-reviews/resolve-url:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // GET cached Google reviews for a designer (cache-only — NEVER calls Google API)
 // Google API calls only happen via cron-refresh-all or manual refresh endpoints.
 app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
@@ -3637,9 +3780,10 @@ app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
       return c.json({ data: cached, stale: !!isStale });
     }
 
-    // No cache at all — return empty payload (cron will populate it)
-    const profile = await kv.get(`designer:${slug}`);
-    const placeId: string | null = profile?.googlePlaceId || null;
+    // No cache at all — read googlePlaceId from designers table, return empty payload (cron will populate it)
+    const supabaseForProfile = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: designerRow } = await supabaseForProfile.from("designers").select("data").eq("slug", slug).maybeSingle();
+    const placeId: string | null = designerRow?.data?.googlePlaceId || null;
     return c.json({ data: emptyGoogleReviewsPayload(placeId), stale: true });
   } catch (err) {
     console.log("Error in GET /google-reviews/:slug:", err);
@@ -3679,23 +3823,24 @@ app.post("/make-server-4808de5e/google-reviews/cron-refresh-all", async (c) => {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
+    // Query the designers table for all designers with a googlePlaceId
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     const { data, error } = await supabase
-      .from("kv_store_4808de5e")
-      .select("key, value")
-      .like("key", "designer:%")
-      .not("key", "like", "%:%:%");
+      .from("designers")
+      .select("slug, data");
 
     if (error) {
       console.log("cron-refresh-all: failed to list designers:", error);
       return c.json({ error: "Failed to list designers" }, 500);
     }
 
+    // Only refresh designers that have a googlePlaceId set
     const slugs: string[] = (data || [])
-      .map((d: any) => d.value?.slug)
+      .filter((d: any) => d.data?.googlePlaceId)
+      .map((d: any) => d.slug)
       .filter((s: any): s is string => typeof s === "string" && s.length > 0);
 
     const results: Record<string, string> = {};
@@ -5011,6 +5156,88 @@ app.delete("/make-server-4808de5e/fp3d/renders/:renderId", async (c) => {
 });
 
 // =============================================
+// PIPELINE → DESIGNER PROFILE MAPPING
+// =============================================
+
+/**
+ * Maps at_clients_pipeline.fields (from ons-portal) into a designers.data object
+ * so that when a designer first logs in, their profile is pre-populated.
+ */
+function mapPipelineToDesignerData(fields: any, slug: string): any {
+  const name = fields["Client"] || "";
+  const contactPerson = fields["Contact Person"] || "";
+  const address = (fields["Office Address"] || "").trim();
+  const phone = fields["Phone"] || "";
+  const acra = fields["ACRA/UEN"] || "";
+  const yearsExp = fields["Years of Experience"];
+  const dateJoined = fields["Date Joined"];
+  const styles: string[] = fields["Design Styles"] || [];
+  const projectTypes: string[] = fields["Typical Project Type"] || [];
+  const budgetRange: string[] = fields["Budget Range"] || [];
+  const serviceAreaArr: string[] = fields["Service Area"] || [];
+  const specialization: string[] = fields["Specialization"] || [];
+  const services: string[] = fields["Services"] || [];
+  const landed = fields["Landed Project Eligibility"];
+  const financing = fields["Renovation Financing"] || "";
+  const classification = fields["Classification"] || "";
+
+  // Parse project types for credentials
+  const hasHdb = projectTypes.some((t: string) => /hdb/i.test(t));
+  const hasLanded = landed === "Landed Homes" || projectTypes.some((t: string) => /landed/i.test(t));
+
+  // Build businessInfo array
+  const businessInfo: { label: string; value: string }[] = [];
+  if (acra) businessInfo.push({ label: "ACRA / UEN", value: acra });
+  if (phone) businessInfo.push({ label: "Phone", value: phone });
+  if (financing) businessInfo.push({ label: "Financing", value: financing });
+  if (projectTypes.length) businessInfo.push({ label: "Project types", value: projectTypes.join(" · ") });
+  if (styles.length) businessInfo.push({ label: "Style specialisation", value: styles.join(" · ") });
+  if (budgetRange.length) businessInfo.push({ label: "Budget range", value: budgetRange.join(" · ") });
+  if (serviceAreaArr.length) businessInfo.push({ label: "Service area", value: serviceAreaArr.join(" · ") });
+  if (specialization.length) businessInfo.push({ label: "Specialisation", value: specialization.join(" · ") });
+  if (services.length) businessInfo.push({ label: "Services", value: services.join(" · ") });
+
+  // Trusted since year
+  const joinYear = dateJoined ? new Date(dateJoined).getFullYear() : null;
+
+  return {
+    name,
+    slug,
+    founder: contactPerson,
+    location: address || "Singapore Based",
+    tagline: classification || "",
+    bio: "",
+    stats: {
+      years: yearsExp ? String(yearsExp) : "1",
+      rating: "",
+      hdbCert: hasHdb,
+      bcaLicensed: false,
+      reviewCount: "0",
+    },
+    credentials: {
+      hdb: { title: "HDB Registered Contractor", active: hasHdb, firm: name, reg: "" },
+      bca: { title: "BCA Licensed Builder", active: false, firm: name, reg: "" },
+      landedEligible: hasLanded,
+    },
+    businessInfo,
+    services,
+    designStyles: styles,
+    specialization,
+    budgetRange,
+    serviceArea: { regions: serviceAreaArr },
+    trustedSince: {
+      title: joinYear ? `Trusted Since ${joinYear}` : "",
+      badges: [],
+      description: "",
+      certifications: [],
+    },
+    coverProject: { name: "Your Featured Project" },
+    images: {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// =============================================
 // PORTAL AUTH (ons-portal portal_accounts)
 // =============================================
 
@@ -5088,6 +5315,34 @@ app.post("/make-server-4808de5e/portal-login", async (c) => {
 
     clearFailedLogins(ip);
     console.log(`Portal login success: ${accountSlug} (${account.firm_name})`);
+
+    // ── Auto-populate designer profile from at_clients_pipeline (if sparse) ──
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: existing } = await supabase.from("designers").select("data").eq("slug", accountSlug).maybeSingle();
+      const isSparse = !existing || !existing.data || Object.keys(existing.data).length < 5;
+
+      if (isSparse && account.firm_name) {
+        const { data: pipelineRows } = await portalClient
+          .from("at_clients_pipeline")
+          .select("fields")
+          .filter("fields->>Client", "eq", account.firm_name)
+          .limit(1);
+
+        if (pipelineRows?.[0]?.fields) {
+          const mapped = mapPipelineToDesignerData(pipelineRows[0].fields, accountSlug);
+          await supabase.from("designers").upsert(
+            { slug: accountSlug, name: mapped.name || accountSlug, data: mapped, updated_at: new Date().toISOString() },
+            { onConflict: "slug" },
+          );
+          await kv.set(`designer:${accountSlug}`, mapped);
+          console.log(`Auto-populated designer profile for ${accountSlug} from pipeline (${account.firm_name})`);
+        }
+      }
+    } catch (e) {
+      console.log("Auto-populate from pipeline failed (non-fatal):", e);
+    }
+
     return c.json({
       success: true,
       token: sessionToken,
@@ -5152,6 +5407,122 @@ app.post("/make-server-4808de5e/portal-logout", async (c) => {
   }
 });
 
+// =============================================
+// BULK SYNC: at_clients_pipeline → designers
+// =============================================
+// One-time (or periodic) endpoint to pre-populate ALL designer profiles
+// from ons-portal at_clients_pipeline data. Protected by CRON_SECRET.
+app.post("/make-server-4808de5e/admin/sync-pipeline-to-designers", async (c) => {
+  try {
+    const cronSecret = c.req.header("x-cron-secret");
+    const expected = Deno.env.get("CRON_SECRET");
+    if (!cronSecret || !expected || cronSecret !== expected) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+    const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+    if (!portalUrl || !portalKey) {
+      return c.json({ error: "Portal not configured" }, 500);
+    }
+
+    // ?force=true skips the sparse check and re-syncs all profiles that haven't been manually edited
+    const forceSync = c.req.query("force") === "true";
+    // ?slugs=sora,onehome — reset specific slugs to fresh pipeline data (ignores all checks)
+    const onlySlugs = c.req.query("slugs") ? new Set(c.req.query("slugs")!.split(",").map(s => s.trim())) : null;
+
+    const portalClient = createClient(portalUrl, portalKey);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // 1. Fetch all portal_accounts
+    const { data: accounts, error: accErr } = await portalClient
+      .from("portal_accounts")
+      .select("username, firm_name, email")
+      .eq("active", true);
+
+    if (accErr || !accounts) {
+      return c.json({ error: "Failed to fetch portal_accounts", detail: accErr?.message }, 500);
+    }
+
+    // 2. Fetch all pipeline rows
+    const { data: pipelineRows, error: pipErr } = await portalClient
+      .from("at_clients_pipeline")
+      .select("fields");
+
+    if (pipErr) {
+      return c.json({ error: "Failed to fetch at_clients_pipeline", detail: pipErr?.message }, 500);
+    }
+
+    // Build a lookup map: firm_name → pipeline fields
+    const pipelineMap = new Map<string, any>();
+    for (const row of pipelineRows || []) {
+      const clientName = row.fields?.["Client"];
+      if (clientName) pipelineMap.set(clientName, row.fields);
+    }
+
+    const results: { synced: string[]; skipped: string[]; noMatch: string[]; errors: string[] } = {
+      synced: [], skipped: [], noMatch: [], errors: [],
+    };
+
+    for (const acc of accounts) {
+      const slug = acc.username;
+      if (!slug) continue;
+      // If ?slugs= is specified, only process those specific slugs
+      if (onlySlugs && !onlySlugs.has(slug)) continue;
+
+      try {
+        // When targeting specific slugs, always overwrite (fresh start)
+        const isTargeted = onlySlugs?.has(slug);
+
+        // Check if designers row is sparse (skip rich profiles unless force=true)
+        const { data: existing } = await supabase.from("designers").select("data").eq("slug", slug).maybeSingle();
+        const isSparse = !existing || !existing.data || Object.keys(existing.data).length < 5;
+        // If profile has been manually edited (has images, bio, etc.), don't overwrite even with force
+        const hasManualEdits = existing?.data?.bio || existing?.data?.images?.cover || existing?.data?.images?.logo;
+
+        if (!isTargeted && !forceSync && !isSparse) {
+          results.skipped.push(slug);
+          continue;
+        }
+        if (!isTargeted && forceSync && hasManualEdits) {
+          results.skipped.push(slug);
+          continue;
+        }
+
+        // Look up pipeline data by firm_name
+        const pipelineFields = acc.firm_name ? pipelineMap.get(acc.firm_name) : null;
+        if (!pipelineFields) {
+          results.noMatch.push(`${slug} (${acc.firm_name || "no firm_name"})`);
+          continue;
+        }
+
+        const mapped = mapPipelineToDesignerData(pipelineFields, slug);
+        await supabase.from("designers").upsert(
+          { slug, name: mapped.name || slug, data: mapped, updated_at: new Date().toISOString() },
+          { onConflict: "slug" },
+        );
+        await kv.set(`designer:${slug}`, mapped);
+        results.synced.push(slug);
+      } catch (e) {
+        results.errors.push(`${slug}: ${(e as Error).message}`);
+      }
+    }
+
+    console.log(`Pipeline sync complete: synced=${results.synced.length}, skipped=${results.skipped.length}, noMatch=${results.noMatch.length}, errors=${results.errors.length}`);
+    return c.json({
+      success: true,
+      synced: results.synced.length,
+      skipped: results.skipped.length,
+      noMatch: results.noMatch.length,
+      errors: results.errors.length,
+      details: results,
+    });
+  } catch (err) {
+    console.log("Error in sync-pipeline-to-designers:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 // ── Profile Editor: Save to designers + designer_sections tables ──
 
 app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
@@ -5179,16 +5550,19 @@ app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
       sectionMap[s.section] = s.data;
     }
 
+    // Section rows override data column, but fall back to data column values
+    // (e.g. pipeline-synced businessInfo lives in designers.data until manually edited)
+    const d = designer?.data || {};
     return c.json({
       data: {
-        ...(designer?.data || {}),
-        team: sectionMap.team || [],
-        projects: sectionMap.projects || [],
-        caseStudies: sectionMap.casestudies || [],
-        reviews: sectionMap.reviews || [],
-        latestReviews: sectionMap.latestreviews || [],
-        serviceArea: sectionMap.servicearea || {},
-        businessInfo: sectionMap.businessinfo || [],
+        ...d,
+        team: sectionMap.team || d.team || [],
+        projects: sectionMap.projects || d.projects || [],
+        caseStudies: sectionMap.casestudies || d.caseStudies || [],
+        reviews: sectionMap.reviews || d.reviews || [],
+        latestReviews: sectionMap.latestreviews || d.latestReviews || [],
+        serviceArea: sectionMap.servicearea || d.serviceArea || {},
+        businessInfo: sectionMap.businessinfo || d.businessInfo || [],
       },
     });
   } catch (err) {

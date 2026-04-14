@@ -21,6 +21,7 @@ import {
   ServiceArea,
   ProfileLoadingSkeleton,
 } from "./DesignerProfile";
+import { useGoogleReviews } from "./useGoogleReviews";
 import {
   LogOut, Pencil, X, Check, Loader2, Plus, Trash2, Save, Eye,
   Upload, MapPin, Star, Users, Briefcase, FileText,
@@ -2556,6 +2557,190 @@ function InlineLatestReviews() {
   );
 }
 
+// ─── GOOGLE PLACE ID INPUT ──────────────────────────────────────
+function GooglePlaceIdInput() {
+  const { rawData, saveSection, slug } = useEditor();
+  const [inputValue, setInputValue] = useState("");
+  const [resolvedPlaceId, setResolvedPlaceId] = useState(rawData?.googlePlaceId || "");
+  const [resolvedName, setResolvedName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const token = sessionStorage.getItem("designer-token");
+
+  // Sync from rawData when it changes
+  useEffect(() => {
+    if (rawData?.googlePlaceId && rawData.googlePlaceId !== resolvedPlaceId) {
+      setResolvedPlaceId(rawData.googlePlaceId);
+    }
+  }, [rawData?.googlePlaceId]);
+
+  /**
+   * Extract a Place ID from various Google Maps URL formats, or return the
+   * raw input if it already looks like a Place ID (starts with "ChIJ").
+   */
+  const extractPlaceId = async (input: string): Promise<{ placeId: string; name?: string; lat?: number; lng?: number; address?: string }> => {
+    const trimmed = input.trim();
+
+    // Already a Place ID — still resolve via backend to get location data
+    if (/^ChIJ[A-Za-z0-9_-]{20,}$/.test(trimmed)) {
+      try {
+        const res = await fetch(`${API}/google-reviews/resolve-url`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+            ...(token ? { "X-Designer-Token": token } : {}),
+          },
+          body: JSON.stringify({ url: `place_id=${trimmed}` }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return { placeId: data.placeId || trimmed, name: data.name, lat: data.lat, lng: data.lng, address: data.address };
+        }
+      } catch { /* fallback */ }
+      return { placeId: trimmed };
+    }
+
+    // Google Maps URL — resolve via backend
+    if (trimmed.includes("google") || trimmed.includes("maps") || trimmed.includes("goo.gl")) {
+      const res = await fetch(`${API}/google-reviews/resolve-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+          ...(token ? { "X-Designer-Token": token } : {}),
+        },
+        body: JSON.stringify({ url: trimmed }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to resolve Google Maps link");
+      }
+      const data = await res.json();
+      if (!data.placeId) throw new Error("Could not find a Place ID from that link");
+      return { placeId: data.placeId, name: data.name, lat: data.lat, lng: data.lng, address: data.address };
+    }
+
+    throw new Error("Please paste a Google Maps link (e.g. https://maps.google.com/...)");
+  };
+
+  const handleConnect = async () => {
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setResolving(true);
+    setStatus("idle");
+    setErrorMsg("");
+    try {
+      // Step 1: Resolve to Place ID (+ location data)
+      const resolved = await extractPlaceId(trimmed);
+      setResolvedPlaceId(resolved.placeId);
+      if (resolved.name) setResolvedName(resolved.name);
+      setResolving(false);
+
+      // Step 2: Save Place ID to profile
+      const ok = await saveSection("profile", { googlePlaceId: resolved.placeId });
+      if (!ok) { setStatus("error"); setErrorMsg("Failed to save"); return; }
+
+      // Step 2b: Auto-update Service Area map using the place's location
+      if (resolved.lat && resolved.lng) {
+        const mapEmbedUrl = `https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d996.4!2d${resolved.lng}!3d${resolved.lat}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s${encodeURIComponent(resolved.placeId)}!2s${encodeURIComponent(resolved.address || "")}!5e0!3m2!1sen!2ssg!4v1700000000000!5m2!1sen!2ssg`;
+        await saveSection("servicearea", {
+          hqLat: resolved.lat,
+          hqLng: resolved.lng,
+          hqAddress: resolved.address || resolved.name || "",
+          mapEmbedUrl,
+        });
+      }
+
+      // Step 3: Trigger refresh to warm the cache
+      try {
+        await fetch(`${API}/google-reviews/${slug}/refresh`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+            ...(token ? { "X-Designer-Token": token } : {}),
+          },
+        });
+        try { sessionStorage.removeItem(`google-reviews:${slug}`); } catch {}
+        toast.success("Google reviews connected!");
+      } catch {
+        toast.success("Connected — reviews will appear after next refresh.");
+      }
+      setStatus("saved");
+      setInputValue("");
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(err.message || "Something went wrong");
+    } finally {
+      setSaving(false);
+      setResolving(false);
+    }
+  };
+
+  const isConnected = !!rawData?.googlePlaceId;
+
+  return (
+    <section className="py-[32px] md:py-[48px]">
+      <FadeIn>
+        <div className="flex flex-col items-center text-center mb-6">
+          <TagLabel>GOOGLE REVIEWS</TagLabel>
+          <h2 style={{ fontFamily: serif, fontSize: "clamp(20px, 2.5vw, 28px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3">
+            Connect Your Google Reviews
+          </h2>
+          <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[13px] mt-2 max-w-[480px]">
+            Paste your Google Maps link below to automatically display your Google reviews and rating on your profile.
+          </p>
+        </div>
+
+        <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-6 max-w-[600px] mx-auto">
+          <label style={{ fontFamily: sans }} className="block text-[12px] font-medium text-[#6b6860] uppercase tracking-wider mb-2">
+            Google Maps Link
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => { setInputValue(e.target.value); setStatus("idle"); setErrorMsg(""); }}
+              placeholder="https://maps.google.com/maps?cid=..."
+              style={{ fontFamily: sans }}
+              className="flex-1 h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-3 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d] placeholder:text-[#c4c0b8]"
+            />
+            <button
+              onClick={handleConnect}
+              disabled={saving || !inputValue.trim()}
+              className="h-[44px] px-5 rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 flex items-center gap-2 whitespace-nowrap"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+              )}
+              {resolving ? "Resolving..." : saving ? "Connecting..." : "Connect"}
+            </button>
+          </div>
+
+          {isConnected && status !== "error" && (
+            <div className="mt-4 flex items-center gap-2 text-[12px]" style={{ fontFamily: sans, color: "#166534" }}>
+              <Check className="w-3.5 h-3.5" />
+              <span>Connected{resolvedName ? ` — ${resolvedName}` : ""} — reviews refresh automatically every month</span>
+            </div>
+          )}
+          {status === "error" && (
+            <div className="mt-4 flex items-center gap-2 text-[12px]" style={{ fontFamily: sans, color: "#dc2626" }}>
+              <X className="w-3.5 h-3.5" />
+              <span>{errorMsg || "Failed to connect. Please try again."}</span>
+            </div>
+          )}
+        </div>
+      </FadeIn>
+    </section>
+  );
+}
+
 // ─── INLINE GOOGLE REVIEWS ───────────────────────────────────────
 function InlineGoogleReviews() {
   const { rawData, saveSection } = useEditor();
@@ -3641,6 +3826,7 @@ function EditorView({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { payload: googlePayload, uiReviews: googleUiReviews } = useGoogleReviews(slug);
 
   // ── Project modal state (Add / Edit) ──
   // Mounted at the editor level so the click-to-add and click-to-edit chrome
@@ -3766,8 +3952,15 @@ function EditorView({ slug }: { slug: string }) {
       serviceArea: rawData?.serviceArea || {},
       businessInfo: rawData?.businessInfo || [],
     };
-    return transformApiData(blankProfile);
-  }, [rawData, slug]);
+    const base = transformApiData(blankProfile);
+    return {
+      ...base,
+      googleReviews: googleUiReviews,
+      googleMeta: googlePayload
+        ? { rating: googlePayload.rating, totalRatings: googlePayload.totalRatings, source: googlePayload.source, fetchedAt: googlePayload.fetchedAt, placeId: googlePayload.placeId }
+        : null,
+    };
+  }, [rawData, slug, googlePayload, googleUiReviews]);
 
   if (loading) return <ProfileLoadingSkeleton />;
 
@@ -3991,7 +4184,8 @@ function EditorView({ slug }: { slug: string }) {
               {/* 6. Projects Carousel — fully inline (use the + tile to add a project) */}
               <ProjectsSection />
 
-              {/* 7. Rating Breakdown */}
+              {/* 7. Google Place ID + Rating Breakdown */}
+              <GooglePlaceIdInput />
               <RatingBreakdown />
             </div>
 

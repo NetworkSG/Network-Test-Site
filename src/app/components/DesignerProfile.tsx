@@ -96,7 +96,7 @@ interface DesignerCtxType {
    *  live Google response; until then it's an empty array. */
   googleReviews?: any[];
   /** Optional metadata for the cached Google reviews payload (rating, total). */
-  googleMeta?: { rating: number; totalRatings: number; source: string; fetchedAt: string } | null;
+  googleMeta?: { rating: number; totalRatings: number; source: string; fetchedAt: string; placeId?: string | null } | null;
   profile: any;
   projects: any[];
   serviceArea: any;
@@ -359,7 +359,8 @@ export function HeroSection() {
   const availText = p?.availability || "";
   const locText = p?.location || "Singapore Based";
   const isVerified = p?.verified ?? false;
-  const rating = p?.stats?.rating || "4.9";
+  const hasGoogleR = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const rating = hasGoogleR ? String(ctx!.googleMeta!.rating) : (p?.stats?.rating || "4.9");
   const coverName = cp?.name || "Featured project name";
   const coverCost = cp?.cost || "";
   const coverArea = cp?.area || "";
@@ -571,7 +572,8 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
   const slug = ctx?.profile?.slug || "";
   const companyName = ctx?.profile?.name || "this designer";
   const logoImg = ctx?.profile?.images?.logo ? resolveImg(ctx.profile.images.logo) : PLACEHOLDER_LOGO;
-  const rating = ctx?.profile?.stats?.rating || "4.9";
+  const hasGoogleQ = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const rating = hasGoogleQ ? String(ctx!.googleMeta!.rating) : (ctx?.profile?.stats?.rating || "4.9");
   const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -822,6 +824,9 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
 export function StatsRow() {
   const ctx = useDesignerCtx();
   const s = ctx?.profile?.stats;
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const displayRating = hasGoogle ? String(ctx!.googleMeta!.rating) : (s?.rating || "4.9");
+  const displayReviewCount = hasGoogle ? String(ctx!.googleMeta!.totalRatings) : (s?.reviewCount || "0");
   const stats = [
     {
       icon: (
@@ -829,8 +834,8 @@ export function StatsRow() {
           <path d="M7.22 0.5L9.07 4.82L13.94 5.33L10.27 8.62L11.22 13.27L7.22 11.02L3.22 13.27L4.17 8.62L0.5 5.33L5.37 4.82L7.22 0.5Z" fill="#FFA929" />
         </svg>
       ),
-      label: `${s?.rating || "4.9"} Rating`,
-      sub: `${s?.reviewCount || "186"} Reviews`,
+      label: `${displayRating} Rating`,
+      sub: `${displayReviewCount} Reviews`,
     },
     {
       icon: (
@@ -2440,7 +2445,8 @@ export function HomeownersSay() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const rData = ctx?.reviewsData ?? reviewsData;
-  const rating = ctx?.profile?.stats?.rating || "4.9";
+  const hasGoogleH = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const rating = hasGoogleH ? String(ctx!.googleMeta!.rating) : (ctx?.profile?.stats?.rating || "4.9");
 
   // Hide on live page when no reviews exist
   if (!editCtx && !rData.length) return null;
@@ -2576,6 +2582,12 @@ export function HomeownersSay() {
 function ReviewCard({ review, index }: { review: typeof reviews[0]; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const ctx = useDesignerCtx();
+  const placeId = ctx?.googleMeta?.placeId;
+  const googleReviewsUrl = placeId
+    ? `https://search.google.com/local/reviews?placeid=${placeId}`
+    : null;
+  const starRating = typeof review.rating === "number" ? review.rating : 5;
 
   return (
     <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] overflow-hidden">
@@ -2602,12 +2614,18 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
 
       {/* Content */}
       <div className="p-5">
-        {/* Stars + Verified */}
-        <div className="flex items-center justify-between mb-1">
+        {/* Stars + Verified — clickable to Google Reviews */}
+        <a
+          href={googleReviewsUrl || "#"}
+          target={googleReviewsUrl ? "_blank" : undefined}
+          rel={googleReviewsUrl ? "noopener noreferrer" : undefined}
+          className="flex items-center justify-between mb-1 no-underline cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={(e) => { if (!googleReviewsUrl) e.preventDefault(); }}
+        >
           <div className="flex gap-[2px]">
             {Array.from({ length: 5 }).map((_, i) => (
               <svg key={i} className="size-[14px]" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1.167L8.682 4.702L12.6 5.232L9.8 7.955L10.521 11.856L7 10.069L3.479 11.856L4.2 7.955L1.4 5.232L5.318 4.702L7 1.167Z" fill="#FFA929" />
+                <path d="M7 1.167L8.682 4.702L12.6 5.232L9.8 7.955L10.521 11.856L7 10.069L3.479 11.856L4.2 7.955L1.4 5.232L5.318 4.702L7 1.167Z" fill={i < starRating ? "#FFA929" : "#E0DDD7"} />
               </svg>
             ))}
           </div>
@@ -2615,7 +2633,7 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
             <img src={imgGoogle} alt="Google" className="size-[16px] object-contain" />
             <span className="font-['DM_Sans',sans-serif] font-medium text-[12px] text-[#34a42f] leading-[16px]">Verified</span>
           </div>
-        </div>
+        </a>
 
         {/* Title */}
         <h4 className="font-['DM_Sans',sans-serif] font-semibold text-[16px] text-[#242424] leading-[22px] mt-1.5 mb-2">
@@ -2668,6 +2686,8 @@ export function GoogleReviewCards() {
   // module-level fallback) so the section still renders during dev.
   const googleRvws = ctx?.googleReviews ?? [];
   const rvws = googleRvws.length > 0 ? googleRvws : (ctx?.reviews ?? reviews);
+  const googlePlaceId = ctx?.googleMeta?.placeId;
+  const totalRatings = ctx?.googleMeta?.totalRatings;
   const [expanded, setExpanded] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -2691,6 +2711,8 @@ export function GoogleReviewCards() {
 
   // Hide on live page when no reviews exist
   if (!editCtx && !rvws.length) return null;
+
+  const showViewMore = rvws.length > 8;
 
   const toggle = () => {
     if (expanded) {
@@ -2717,9 +2739,9 @@ export function GoogleReviewCards() {
           <div
             ref={gridRef}
             style={{
-              maxHeight: expanded ? `${contentHeight}px` : `${COLLAPSED_HEIGHT}px`,
+              maxHeight: !showViewMore ? "none" : expanded ? `${contentHeight}px` : `${COLLAPSED_HEIGHT}px`,
               transition: "max-height 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-              overflow: "hidden",
+              overflow: showViewMore ? "hidden" : "visible",
             }}
           >
             {/* Desktop: masonry 3-column layout — dynamically distributes any number of reviews */}
@@ -2751,37 +2773,61 @@ export function GoogleReviewCards() {
             </div>
           </div>
 
-          {/* Gradient fade — fades out when expanded */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[2]"
-            style={{
-              background: "linear-gradient(to bottom, rgba(240,237,230,0) 0%, rgba(240,237,230,0.85) 50%, rgba(240,237,230,1) 100%)",
-              opacity: expanded ? 0 : 1,
-              transition: "opacity 0.5s ease",
-            }}
-          />
+          {/* Gradient fade — only show when there are more than 8 reviews */}
+          {showViewMore && (
+            <div
+              className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[2]"
+              style={{
+                background: "linear-gradient(to bottom, rgba(240,237,230,0) 0%, rgba(240,237,230,0.85) 50%, rgba(240,237,230,1) 100%)",
+                opacity: expanded ? 0 : 1,
+                transition: "opacity 0.5s ease",
+              }}
+            />
+          )}
         </div>
 
-        {/* ── View More / View Less button ── */}
-        <button
-          onClick={toggle}
-          className="flex flex-col items-center gap-[8px] mx-auto mt-7 cursor-pointer border-none bg-transparent p-2 group"
-        >
-          <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
-            {expanded ? "View Less" : "View More"}
-          </span>
-          <div
-            className="size-[44px] rounded-full border-[1.5px] border-[#ccc] flex items-center justify-center group-hover:border-[#888] group-hover:bg-black/[0.04]"
-            style={{
-              transition: "transform 0.4s ease, border-color 0.3s ease, background 0.3s ease",
-              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-            }}
+        {/* ── View More / View Less button — only when more than 8 reviews ── */}
+        {showViewMore && (
+          <button
+            onClick={toggle}
+            className="flex flex-col items-center gap-[8px] mx-auto mt-7 cursor-pointer border-none bg-transparent p-2 group"
           >
-            <svg className="size-[18px] text-[#555]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6" />
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
+              {expanded ? "View Less" : "View More"}
+            </span>
+            <div
+              className="size-[44px] rounded-full border-[1.5px] border-[#ccc] flex items-center justify-center group-hover:border-[#888] group-hover:bg-black/[0.04]"
+              style={{
+                transition: "transform 0.4s ease, border-color 0.3s ease, background 0.3s ease",
+                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+              }}
+            >
+              <svg className="size-[18px] text-[#555]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </div>
+          </button>
+        )}
+
+        {/* ── View all reviews on Google ── */}
+        {googlePlaceId && (
+          <a
+            href={`https://search.google.com/local/reviews?placeid=${googlePlaceId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 mx-auto mt-6 px-6 h-[44px] rounded-full border border-[#d8d3c8] bg-white hover:bg-[#fafaf8] transition no-underline group"
+          >
+            <img src={imgGoogle} alt="Google" className="size-[18px] object-contain" />
+            <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#333] group-hover:text-[#0f0f0d]">
+              View all {totalRatings ? `${totalRatings} ` : ""}reviews on Google
+            </span>
+            <svg className="size-[14px] text-[#999] group-hover:text-[#555] transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
             </svg>
-          </div>
-        </button>
+          </a>
+        )}
 
       </div>
     </section>
@@ -3128,6 +3174,10 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
   const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
   const budgetVal = budgetEntry?.value?.trim() || "$30k – $120k";
 
+  // Prefer Google rating when available
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const googleRating = hasGoogle ? ctx!.googleMeta!.rating : null;
+
   type Metric = {
     value: string;
     valuePath: string | undefined;
@@ -3143,7 +3193,7 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
 
   const metrics: Metric[] = [
     {
-      value: s?.rating || "4.9",
+      value: googleRating ? String(googleRating) : (s?.rating || "4.9"),
       valuePath: undefined,
       suffix: "/5.0",
       label: "Average Rating",
@@ -3229,9 +3279,16 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
 export function RatingBreakdown() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
-  const rating = parseFloat(ctx?.profile?.stats?.rating || "4.9");
+
+  // Prefer Google data when available, fall back to manual stats
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const rating = hasGoogle
+    ? ctx!.googleMeta!.rating
+    : parseFloat(ctx?.profile?.stats?.rating || "4.9");
   const reviewCount = ctx?.reviewsData?.length ?? 0;
-  const totalReviews = ctx?.profile?.stats?.reviewCount || reviewCount || "186";
+  const totalReviews = hasGoogle
+    ? ctx!.googleMeta!.totalRatings
+    : (ctx?.profile?.stats?.reviewCount || reviewCount || "186");
 
   const categories = [
     { label: "Design Quality", score: Math.min(5, rating + 0.05) },
@@ -3417,10 +3474,11 @@ function BusinessInfoMultiSelect({
   const [saving, setSaving] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  // Parse comma/·-separated value into a Set for fast lookups.
+  // Parse ·-separated value into a Set for fast lookups.
+  // NOTE: only split on middle dot (·), NOT commas — values like "HDB (BTO, Resale, Maisonette)" contain commas.
   const selectedSet = new Set(
     (value || "")
-      .split(/[,\u00b7]/)
+      .split(/\s*\u00b7\s*/)
       .map((s) => s.trim())
       .filter(Boolean),
   );
@@ -3491,7 +3549,7 @@ function BusinessInfoMultiSelect({
       >
         {allSelected.length > 0 ? (
           <span className="flex flex-wrap gap-1.5">
-            {allSelected.map((s) => (
+            {allSelected.slice(0, 2).map((s) => (
               <span
                 key={s}
                 className="text-[12px] font-medium px-2.5 py-1 rounded-full border"
@@ -3500,6 +3558,20 @@ function BusinessInfoMultiSelect({
                 {s}
               </span>
             ))}
+            {allSelected.length > 2 && (
+              <span
+                className="text-[12px] font-medium px-2.5 py-1 rounded-full border relative group/more"
+                style={{ background: C.cream, color: C.grayLight, borderColor: C.creamBorder, fontFamily: sans, cursor: "default" }}
+                title={allSelected.slice(2).join(", ")}
+              >
+                +{allSelected.length - 2} more
+                <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg text-[12px] font-medium leading-relaxed bg-[#0f0f0d] text-white whitespace-nowrap opacity-0 pointer-events-none group-hover/more:opacity-100 transition-opacity z-50"
+                  style={{ fontFamily: sans }}
+                >
+                  {allSelected.slice(2).join(" · ")}
+                </span>
+              </span>
+            )}
           </span>
         ) : (
           <span style={{ color: "#a8a8a8" }}>Click to select</span>
@@ -3680,6 +3752,38 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
         );
+      case "Service area":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+        );
+      case "Specialisation":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        );
+      case "Services":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
+        );
+      case "Phone":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+          </svg>
+        );
+      case "Financing":
+        return (
+          <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+        );
       case "Team Members":
         return (
           <svg className={cls} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -3706,14 +3810,20 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
     }
   };
 
-  const CHIP_FIELDS = new Set(["Project types", "Style specialisation"]);
+  const CHIP_FIELDS = new Set(["Project types", "Style specialisation", "Service area", "Specialisation", "Services", "Budget range"]);
   const isChipField = (label: string) => CHIP_FIELDS.has(label);
 
   // Predefined option lists for the multi-select dropdown fields. Add to these
   // arrays to surface more options to studios — order here is the order they
   // render in the dropdown and on the public page.
   const MULTI_SELECT_OPTIONS: Record<string, string[]> = {
-    "Project types": ["HDB", "Condo", "Landed", "Commercial"],
+    "Project types": [
+      "HDB (BTO, Resale, Maisonette)",
+      "Executive Condominium (EC)",
+      "Condominium (New Launch, Resale)",
+      "Landed Homes (if applicable)",
+      "Commercial",
+    ],
     "Style specialisation": [
       "Modern",
       "Contemporary",
@@ -3722,10 +3832,39 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
       "Japandi",
       "Minimalist",
       "Mid-Century",
-      "Traditional",
-      "Bohemian",
-      "Rustic",
-      "Coastal",
+      "Luxury/High-End",
+      "Classic/Traditional",
+      "Eclectic",
+      "Muji-style",
+      "Resort-style",
+    ],
+    "Service area": [
+      "West",
+      "East",
+      "North",
+      "North-East",
+      "Central",
+      "Island-wide",
+    ],
+    "Specialisation": [
+      "Design & Build",
+      "Commercial",
+      "Carpentry-Focused",
+      "Full Home Renovation",
+      "Partial Renovation",
+    ],
+    "Services": [
+      "Design + Build",
+      "Design-Only Services",
+      "Project management",
+      "Consultation",
+    ],
+    "Budget range": [
+      "$30k – $50k",
+      "$50k – $80k",
+      "$80k – $120k",
+      "$120k – $200k",
+      "$200k+",
     ],
   };
 
@@ -3767,10 +3906,12 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
       }
       // Public mode — chip rendering for list-type fields.
       if (isChipField(row.label) && row.value) {
-        const chips = row.value.split(/[,\u00b7]/).map((s) => s.trim()).filter(Boolean);
+        const chips = row.value.split(/\s*\u00b7\s*/).map((s: string) => s.trim()).filter(Boolean);
+        const visible = chips.slice(0, 2);
+        const overflow = chips.slice(2);
         return (
           <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {chips.map((chip) => (
+            {visible.map((chip) => (
               <span
                 key={chip}
                 className="text-[12px] font-medium px-2.5 py-1 rounded-full border"
@@ -3779,6 +3920,20 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
                 {chip}
               </span>
             ))}
+            {overflow.length > 0 && (
+              <span
+                className="text-[12px] font-medium px-2.5 py-1 rounded-full border relative group/more"
+                style={{ background: C.cream, color: C.grayLight, borderColor: C.creamBorder, fontFamily: sans, cursor: "default" }}
+              >
+                +{overflow.length} more
+                <span
+                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg text-[12px] font-medium leading-relaxed bg-[#0f0f0d] text-white whitespace-nowrap opacity-0 pointer-events-none group-hover/more:opacity-100 transition-opacity z-50"
+                  style={{ fontFamily: sans }}
+                >
+                  {overflow.join(" · ")}
+                </span>
+              </span>
+            )}
           </div>
         );
       }
@@ -3973,6 +4128,7 @@ export function DesignerProfile() {
             totalRatings: googlePayload.totalRatings,
             source: googlePayload.source,
             fetchedAt: googlePayload.fetchedAt,
+            placeId: googlePayload.placeId,
           }
         : null,
     };
