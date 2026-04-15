@@ -5040,21 +5040,35 @@ app.post("/make-server-4808de5e/portal-login", async (c) => {
       return c.json({ error: "Portal auth not configured" }, 500);
     }
 
+    // Validate that ONS_PORTAL_URL looks like a real Supabase URL
+    if (!portalUrl.startsWith("https://")) {
+      console.log(`ONS_PORTAL_URL is not a valid URL: ${portalUrl.substring(0, 20)}...`);
+      return c.json({ error: "Portal auth misconfigured" }, 500);
+    }
+
     const portalClient = createClient(portalUrl, portalKey);
 
-    // Try username first, then email if not found
+    // Try username first, then email if not found (with timeout protection)
     let accounts: any[] | null = null;
     let portalErr: any = null;
 
-    const res1 = await portalClient.from("portal_accounts").select("*").eq("username", username).eq("active", true).limit(1);
-    accounts = res1.data;
-    portalErr = res1.error;
+    const portalTimeout = (promise: Promise<any>) =>
+      Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error("Portal DB timeout")), 8000))]);
 
-    if ((!accounts || accounts.length === 0) && !portalErr) {
-      // Try matching by email (case-insensitive)
-      const res2 = await portalClient.from("portal_accounts").select("*").ilike("email", username).eq("active", true).limit(1);
-      accounts = res2.data;
-      portalErr = res2.error;
+    try {
+      const res1: any = await portalTimeout(portalClient.from("portal_accounts").select("*").eq("username", username).eq("active", true).limit(1));
+      accounts = res1.data;
+      portalErr = res1.error;
+
+      if ((!accounts || accounts.length === 0) && !portalErr) {
+        // Try matching by email (case-insensitive)
+        const res2: any = await portalTimeout(portalClient.from("portal_accounts").select("*").ilike("email", username).eq("active", true).limit(1));
+        accounts = res2.data;
+        portalErr = res2.error;
+      }
+    } catch (timeoutErr: any) {
+      console.log(`Portal login timeout for: ${username} — ${timeoutErr.message}`);
+      return c.json({ error: "Portal service unavailable. Please try again." }, 503);
     }
 
     if (portalErr || !accounts || accounts.length === 0) {

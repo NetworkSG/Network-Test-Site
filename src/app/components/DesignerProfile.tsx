@@ -518,8 +518,8 @@ export function StudioInfo() {
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="relative bg-black rounded-full size-[100px] md:size-[128px] border-[3px] border-[#d8d3c8] shrink-0 overflow-hidden flex items-center justify-center mb-4">
-        <EditableImage src={logoImg} alt={companyName} path="images.logo" className="w-[90%] h-[90%] object-cover rounded-full" />
+      <div className="relative rounded-full size-[100px] md:size-[128px] border-[3px] border-[#d8d3c8] shrink-0 overflow-hidden flex items-center justify-center mb-4" style={{ background: C.cream }}>
+        <EditableImage src={logoImg} alt={companyName} path="images.logo" className="w-full h-full object-cover rounded-full" />
       </div>
 
       {/* Name */}

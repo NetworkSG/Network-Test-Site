@@ -76,18 +76,22 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, slug: string) => vo
     e.preventDefault();
     setError(""); setLoading(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch(`${API}/portal-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
         body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       const json = await res.json();
       if (!res.ok) { setError(json.error || "Login failed"); setLoading(false); return; }
       localStorage.setItem("designer-token", json.token);
       localStorage.setItem("designer-slug", json.slug);
       onLogin(json.token, json.slug);
     } catch (err: any) {
-      setError(err.message || "Network error");
+      setError(err.name === "AbortError" ? "Login timed out. Please try again." : (err.message || "Network error"));
     }
     setLoading(false);
   };
