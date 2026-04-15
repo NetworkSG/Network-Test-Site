@@ -397,13 +397,13 @@ export function DesignersDirectory() {
   useEffect(() => {
     const fetchDesigners = async () => {
       try {
-        const response = await fetch(`${API}/designers`, {
+        const response = await fetch(`${API}/designers?limit=100`, {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = await response.json();
         const designersList = json.data || [];
-        setDesigners(designersList.map(mapDesigner));
+        setDesigners(designersList.filter((d: any) => d.active !== false).map(mapDesigner));
       } catch (error) {
         console.error("Error fetching designers:", error);
       } finally {

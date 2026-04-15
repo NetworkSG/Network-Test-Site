@@ -3802,6 +3802,11 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
     { label: "Office address", placeholder: "e.g. 5855 W Century, Ang Mo Kio, Singapore" },
     { label: "Project types", placeholder: "e.g. HDB, Condo, Landed, Commercial" },
     { label: "Style specialisation", placeholder: "e.g. Modern, Japandi, Minimalist" },
+    { label: "Service area", placeholder: "e.g. Island-wide, Central, East" },
+    { label: "Specialisation", placeholder: "e.g. Design & Build, Full Home Renovation" },
+    { label: "Services", placeholder: "e.g. Design + Build, Consultation" },
+    { label: "Phone", placeholder: "e.g. +65 9123 4567" },
+    { label: "Financing", placeholder: "e.g. 0% Interest Instalment Plan" },
   ];
 
   // Build a label → biIndex map of what the studio already has saved so we
@@ -4311,7 +4316,8 @@ export function DesignerProfile() {
               <ExperienceTable inline />
             </div>
 
-            {/* 6. Team Avatars */}
+            {/* 6. Team Avatars — hidden when no team data */}
+            {(ctxValue?.teamMembers?.length ?? 0) > 0 && (
             <div className="mt-16 md:mt-24">
               <FadeIn>
                 <TagLabel>OUR TEAM</TagLabel>
@@ -4321,6 +4327,7 @@ export function DesignerProfile() {
                 <TeamAvatars />
               </FadeIn>
             </div>
+            )}
 
             {/* 7. Projects Carousel */}
             <ProjectsSection />

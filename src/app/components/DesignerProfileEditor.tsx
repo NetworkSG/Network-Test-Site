@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from "react";
+import { useParams } from "react-router";
 import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import {
@@ -66,7 +67,7 @@ const EditorContext = createContext<EditorCtx | null>(null);
 function useEditor() { return useContext(EditorContext)!; }
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: (token: string, slug: string) => void }) {
+function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -88,8 +89,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, slug: string) => vo
       const json = await res.json();
       if (!res.ok) { setError(json.error || "Login failed"); setLoading(false); return; }
       localStorage.setItem("designer-token", json.token);
-      localStorage.setItem("designer-slug", json.slug);
-      onLogin(json.token, json.slug);
+      onLogin();
     } catch (err: any) {
       setError(err.name === "AbortError" ? "Login timed out. Please try again." : (err.message || "Network error"));
     }
@@ -130,10 +130,10 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, slug: string) => vo
               letterSpacing: "-0.01em",
             }}
           >
-            Interior Designer Profile
+            Editor Access
           </h1>
           <p className="mt-2 text-[14px]" style={{ color: C.gray }}>
-            Sign in with your portal credentials
+            Sign in to edit designer profiles
           </p>
         </div>
 
@@ -3961,7 +3961,6 @@ function EditorView({ slug }: { slug: string }) {
   const handleLogout = () => {
     editorApi("/portal-logout", { method: "POST" });
     localStorage.removeItem("designer-token");
-    localStorage.removeItem("designer-slug");
     window.location.reload();
   };
 
@@ -4219,16 +4218,6 @@ function EditorView({ slug }: { slug: string }) {
                 <ExperienceTable inline />
               </div>
 
-              {/* 5. Team Avatars — fully inline (use the + tiles to add members / stories) */}
-              <div className="mt-16 md:mt-24">
-                <FadeIn>
-                  <TagLabel>OUR TEAM</TagLabel>
-                  <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-5">
-                    Meet the Team
-                  </h2>
-                  <TeamAvatars />
-                </FadeIn>
-              </div>
 
               {/* 6. Projects Carousel — fully inline (use the + tile to add a project) */}
               <ProjectsSection />
@@ -4287,15 +4276,14 @@ function EditorView({ slug }: { slug: string }) {
 // ─── MAIN EXPORT ──────────────────────────────────────────────────
 
 export function DesignerProfileEditor() {
+  const { slug: urlSlug } = useParams<{ slug: string }>();
   const [authed, setAuthed] = useState(false);
-  const [slug, setSlug] = useState("");
   const [checking, setChecking] = useState(true);
 
   // Check existing session on mount
   useEffect(() => {
     const token = localStorage.getItem("designer-token");
-    const savedSlug = localStorage.getItem("designer-slug");
-    if (!token || !savedSlug) { setChecking(false); return; }
+    if (!token) { setChecking(false); return; }
 
     fetch(`${API}/portal-session`, {
       headers: {
@@ -4307,15 +4295,24 @@ export function DesignerProfileEditor() {
       .then((json) => {
         if (json.valid) {
           setAuthed(true);
-          setSlug(json.slug || savedSlug);
         } else {
           localStorage.removeItem("designer-token");
-          localStorage.removeItem("designer-slug");
         }
       })
       .catch(() => {})
       .finally(() => setChecking(false));
   }, []);
+
+  if (!urlSlug) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: C.cream, fontFamily: sans, color: C.gray }}
+      >
+        <p className="text-[15px]">No designer specified.</p>
+      </div>
+    );
+  }
 
   if (checking) {
     return (
@@ -4331,13 +4328,10 @@ export function DesignerProfileEditor() {
   if (!authed) {
     return (
       <LoginScreen
-        onLogin={(token, s) => {
-          setAuthed(true);
-          setSlug(s);
-        }}
+        onLogin={() => setAuthed(true)}
       />
     );
   }
 
-  return <EditorView slug={slug} />;
+  return <EditorView slug={urlSlug} />;
 }

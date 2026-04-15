@@ -108,7 +108,7 @@ export const router = createBrowserRouter([
   { path: "/profile", element: createElement(LazyRoute, { component: LazyHomeownerDashboard }) },
   { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
   { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
-  { path: "/edit-profile", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
+  { path: "/edit-profile/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
   // { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   // { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

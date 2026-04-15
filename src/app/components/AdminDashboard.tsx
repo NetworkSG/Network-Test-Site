@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { useNavigate } from "react-router";
 import { supabase } from "./supabaseClient";
@@ -40,6 +41,8 @@ import {
   ArrowRight,
   Check,
   Power,
+  Search,
+  Filter,
 } from "lucide-react";
 import { AdminFloorPlanTemplates } from "./AdminFloorPlanTemplates";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
@@ -1740,12 +1743,26 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [toggling, setToggling] = useState<string | null>(null);
   const [designerToggleConfirm, setDesignerToggleConfirm] = useState<{ slug: string; currentlyActive: boolean } | null>(null);
   const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor">("overview");
+  const [designerSearch, setDesignerSearch] = useState("");
+  const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  // Filtered designers
+  const filteredDesigners = designers.filter((d: any) => {
+    const matchesSearch = !designerSearch ||
+      (d.name || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
+      (d.slug || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
+      (d.tagline || "").toLowerCase().includes(designerSearch.toLowerCase());
+    const matchesStatus = designerStatusFilter === "all" ||
+      (designerStatusFilter === "active" && d.active !== false) ||
+      (designerStatusFilter === "inactive" && d.active === false);
+    return matchesSearch && matchesStatus;
+  });
 
   // Fetch designer list
   const fetchDesigners = useCallback(async () => {
     setLoadingList(true);
     try {
-      const res = await fetch(`${API}/designers?showAll=true`, { headers: AUTH });
+      const res = await fetch(`${API}/designers?showAll=true&limit=100`, { headers: AUTH });
       const json = await res.json();
       setDesigners(json.data || []);
     } catch (err) {
@@ -2013,27 +2030,62 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
         ) : !showForm ? (
           /* ──────── DESIGNER LIST VIEW ──────── */
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-bold text-[22px] text-[#101828] tracking-tight">Designer Profiles</h2>
                 <p className="text-[14px] text-[#6a7282] mt-0.5">
-                  {loadingList ? "Loading..." : `${designers.length} profile${designers.length !== 1 ? "s" : ""} found`}
+                  {loadingList ? "Loading..." : `${filteredDesigners.length} of ${designers.length} profile${designers.length !== 1 ? "s" : ""}`}
+                  {!loadingList && designers.length > 0 && (
+                    <span className="ml-3 text-[13px]">
+                      · <span className="text-[#22c55e] font-medium">{designers.filter((d: any) => d.completeness?.missing?.length === 0).length}</span> complete
+                      · <span className="text-[#f59e0b] font-medium">{designers.filter((d: any) => d.completeness?.missing?.length > 0).length}</span> incomplete
+                    </span>
+                  )}
                 </p>
               </div>
-              <button
-                onClick={startNew}
-                className="flex items-center gap-2 bg-[#101828] text-white px-5 py-2.5 rounded-xl text-[14px] font-semibold hover:bg-[#1f2937] transition-colors cursor-pointer shadow-sm"
-              >
-                <Plus className="size-4" />
-                Add New Designer
-              </button>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#9ca3af]" />
+                <input
+                  type="text"
+                  placeholder="Search by name, slug, or tagline..."
+                  value={designerSearch}
+                  onChange={(e) => setDesignerSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#e5e7eb] rounded-xl text-[14px] text-[#101828] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2b7fff]/20 focus:border-[#2b7fff] transition-all"
+                />
+                {designerSearch && (
+                  <button onClick={() => setDesignerSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#6a7282] cursor-pointer">
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
+                {(["all", "active", "inactive"] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setDesignerStatusFilter(status)}
+                    className={`px-4 py-2.5 text-[13px] font-medium transition-all cursor-pointer capitalize ${
+                      designerStatusFilter === status
+                        ? status === "active" ? "bg-[#f0fdf4] text-[#16a34a] border-r border-[#e5e7eb]"
+                        : status === "inactive" ? "bg-[#fffbeb] text-[#d97706] border-r border-[#e5e7eb]"
+                        : "bg-[#f3f4f6] text-[#364153] border-r border-[#e5e7eb]"
+                        : "text-[#6a7282] hover:bg-[#f9fafb] border-r border-[#e5e7eb] last:border-r-0"
+                    }`}
+                  >
+                    {status === "all" ? `All (${designers.length})` : status === "active" ? `Active (${designers.filter((d: any) => d.active !== false).length})` : `Inactive (${designers.filter((d: any) => d.active === false).length})`}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loadingList ? (
               <div className="flex items-center justify-center h-[300px]">
                 <Loader2 className="size-8 text-[#9ca3af] animate-spin" />
               </div>
-            ) : designers.length === 0 ? (
+            ) : filteredDesigners.length === 0 && designers.length === 0 ? (
               <div className="bg-white border border-[#e5e7eb] rounded-2xl p-12 text-center">
                 <div className="bg-[#f3f4f6] rounded-full size-16 flex items-center justify-center mx-auto mb-4">
                   <Users className="size-7 text-[#9ca3af]" />
@@ -2049,9 +2101,18 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                   Create First Designer
                 </button>
               </div>
+            ) : filteredDesigners.length === 0 ? (
+              <div className="bg-white border border-[#e5e7eb] rounded-2xl p-12 text-center">
+                <div className="bg-[#f3f4f6] rounded-full size-16 flex items-center justify-center mx-auto mb-4">
+                  <Search className="size-7 text-[#9ca3af]" />
+                </div>
+                <h3 className="font-semibold text-[18px] text-[#101828] mb-2">No matching designers</h3>
+                <p className="text-[14px] text-[#6a7282] mb-4">Try adjusting your search or filter criteria.</p>
+                <button onClick={() => { setDesignerSearch(""); setDesignerStatusFilter("all"); }} className="text-[14px] font-medium text-[#2b7fff] hover:underline cursor-pointer">Clear filters</button>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {designers.map((d: any) => (
+                {filteredDesigners.map((d: any) => (
                   <div
                     key={d.slug}
                     className={`bg-white border border-[#e5e7eb] rounded-2xl p-5 hover:shadow-md transition-shadow group ${d.active === false ? "opacity-60" : ""}`}
@@ -2088,7 +2149,29 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                       </div>
                     </div>
                     {d.tagline && (
-                      <p className="text-[13px] text-[#6a7282] leading-[20px] mb-4 line-clamp-2">{d.tagline}</p>
+                      <p className="text-[13px] text-[#6a7282] leading-[20px] mb-3 line-clamp-2">{d.tagline}</p>
+                    )}
+                    {/* Profile Completeness */}
+                    {d.completeness && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-medium text-[#6a7282]">Profile</span>
+                          <span className={`text-[11px] font-semibold ${d.completeness.missing.length === 0 ? "text-[#22c55e]" : d.completeness.filled / d.completeness.total >= 0.7 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
+                            {d.completeness.filled}/{d.completeness.total}
+                          </span>
+                        </div>
+                        <div className="w-full h-[5px] bg-[#f3f4f6] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${d.completeness.missing.length === 0 ? "bg-[#22c55e]" : d.completeness.filled / d.completeness.total >= 0.7 ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`}
+                            style={{ width: `${Math.round((d.completeness.filled / d.completeness.total) * 100)}%` }}
+                          />
+                        </div>
+                        {d.completeness.missing.length > 0 && (
+                          <p className="text-[10px] text-[#9ca3af] mt-1 line-clamp-1" title={d.completeness.missing.join(", ")}>
+                            Missing: {d.completeness.missing.slice(0, 3).join(", ")}{d.completeness.missing.length > 3 ? ` +${d.completeness.missing.length - 3} more` : ""}
+                          </p>
+                        )}
+                      </div>
                     )}
                     <div className="flex items-center gap-2">
                       <button
@@ -2665,7 +2748,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
       </div>{/* close sidebar + content flex wrapper */}
 
       {/* Designer Activate/Deactivate Confirmation Modal */}
-      {designerToggleConfirm && (
+      {designerToggleConfirm && typeof document !== "undefined" && document.body && createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !toggling && setDesignerToggleConfirm(null)}>
           <div className="bg-white rounded-[17px] shadow-[0_25px_35.9px_rgba(0,0,0,0.07)] border border-[#F3F4F6] w-[90vw] max-w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
@@ -2696,7 +2779,8 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Keyframe for toast */}

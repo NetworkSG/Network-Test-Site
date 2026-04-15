@@ -3491,6 +3491,69 @@ app.post("/make-server-4808de5e/fp3d/lead", async (c) => {
 // DESIGNER PROFILE ROUTES
 // =============================================
 
+// ── Super account auth helper ──
+function isAuthorizedForSlug(session: any, slug: string): boolean {
+  if (!session) return false;
+  if (session.isSuper) return true;
+  return session.slug === slug;
+}
+
+// ── SQL helpers for designers (replaces KV) ──
+function getDesignerSupabase() {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+}
+
+async function getDesignerProfile(slug: string): Promise<any | null> {
+  const sb = getDesignerSupabase();
+  const { data } = await sb.from("designers").select("slug, name, data").eq("slug", slug).maybeSingle();
+  if (!data?.data) return null;
+  return { ...data.data, slug: data.slug, name: data.data?.name || data.name };
+}
+
+async function getDesignerSection(slug: string, section: string): Promise<any | null> {
+  const sb = getDesignerSupabase();
+  const { data } = await sb.from("designer_sections").select("data").eq("slug", slug).eq("section", section).maybeSingle();
+  return data?.data || null;
+}
+
+async function saveDesignerProfile(slug: string, profileData: any): Promise<void> {
+  const sb = getDesignerSupabase();
+  await sb.from("designers").upsert(
+    { slug, name: profileData.name || slug, data: profileData, updated_at: new Date().toISOString() },
+    { onConflict: "slug" },
+  );
+}
+
+async function saveDesignerSection(slug: string, section: string, sectionData: any): Promise<void> {
+  const sb = getDesignerSupabase();
+  const { data: existing } = await sb.from("designer_sections").select("id").eq("slug", slug).eq("section", section).maybeSingle();
+  if (existing) {
+    await sb.from("designer_sections").update({ data: sectionData, updated_at: new Date().toISOString() }).eq("slug", slug).eq("section", section);
+  } else {
+    await sb.from("designer_sections").insert({ slug, section, data: sectionData });
+  }
+}
+
+async function deleteDesignerAndSections(slug: string): Promise<void> {
+  const sb = getDesignerSupabase();
+  await sb.from("designer_sections").delete().eq("slug", slug);
+  await sb.from("designers").delete().eq("slug", slug);
+}
+
+async function getDesignerWithSections(slug: string) {
+  const sb = getDesignerSupabase();
+  const [profileRes, sectionsRes] = await Promise.all([
+    sb.from("designers").select("slug, name, data").eq("slug", slug).maybeSingle(),
+    sb.from("designer_sections").select("section, data").eq("slug", slug),
+  ]);
+  const profile = profileRes.data?.data ? { ...profileRes.data.data, slug: profileRes.data.slug, name: profileRes.data.data?.name || profileRes.data.name } : null;
+  const sections: Record<string, any> = {};
+  for (const row of (sectionsRes.data || [])) {
+    sections[row.section] = row.data;
+  }
+  return { profile, sections };
+}
+
 // GET all designers (list)
 app.get("/make-server-4808de5e/designers", async (c) => {
   try {
@@ -3504,31 +3567,111 @@ app.get("/make-server-4808de5e/designers", async (c) => {
       return c.json({ error: "Too many requests" }, 429);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data, error } = await supabase
-      .from("kv_store_4808de5e")
-      .select("key, value")
-      .like("key", "designer:%")
-      .not("key", "like", "%:%:%");
+    const sb = getDesignerSupabase();
+    const showAll = c.req.query("showAll") === "true";
 
-    if (error) {
-      console.log("Error fetching designers:", error);
-      return c.json({ error: `Failed to fetch designers: ${error.message}` }, 500);
+    // Fetch designers + sections (for completeness calc in admin mode)
+    const [designersRes, sectionsRes] = await Promise.all([
+      sb.from("designers").select("slug, name, data"),
+      showAll ? sb.from("designer_sections").select("slug, section, data") : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (designersRes.error) {
+      console.log("Error fetching designers:", designersRes.error);
+      return c.json({ error: `Failed to fetch designers: ${designersRes.error.message}` }, 500);
     }
 
-    const allDesigners = data?.map((d: any) => d.value) ?? [];
-    // Filter out inactive designers for public listing (admin uses /admin/designers)
-    const showAll = c.req.query("showAll") === "true";
+    // Build sections lookup by slug for completeness check
+    const sectionsBySlug: Record<string, Record<string, any>> = {};
+    if (showAll && sectionsRes.data) {
+      for (const row of sectionsRes.data as any[]) {
+        if (!sectionsBySlug[row.slug]) sectionsBySlug[row.slug] = {};
+        sectionsBySlug[row.slug][row.section] = row.data;
+      }
+    }
+
+    // Profile completeness checker based on required checklist
+    const s = (v: any) => typeof v === "string" ? v.trim() : "";
+    function computeCompleteness(d: any, sections: Record<string, any>): { filled: number; total: number; missing: string[] } {
+      const missing: string[] = [];
+      const bi = Array.isArray(sections.businessinfo) ? sections.businessinfo : Array.isArray(d.businessInfo) ? d.businessInfo : [];
+      const biByLabel = new Map<string, string>();
+      for (const b of bi) { if (b?.label && s(b?.value)) biByLabel.set(b.label, b.value); }
+
+      const projects = Array.isArray(sections.projects) ? sections.projects : Array.isArray(d.projects) ? d.projects : [];
+      const creds = d.credentials || {};
+      const ts = d.trustedSince || {};
+
+      // 1. Cover / Featured Project
+      const cp = d.coverProject || {};
+      if (!d.images?.cover && !s(cp.image)) missing.push("Cover Image");
+      if (!s(cp.name)) missing.push("Featured Project Name");
+      if (!s(cp.cost)) missing.push("Featured Project Cost");
+      if (!s(cp.area)) missing.push("Featured Project Area");
+      if (!s(String(cp.year || ""))) missing.push("Featured Project Year");
+      if (!s(cp.style)) missing.push("Featured Project Style");
+
+      // 2. Studio Info
+      if (!d.images?.logo) missing.push("Logo");
+      if (!s(d.name)) missing.push("Studio Name");
+      if (!s(d.tagline)) missing.push("Tagline");
+      if (!s(d.location)) missing.push("Location");
+
+      // 3. Bio
+      if (!s(d.bio) && !s(d.about)) missing.push("Bio / About");
+
+      // 4. Quick Facts
+      if (!biByLabel.has("ACRA / UEN")) missing.push("ACRA / UEN");
+      if (!biByLabel.has("Office address")) missing.push("Office Address");
+      if (!biByLabel.has("Project types")) missing.push("Project Types");
+      if (!biByLabel.has("Style specialisation")) missing.push("Style Specialisation");
+      if (!biByLabel.has("Service area")) missing.push("Service Area");
+      if (!biByLabel.has("Specialisation")) missing.push("Specialisation");
+      if (!biByLabel.has("Services")) missing.push("Services");
+      if (!biByLabel.has("Phone")) missing.push("Phone");
+      if (!biByLabel.has("Financing")) missing.push("Financing");
+
+      // 5. Key Metrics
+      if (!d.stats?.years && !s(d.yearsExperience)) missing.push("Industry Experience");
+      if (!biByLabel.has("Budget range") && !s(d.budgetRange)) missing.push("Budget Range");
+
+      // 6. Projects (at least 1)
+      if (!projects.length) missing.push("Projects (at least 1)");
+
+      // 7. Credentials & Trust
+      const hasAnyCred = (creds.hdb?.active && creds.hdb?.reg) || (creds.bca?.active && creds.bca?.reg) || creds.landedEligible || s(ts.title) || (ts.badges?.length > 0);
+      if (!hasAnyCred) missing.push("Credentials & Trust");
+
+      // 8. Google Reviews — Google Maps link / placeId
+      if (!s(d.googlePlaceId) && !s(d.placeId) && !s(d.googleMapsLink)) missing.push("Google Maps Link");
+
+      const total = 28;
+      const filled = total - missing.length;
+      return { filled, total, missing };
+    }
+
+    const allDesigners = (designersRes.data || []).map((d: any) => {
+      const designer = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
+      if (showAll) {
+        try {
+          const sections = sectionsBySlug[d.slug] || {};
+          designer.completeness = computeCompleteness(designer, sections);
+        } catch (e) {
+          console.log(`Completeness calc failed for ${d.slug}:`, e);
+          designer.completeness = { filled: 0, total: 28, missing: ["Error computing"] };
+        }
+      }
+      return designer;
+    });
+
     const activeDesigners = showAll ? allDesigners : allDesigners.filter((d: any) => d.active !== false);
     // Pagination — limit response size to prevent bulk scraping
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
     const designers = activeDesigners.slice(offset, offset + limit);
+    const completeCount = showAll ? allDesigners.filter((d: any) => d.completeness?.missing?.length === 0).length : undefined;
     console.log(`Returning ${designers.length} of ${activeDesigners.length} active designers (${allDesigners.length} total)`);
-    return c.json({ count: activeDesigners.length, data: designers, limit, offset });
+    return c.json({ count: activeDesigners.length, data: designers, limit, offset, completeCount });
   } catch (err) {
     console.log("Unexpected error in GET /designers:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -3553,34 +3696,23 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Invalid slug" }, 400);
     }
 
-    const [profile, team, projects, caseStudies, reviews, latestReviews, serviceArea, businessInfo] = await Promise.all([
-      kv.get(`designer:${slug}`),
-      kv.get(`designer:${slug}:team`),
-      kv.get(`designer:${slug}:projects`),
-      kv.get(`designer:${slug}:casestudies`),
-      kv.get(`designer:${slug}:reviews`),
-      kv.get(`designer:${slug}:latestreviews`),
-      kv.get(`designer:${slug}:servicearea`),
-      kv.get(`designer:${slug}:businessinfo`),
-    ]);
+    const { profile, sections } = await getDesignerWithSections(slug);
 
     if (!profile) {
       return c.json({ error: "Designer not found" }, 404);
     }
 
     console.log(`Fetched designer profile: ${slug}`);
-    // Section KV keys override profile-level data, but fall back to profile data
-    // (e.g. pipeline-synced businessInfo lives in the profile KV until manually edited)
     return c.json({
       data: {
         ...profile,
-        team: team || profile.team || [],
-        projects: projects || profile.projects || [],
-        caseStudies: caseStudies || profile.caseStudies || [],
-        reviews: reviews || profile.reviews || [],
-        latestReviews: latestReviews || profile.latestReviews || [],
-        serviceArea: serviceArea || profile.serviceArea || {},
-        businessInfo: businessInfo || profile.businessInfo || [],
+        team: sections.team || profile.team || [],
+        projects: sections.projects || profile.projects || [],
+        caseStudies: sections.casestudies || profile.caseStudies || [],
+        reviews: sections.reviews || profile.reviews || [],
+        latestReviews: sections.latestreviews || profile.latestReviews || [],
+        serviceArea: sections.servicearea || profile.serviceArea || {},
+        businessInfo: sections.businessinfo || profile.businessInfo || [],
       },
     });
   } catch (err) {
@@ -3999,24 +4131,25 @@ app.post("/make-server-4808de5e/designers", async (c) => {
     }
 
     // IDOR protection: if designer already exists, only the owner can update
-    const existingDesigner = await kv.get(`designer:${cleanSlug}`);
+    const existingDesigner = await getDesignerProfile(cleanSlug);
     if (existingDesigner && existingDesigner.ownerId && existingDesigner.ownerId !== designerOwner.id) {
       return c.json({ error: "Designer not found" }, 404);
     }
 
-    const keys: string[] = [`designer:${cleanSlug}`];
-    const values: any[] = [{ ...profile, slug: cleanSlug, ownerId: existingDesigner?.ownerId || designerOwner.id, updatedAt: new Date().toISOString() }];
+    const profileData = { ...profile, slug: cleanSlug, ownerId: existingDesigner?.ownerId || designerOwner.id, updatedAt: new Date().toISOString() };
+    await saveDesignerProfile(cleanSlug, profileData);
 
-    if (team) { keys.push(`designer:${cleanSlug}:team`); values.push(team); }
-    if (projects) { keys.push(`designer:${cleanSlug}:projects`); values.push(projects); }
-    if (caseStudies) { keys.push(`designer:${cleanSlug}:casestudies`); values.push(caseStudies); }
-    if (reviews) { keys.push(`designer:${cleanSlug}:reviews`); values.push(reviews); }
-    if (latestReviews) { keys.push(`designer:${cleanSlug}:latestreviews`); values.push(latestReviews); }
-    if (serviceArea) { keys.push(`designer:${cleanSlug}:servicearea`); values.push(serviceArea); }
-    if (businessInfo) { keys.push(`designer:${cleanSlug}:businessinfo`); values.push(businessInfo); }
+    const sectionWrites: Promise<void>[] = [];
+    if (team) sectionWrites.push(saveDesignerSection(cleanSlug, "team", team));
+    if (projects) sectionWrites.push(saveDesignerSection(cleanSlug, "projects", projects));
+    if (caseStudies) sectionWrites.push(saveDesignerSection(cleanSlug, "casestudies", caseStudies));
+    if (reviews) sectionWrites.push(saveDesignerSection(cleanSlug, "reviews", reviews));
+    if (latestReviews) sectionWrites.push(saveDesignerSection(cleanSlug, "latestreviews", latestReviews));
+    if (serviceArea) sectionWrites.push(saveDesignerSection(cleanSlug, "servicearea", serviceArea));
+    if (businessInfo) sectionWrites.push(saveDesignerSection(cleanSlug, "businessinfo", businessInfo));
+    await Promise.all(sectionWrites);
 
-    await kv.mset(keys, values);
-    console.log(`Designer profile saved: ${cleanSlug} (${keys.length} keys)`);
+    console.log(`Designer profile saved: ${cleanSlug} (${1 + sectionWrites.length} writes)`);
 
     // Seed Google reviews cache if designer has a googlePlaceId and no cache exists yet
     if (profile.googlePlaceId) {
@@ -4058,7 +4191,7 @@ app.put("/make-server-4808de5e/designers/:slug/:section", async (c) => {
       return c.json({ error: "Invalid slug or section" }, 400);
     }
 
-    const existing = await kv.get(`designer:${slug}`);
+    const existing = await getDesignerProfile(slug);
     if (!existing) {
       return c.json({ error: "Designer not found" }, 404);
     }
@@ -4075,7 +4208,7 @@ app.put("/make-server-4808de5e/designers/:slug/:section", async (c) => {
       const designerToken = c.req.header("X-Designer-Token");
       if (designerToken) {
         const session = await kv.get(`designer-session:${designerToken}`);
-        if (session && session.slug === slug) {
+        if (isAuthorizedForSlug(session, slug)) {
           authorized = true;
         }
       }
@@ -4087,9 +4220,10 @@ app.put("/make-server-4808de5e/designers/:slug/:section", async (c) => {
     const body = await c.req.json();
 
     if (section === "profile") {
-      await kv.set(`designer:${slug}`, { ...existing, ...body.data, slug, updatedAt: new Date().toISOString() });
+      const mergedProfile = { ...existing, ...body.data, slug, updatedAt: new Date().toISOString() };
+      await saveDesignerProfile(slug, mergedProfile);
     } else {
-      await kv.set(`designer:${slug}:${section}`, body.data);
+      await saveDesignerSection(slug, section, body.data);
     }
 
     console.log(`Updated designer ${slug} section: ${section}`);
@@ -4117,7 +4251,7 @@ app.delete("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Invalid slug" }, 400);
     }
 
-    const existing = await kv.get(`designer:${slug}`);
+    const existing = await getDesignerProfile(slug);
     if (!existing) {
       return c.json({ error: "Designer not found" }, 404);
     }
@@ -4128,20 +4262,9 @@ app.delete("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Designer not found" }, 404);
     }
 
-    const keysToDelete = [
-      `designer:${slug}`,
-      `designer:${slug}:team`,
-      `designer:${slug}:projects`,
-      `designer:${slug}:casestudies`,
-      `designer:${slug}:reviews`,
-      `designer:${slug}:latestreviews`,
-      `designer:${slug}:servicearea`,
-      `designer:${slug}:businessinfo`,
-    ];
-
-    await kv.mdel(keysToDelete);
-    console.log(`Deleted designer profile: ${slug} (${keysToDelete.length} keys)`);
-    return c.json({ success: true, slug, keysDeleted: keysToDelete.length });
+    await deleteDesignerAndSections(slug);
+    console.log(`Deleted designer profile: ${slug}`);
+    return c.json({ success: true, slug });
   } catch (err) {
     console.log("Unexpected error in DELETE /designers/:slug:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -4165,7 +4288,7 @@ app.post("/make-server-4808de5e/seed-designer", async (c) => {
     const slug = "sora-studios";
 
     // Check if already seeded
-    const existing = await kv.get(`designer:${slug}`);
+    const existing = await getDesignerProfile(slug);
     if (existing) {
       return c.json({ message: "Designer already seeded", slug });
     }
@@ -4286,23 +4409,20 @@ app.post("/make-server-4808de5e/seed-designer", async (c) => {
       { label: "Budget range", value: "$30,000 \u2013 $120,000" },
     ];
 
-    // ── WRITE ALL KEYS ──
-    const keys = [
-      `designer:${slug}`,
-      `designer:${slug}:team`,
-      `designer:${slug}:projects`,
-      `designer:${slug}:casestudies`,
-      `designer:${slug}:reviews`,
-      `designer:${slug}:latestreviews`,
-      `designer:${slug}:servicearea`,
-      `designer:${slug}:businessinfo`,
-    ];
-    const allValues = [profile, teamData, projectsData, caseStudiesData, reviewCardsData, latestReviewsData, serviceAreaData, businessInfoData];
+    // ── WRITE TO SQL ──
+    await saveDesignerProfile(slug, profile);
+    await Promise.all([
+      saveDesignerSection(slug, "team", teamData),
+      saveDesignerSection(slug, "projects", projectsData),
+      saveDesignerSection(slug, "casestudies", caseStudiesData),
+      saveDesignerSection(slug, "reviews", reviewCardsData),
+      saveDesignerSection(slug, "latestreviews", latestReviewsData),
+      saveDesignerSection(slug, "servicearea", serviceAreaData),
+      saveDesignerSection(slug, "businessinfo", businessInfoData),
+    ]);
 
-    await kv.mset(keys, allValues);
-
-    console.log(`Seeded designer: ${slug} (${keys.length} keys written)`);
-    return c.json({ success: true, slug, keysWritten: keys.length, keys });
+    console.log(`Seeded designer: ${slug} (profile + 7 sections)`);
+    return c.json({ success: true, slug });
   } catch (err) {
     console.log("Unexpected error in POST /seed-designer:", err);
     return c.json({ error: "Internal server error" }, 500);
@@ -5393,6 +5513,22 @@ app.post("/make-server-4808de5e/portal-login", async (c) => {
 
     if (!username || !password) return c.json({ error: "Username and password are required" }, 400);
 
+    // ── Super account check (single shared editor credential) ──
+    const superUser = Deno.env.get("SUPER_EDITOR_USER");
+    const superPass = Deno.env.get("SUPER_EDITOR_PASS");
+    if (superUser && superPass && username === superUser.toLowerCase().trim() && password === superPass) {
+      const sessionToken = crypto.randomUUID();
+      await kv.set(`designer-session:${sessionToken}`, {
+        slug: "__super__",
+        isSuper: true,
+        createdAt: new Date().toISOString(),
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      clearFailedLogins(ip);
+      console.log(`Super editor login success from ${ip}`);
+      return c.json({ success: true, token: sessionToken, slug: "__super__", isSuper: true });
+    }
+
     // Connect to ons-portal Supabase
     const portalUrl = Deno.env.get("ONS_PORTAL_URL");
     const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
@@ -5483,7 +5619,6 @@ app.post("/make-server-4808de5e/portal-login", async (c) => {
             { slug: accountSlug, name: mapped.name || accountSlug, data: mapped, updated_at: new Date().toISOString() },
             { onConflict: "slug" },
           );
-          await kv.set(`designer:${accountSlug}`, mapped);
           console.log(`Auto-populated designer profile for ${accountSlug} from pipeline (${account.firm_name})`);
         }
       }
@@ -5517,6 +5652,11 @@ app.get("/make-server-4808de5e/portal-session", async (c) => {
         await kv.del(`designer-session:${token}`);
         return c.json({ error: "Session expired" }, 401);
       }
+      // Super session — no specific designer profile to load
+      if (kvSession.isSuper) {
+        return c.json({ valid: true, isSuper: true });
+      }
+
       // Fetch designer profile from designers table
       const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       const { data: designer } = await supabase
@@ -5598,6 +5738,44 @@ app.post("/make-server-4808de5e/admin/bulk-set-active", async (c) => {
 // =============================================
 // One-time (or periodic) endpoint to pre-populate ALL designer profiles
 // from ons-portal at_clients_pipeline data. Protected by CRON_SECRET.
+// ── Sync designer edit links to ONS Portal ──
+app.post("/make-server-4808de5e/admin/sync-edit-links", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+    const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+    if (!portalUrl || !portalKey) return c.json({ error: "Portal not configured" }, 500);
+
+    const sb = getDesignerSupabase();
+    const { data: designers } = await sb.from("designers").select("slug, name, data");
+    if (!designers?.length) return c.json({ error: "No designers found" }, 404);
+
+    const portalClient = createClient(portalUrl, portalKey);
+    const baseUrl = "https://network-weld.vercel.app/edit-profile";
+
+    const rows = designers.map((d: any) => ({
+      slug: d.slug,
+      name: d.data?.name || d.name || d.slug,
+      edit_link: `${baseUrl}/${d.slug}`,
+    }));
+
+    const { error: upsertErr } = await portalClient
+      .from("designer_edit_links")
+      .upsert(rows, { onConflict: "slug" });
+
+    if (upsertErr) {
+      console.log("Error syncing edit links:", upsertErr);
+      return c.json({ error: upsertErr.message }, 500);
+    }
+
+    console.log(`Synced ${rows.length} designer edit links to ONS Portal`);
+    return c.json({ success: true, count: rows.length });
+  } catch (err) {
+    console.log("Unexpected error in sync-edit-links:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 app.post("/make-server-4808de5e/admin/sync-pipeline-to-designers", async (c) => {
   try {
     const cronSecret = c.req.header("x-cron-secret");
@@ -5687,7 +5865,6 @@ app.post("/make-server-4808de5e/admin/sync-pipeline-to-designers", async (c) => 
           { slug, name: mapped.name || slug, data: mapped, updated_at: new Date().toISOString() },
           { onConflict: "slug" },
         );
-        await kv.set(`designer:${slug}`, mapped);
         results.synced.push(slug);
       } catch (e) {
         results.errors.push(`${slug}: ${(e as Error).message}`);
@@ -5718,7 +5895,7 @@ app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
     if (!token) return c.json({ error: "Auth required" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -5764,7 +5941,7 @@ app.put("/make-server-4808de5e/designer-profile-data/:slug/:section", async (c) 
     if (!token) return c.json({ error: "Auth required" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
 
     const section = c.req.param("section");
     const allowedSections = ["profile", "team", "projects", "casestudies", "reviews", "latestreviews", "servicearea", "businessinfo"];
@@ -5799,31 +5976,9 @@ app.put("/make-server-4808de5e/designer-profile-data/:slug/:section", async (c) 
         return c.json({ error: upsertError.message }, 500);
       }
 
-      // Also sync to KV for backward compat with public profile GET
-      await kv.set(`designer:${slug}`, mergedData);
     } else {
       // Upsert into designer_sections table
-      const { data: existingSection } = await supabase
-        .from("designer_sections")
-        .select("id")
-        .eq("slug", slug)
-        .eq("section", section)
-        .single();
-
-      if (existingSection) {
-        await supabase
-          .from("designer_sections")
-          .update({ data: body.data, updated_at: new Date().toISOString() })
-          .eq("slug", slug)
-          .eq("section", section);
-      } else {
-        await supabase
-          .from("designer_sections")
-          .insert({ slug, section, data: body.data });
-      }
-
-      // Also sync to KV for backward compat
-      await kv.set(`designer:${slug}:${section}`, body.data);
+      await saveDesignerSection(slug, section, body.data);
     }
 
     console.log(`Updated designer profile data: ${slug}/${section}`);
@@ -5877,7 +6032,7 @@ app.post("/make-server-4808de5e/designer-login", async (c) => {
       return c.json({ error: "Designer slug not found in account metadata" }, 500);
     }
 
-    const profile = await kv.get(`designer:${designerSlug}`);
+    const profile = await getDesignerProfile(designerSlug);
     if (!profile) return c.json({ error: "Designer profile not found" }, 404);
 
     const sessionToken = crypto.randomUUID();
@@ -5906,8 +6061,8 @@ app.post("/make-server-4808de5e/designer-credentials", async (c) => {
     const cleanEmail = sanitizeString(email, 200).toLowerCase();
     const cleanSlug = sanitizeString(slug, 100).replace(/[^a-zA-Z0-9_-]/g, "");
 
-    // Verify the designer profile exists in KV
-    const designerProfile = await kv.get(`designer:${cleanSlug}`);
+    // Verify the designer profile exists
+    const designerProfile = await getDesignerProfile(cleanSlug);
     if (!designerProfile) return c.json({ error: `Designer profile '${cleanSlug}' not found. The slug must match an existing designer.` }, 404);
 
     // Create or update a real Supabase Auth user
@@ -5966,7 +6121,10 @@ app.get("/make-server-4808de5e/designer-session", async (c) => {
     if (!token || !isValidToken(token)) return c.json({ error: "No session token" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     if (!session) return c.json({ error: "Invalid session" }, 401);
-    const profile = await kv.get(`designer:${session.slug}`);
+    if (session.isSuper) {
+      return c.json({ valid: true, isSuper: true });
+    }
+    const profile = await getDesignerProfile(session.slug);
     return c.json({ valid: true, slug: session.slug, email: session.email, profile: profile ? { name: profile.name, logo: profile.logo, companyName: profile.companyName } : null });
   } catch (err) {
     console.log("Unexpected error in GET /designer-session:", err);
@@ -5992,8 +6150,8 @@ app.get("/make-server-4808de5e/designer-inquiries/:slug", async (c) => {
     if (!token) return c.json({ error: "No session token" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
-    const inquiries = await kv.get(`designer:${slug}:inquiries`) || [];
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
+    const inquiries = await getDesignerSection(slug, "inquiries") || [];
     return c.json({ data: inquiries });
   } catch (err) {
     console.log("Unexpected error in GET /designer-inquiries:", err);
@@ -6024,10 +6182,10 @@ app.post("/make-server-4808de5e/designer-inquiry/:slug", async (c) => {
       createdAt: new Date().toISOString(),
     };
 
-    const existing = await kv.get(`designer:${slug}:inquiries`) || [];
+    const existing = await getDesignerSection(slug, "inquiries") || [];
     existing.unshift(inquiry);
     if (existing.length > 200) existing.length = 200;
-    await kv.set(`designer:${slug}:inquiries`, existing);
+    await saveDesignerSection(slug, "inquiries", existing);
 
     console.log(`New inquiry for designer ${slug} from ${inquiry.name}`);
     return c.json({ success: true, id: inquiry.id });
@@ -6044,16 +6202,16 @@ app.put("/make-server-4808de5e/designer-inquiries/:slug/:inquiryId", async (c) =
     if (!token) return c.json({ error: "No session token" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
 
     const inquiryId = sanitizeKvKey(c.req.param("inquiryId"), 64);
     if (!inquiryId) return c.json({ error: "Invalid inquiry ID" }, 400);
     const body = await c.req.json();
-    const inquiries = await kv.get(`designer:${slug}:inquiries`) || [];
+    const inquiries = await getDesignerSection(slug, "inquiries") || [];
     const idx = inquiries.findIndex((i: any) => i.id === inquiryId);
     if (idx === -1) return c.json({ error: "Inquiry not found" }, 404);
     inquiries[idx] = { ...inquiries[idx], ...body, updatedAt: new Date().toISOString() };
-    await kv.set(`designer:${slug}:inquiries`, inquiries);
+    await saveDesignerSection(slug, "inquiries", inquiries);
     return c.json({ success: true });
   } catch (err) {
     return c.json({ error: "Internal server error" }, 500);
@@ -6067,13 +6225,13 @@ app.delete("/make-server-4808de5e/designer-inquiries/:slug/:inquiryId", async (c
     if (!token) return c.json({ error: "No session token" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
 
     const inquiryId = sanitizeKvKey(c.req.param("inquiryId"), 64);
     if (!inquiryId) return c.json({ error: "Invalid inquiry ID" }, 400);
-    const inquiries = await kv.get(`designer:${slug}:inquiries`) || [];
+    const inquiries = await getDesignerSection(slug, "inquiries") || [];
     const filtered = inquiries.filter((i: any) => i.id !== inquiryId);
-    await kv.set(`designer:${slug}:inquiries`, filtered);
+    await saveDesignerSection(slug, "inquiries", filtered);
     return c.json({ success: true });
   } catch (err) {
     return c.json({ error: "Internal server error" }, 500);
@@ -6088,31 +6246,21 @@ app.get("/make-server-4808de5e/designer-dashboard/:slug", async (c) => {
     if (!token) return c.json({ error: "No session token" }, 401);
     const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!session || session.slug !== slug) return c.json({ error: "Forbidden" }, 403);
+    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
 
-    const [profile, team, projects, caseStudies, reviews, latestReviews, serviceArea, businessInfo, inquiries] = await Promise.all([
-      kv.get(`designer:${slug}`),
-      kv.get(`designer:${slug}:team`),
-      kv.get(`designer:${slug}:projects`),
-      kv.get(`designer:${slug}:casestudies`),
-      kv.get(`designer:${slug}:reviews`),
-      kv.get(`designer:${slug}:latestreviews`),
-      kv.get(`designer:${slug}:servicearea`),
-      kv.get(`designer:${slug}:businessinfo`),
-      kv.get(`designer:${slug}:inquiries`),
-    ]);
+    const { profile, sections } = await getDesignerWithSections(slug);
 
     return c.json({
       data: {
         ...(profile || {}),
-        team: team || [],
-        projects: projects || [],
-        caseStudies: caseStudies || [],
-        reviews: reviews || [],
-        latestReviews: latestReviews || [],
-        serviceArea: serviceArea || {},
-        businessInfo: businessInfo || [],
-        inquiries: inquiries || [],
+        team: sections.team || [],
+        projects: sections.projects || [],
+        caseStudies: sections.casestudies || [],
+        reviews: sections.reviews || [],
+        latestReviews: sections.latestreviews || [],
+        serviceArea: sections.servicearea || {},
+        businessInfo: sections.businessinfo || [],
+        inquiries: sections.inquiries || [],
       },
     });
   } catch (err) {
