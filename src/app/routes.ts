@@ -2,15 +2,18 @@ import { createBrowserRouter, Outlet, useLocation } from "react-router";
 import { lazy, Suspense, createElement, useEffect, useRef, useState } from "react";
 import { inject } from "@vercel/analytics";
 import { useVisitorHeartbeat } from "./hooks/useVisitorHeartbeat";
+import { initErrorReporter } from "./utils/errorReporter";
 
 // Initialize Vercel Analytics (works for Vite/SPA — no React component needed)
 inject();
+// Capture window.onerror + unhandledrejection globally so admin Debug panel can see breakages
+initErrorReporter();
 import { HomepageV8 } from "./components/homepage/v8/HomepageV8";
 import { AdminGuard } from "./components/AdminGuard";
 
 // ── Lazy-loaded routes (code-split per page) ──────────────────────
 const LazyHomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
-const LazyGetMatchedForm = lazy(() => import("./components/GetMatchedForm").then((m) => ({ default: m.GetMatchedForm })));
+const LazyGetMatchedForm = lazy(() => import("./components/funnel/FunnelLeadPage").then((m) => ({ default: m.FunnelLeadPage })));
 const LazyRenderLanding = lazy(() => import("./components/RenderLanding").then((m) => ({ default: m.RenderLanding })));
 const LazyRenderStudioPage = lazy(() => import("./components/render/RenderStudioPage").then((m) => ({ default: m.RenderStudioPage })));
 const LazyDesignerProfile = lazy(() => import("./components/DesignerProfile").then((m) => ({ default: m.DesignerProfile })));

@@ -142,14 +142,14 @@ const app = new Hono();
 
 // --- Structured Security Audit Logger ---
 function securityLog(event: string, severity: "info" | "warn" | "error", ip: string, route: string, details?: Record<string, any>) {
-  console.log(JSON.stringify({
-    event,
-    severity,
-    ip,
-    route,
-    ...details,
-    ts: new Date().toISOString(),
-  }));
+  const ts = new Date().toISOString();
+  const entry = { event, severity, ip, route, ...details, ts };
+  console.log(JSON.stringify(entry));
+  // Also persist errors/warnings to KV for the admin debug dashboard (fire-and-forget)
+  if (severity === "error" || severity === "warn") {
+    const key = `error-log:${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+    kv.set(key, { source: "server", ...entry }).catch(() => {});
+  }
 }
 
 // --- Failed Login Tracker (brute-force protection) ---
@@ -1063,14 +1063,39 @@ app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
     }
 
     console.log("Zapier proxy forwarding data:", JSON.stringify(sanitizedData).slice(0, 500));
-    await fetch(ZAPIER_WEBHOOKS[hook], {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sanitizedData),
-    });
-    return c.json({ success: true });
+    const t0 = Date.now();
+    let status = 0;
+    let ok = false;
+    let errorMsg: string | undefined;
+    try {
+      const response = await fetch(ZAPIER_WEBHOOKS[hook], {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sanitizedData),
+      });
+      status = response.status;
+      ok = response.ok;
+    } catch (fetchErr: any) {
+      errorMsg = String(fetchErr?.message || fetchErr).slice(0, 200);
+    }
+    // Log to KV for debug dashboard (fire-and-forget; keys only, not values)
+    const logKey = `zapier-log:${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+    kv.set(logKey, {
+      hook,
+      status,
+      ok,
+      latencyMs: Date.now() - t0,
+      ts: new Date().toISOString(),
+      payloadKeys: Object.keys(sanitizedData),
+      ...(errorMsg ? { error: errorMsg } : {}),
+    }).catch(() => {});
+    if (!ok) {
+      securityLog("zapier_forward_failed", "warn", ip, "zapier-proxy", { hook, status, error: errorMsg });
+    }
+    return c.json({ success: ok, status });
   } catch (err) {
     console.log("Zapier proxy error:", err);
+    securityLog("zapier_proxy_error", "error", getClientIp(c), "zapier-proxy", { message: String(err).slice(0, 300) });
     return c.json({ error: "Internal server error" }, 500);
   }
 });
@@ -3856,10 +3881,15 @@ async function getOrRefreshGoogleReviews(
   }
 
   // Cache stale or missing — try Google API
-  // Read googlePlaceId from the designers table (not KV)
+  // Read googlePlaceId from the designers table (not KV), with a KV fallback
+  // for non-designer slugs (e.g. marketing pages seeded via /seed endpoint).
   const supabaseForProfile = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data: designerRow } = await supabaseForProfile.from("designers").select("data").eq("slug", slug).maybeSingle();
-  const placeId: string | null = designerRow?.data?.googlePlaceId || null;
+  let placeId: string | null = designerRow?.data?.googlePlaceId || null;
+  if (!placeId) {
+    const kvPlaceId = (await kv.get(`google-reviews-placeid:${slug}`)) as string | null;
+    if (kvPlaceId) placeId = kvPlaceId;
+  }
 
   let fresh: CachedGoogleReviews | null = null;
   if (placeId) {
@@ -4000,6 +4030,46 @@ app.post("/make-server-4808de5e/google-reviews/resolve-url", async (c) => {
   }
 });
 
+// POST seed a Google Reviews slug that is NOT backed by a designer row
+// (e.g. marketing pages like /get-matched). Accepts either { placeId } directly
+// or { url } to resolve. Stores the placeId under `google-reviews-placeid:${slug}`
+// and force-refreshes the `google-reviews:${slug}` cache.
+app.post("/make-server-4808de5e/google-reviews/:slug/seed", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+
+    const body = await c.req.json().catch(() => ({}));
+    let placeId: string | null = (body.placeId || "").trim() || null;
+
+    if (!placeId && body.url) {
+      const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+      if (!apiKey) return c.json({ error: "Google API not configured" }, 500);
+      let finalUrl = body.url;
+      try {
+        const r = await fetch(body.url, { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" } });
+        finalUrl = r.url || body.url;
+      } catch { /* fall through */ }
+      const m = finalUrl.match(/place_id[=:]([A-Za-z0-9_-]+)/i) || finalUrl.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
+      if (m) placeId = m[1];
+    }
+
+    if (!placeId) return c.json({ error: "Provide a placeId or a resolvable url" }, 400);
+
+    await kv.set(`google-reviews-placeid:${slug}`, placeId);
+    const data = await getOrRefreshGoogleReviews(slug, { forceRefresh: true });
+    console.log(`Seeded google-reviews for slug=${slug} placeId=${placeId} source=${data.source} count=${data.reviews.length}`);
+    return c.json({ success: true, slug, placeId, data });
+  } catch (err) {
+    console.log("Error in POST /google-reviews/:slug/seed:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Also include non-designer slugs in cron refresh so seeded slugs stay fresh
+// (cron-refresh-all reads designers table; seeded placeIds live in KV)
+
 // GET cached Google reviews for a designer (cache-only — NEVER calls Google API)
 // Google API calls only happen via cron-refresh-all or manual refresh endpoints.
 app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
@@ -4022,10 +4092,14 @@ app.get("/make-server-4808de5e/google-reviews/:slug", async (c) => {
       return c.json({ data: cached, stale: !!isStale });
     }
 
-    // No cache at all — read googlePlaceId from designers table, return empty payload (cron will populate it)
+    // No cache at all — read googlePlaceId from designers table (or KV fallback), return empty payload (cron will populate it)
     const supabaseForProfile = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: designerRow } = await supabaseForProfile.from("designers").select("data").eq("slug", slug).maybeSingle();
-    const placeId: string | null = designerRow?.data?.googlePlaceId || null;
+    let placeId: string | null = designerRow?.data?.googlePlaceId || null;
+    if (!placeId) {
+      const kvPlaceId = (await kv.get(`google-reviews-placeid:${slug}`)) as string | null;
+      if (kvPlaceId) placeId = kvPlaceId;
+    }
     return c.json({ data: emptyGoogleReviewsPayload(placeId), stale: true });
   } catch (err) {
     console.log("Error in GET /google-reviews/:slug:", err);
@@ -4080,10 +4154,18 @@ app.post("/make-server-4808de5e/google-reviews/cron-refresh-all", async (c) => {
     }
 
     // Only refresh designers that have a googlePlaceId set
-    const slugs: string[] = (data || [])
+    const designerSlugs: string[] = (data || [])
       .filter((d: any) => d.data?.googlePlaceId)
       .map((d: any) => d.slug)
       .filter((s: any): s is string => typeof s === "string" && s.length > 0);
+
+    // Also refresh non-designer slugs seeded via /seed (KV-only placeIds)
+    const seededEntries = await kv.entriesByPrefix("google-reviews-placeid:");
+    const seededSlugs: string[] = seededEntries
+      .map((e) => e.key.replace(/^google-reviews-placeid:/, ""))
+      .filter((s) => s.length > 0);
+
+    const slugs: string[] = Array.from(new Set([...designerSlugs, ...seededSlugs]));
 
     const results: Record<string, string> = {};
     for (const slug of slugs) {
@@ -5751,7 +5833,7 @@ app.post("/make-server-4808de5e/admin/sync-edit-links", async (c) => {
     if (!designers?.length) return c.json({ error: "No designers found" }, 404);
 
     const portalClient = createClient(portalUrl, portalKey);
-    const baseUrl = "https://network-weld.vercel.app/edit-profile";
+    const baseUrl = "https://networksg.net/edit-profile";
 
     const rows = designers.map((d: any) => ({
       slug: d.slug,
@@ -6832,6 +6914,349 @@ app.post("/mood-board-upload-url", async (c) => {
   } catch {
     return c.json({ error: "Upload failed" }, 500);
   }
+});
+
+// =============================================
+// DEBUG & MONITORING — admin-only (gated to DEBUG_ADMIN_EMAIL)
+// =============================================
+
+const DEBUG_ADMIN_EMAIL = (Deno.env.get("DEBUG_ADMIN_EMAIL") || "raemerdr@gmail.com").toLowerCase().trim();
+
+// Resolve email + user-id from the Supabase user token, then ensure email matches DEBUG_ADMIN_EMAIL.
+async function requireDebugAdmin(c: any): Promise<{ ok: true; userId: string; email: string } | { ok: false; status: number; msg: string }> {
+  const userToken = c.req.header("X-User-Token");
+  if (!userToken) return { ok: false, status: 401, msg: "Missing X-User-Token" };
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: { user }, error } = await supabase.auth.getUser(userToken);
+    if (error || !user?.id || !user.email) {
+      return { ok: false, status: 401, msg: "Invalid session" };
+    }
+    const email = user.email.toLowerCase().trim();
+    if (email !== DEBUG_ADMIN_EMAIL) {
+      return { ok: false, status: 403, msg: "Access denied" };
+    }
+    // Also confirm admin flag is set, as belt-and-suspenders
+    const adminFlag = await fp3dDb.getAdmin(user.id);
+    if (!adminFlag || adminFlag.isAdmin !== true) {
+      return { ok: false, status: 403, msg: "Not an admin" };
+    }
+    return { ok: true, userId: user.id, email };
+  } catch (err) {
+    return { ok: false, status: 500, msg: String(err).slice(0, 200) };
+  }
+}
+
+// --- Public: receive client-side errors from any visitor's browser ---
+// --- Public: live homeowner count from ons-portal ---
+app.get("/make-server-4808de5e/homeowner-count", async (c) => {
+  try {
+    // Check KV cache first (5-minute TTL)
+    const cacheKey = "homeowner-count-cache";
+    const cached = await kv.get(cacheKey);
+    if (cached && cached.ts && Date.now() - cached.ts < 5 * 60 * 1000) {
+      return c.json({ count: cached.count, cached: true });
+    }
+
+    const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+    const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+    if (!portalUrl || !portalKey) {
+      return c.json({ count: 3214, cached: false, fallback: true });
+    }
+
+    const portalClient = createClient(portalUrl, portalKey);
+    const { count, error } = await portalClient
+      .from("at_homeowner_distribution")
+      .select("*", { count: "exact", head: true });
+
+    if (error || count === null) {
+      console.log("homeowner-count error:", error?.message);
+      // Return cached value if available, else fallback
+      if (cached) return c.json({ count: cached.count, cached: true });
+      return c.json({ count: 3214, cached: false, fallback: true });
+    }
+
+    // Cache the result
+    await kv.set(cacheKey, { count, ts: Date.now() });
+    return c.json({ count, cached: false });
+  } catch (err) {
+    console.log("homeowner-count error:", err);
+    return c.json({ count: 3214, cached: false, fallback: true });
+  }
+});
+
+app.post("/make-server-4808de5e/client-error", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ ok: true, throttled: true });
+
+    const body = await c.req.json().catch(() => ({}));
+    const message = sanitizeString(String(body.message || "").slice(0, 500), 500);
+    const stack = sanitizeString(String(body.stack || "").slice(0, 2000), 2000);
+    const url = sanitizeString(String(body.url || "").slice(0, 300), 300);
+    const userAgent = sanitizeString(String(body.userAgent || "").slice(0, 250), 250);
+    const clientTs = sanitizeString(String(body.ts || "").slice(0, 40), 40);
+
+    if (!message) return c.json({ ok: true, skipped: "empty" });
+
+    const key = `error-log:${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+    await kv.set(key, {
+      source: "client",
+      severity: "error",
+      event: "browser_error",
+      ip,
+      route: url,
+      message,
+      stack,
+      userAgent,
+      clientTs,
+      ts: new Date().toISOString(),
+    });
+    return c.json({ ok: true });
+  } catch (err) {
+    console.log("client-error endpoint error:", err);
+    return c.json({ ok: false }, 500);
+  }
+});
+
+// --- Admin: get recent error logs ---
+app.get("/make-server-4808de5e/debug/logs", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const limit = Math.min(parseInt(c.req.query("limit") || "100", 10) || 100, 500);
+    const severityFilter = c.req.query("severity") || "";
+    const sourceFilter = c.req.query("source") || "";
+    const entries: any[] = await kv.getByPrefix("error-log:");
+    let filtered = entries;
+    if (severityFilter) filtered = filtered.filter((e) => e?.severity === severityFilter);
+    if (sourceFilter) filtered = filtered.filter((e) => e?.source === sourceFilter);
+    // Sort newest first by ts
+    filtered.sort((a, b) => String(b?.ts || "").localeCompare(String(a?.ts || "")));
+    return c.json({ logs: filtered.slice(0, limit), total: filtered.length });
+  } catch (err) {
+    return c.json({ error: "Failed to load logs: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// --- Admin: recent zapier activity ---
+app.get("/make-server-4808de5e/debug/zapier-activity", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const limit = Math.min(parseInt(c.req.query("limit") || "100", 10) || 100, 500);
+    const entries: any[] = await kv.getByPrefix("zapier-log:");
+    entries.sort((a, b) => String(b?.ts || "").localeCompare(String(a?.ts || "")));
+    return c.json({ entries: entries.slice(0, limit), total: entries.length });
+  } catch (err) {
+    return c.json({ error: "Failed to load zapier activity: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// --- Admin: funnel metrics (lead counts per funnel, 24h / 7d / 30d) ---
+app.get("/make-server-4808de5e/debug/funnel-metrics", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const now = Date.now();
+    const ranges = [
+      { label: "last24h", ms: 24 * 60 * 60 * 1000 },
+      { label: "last7d", ms: 7 * 24 * 60 * 60 * 1000 },
+      { label: "last30d", ms: 30 * 24 * 60 * 60 * 1000 },
+    ];
+
+    async function countTable(table: string, column = "created_at"): Promise<Record<string, number>> {
+      const out: Record<string, number> = {};
+      for (const r of ranges) {
+        const since = new Date(now - r.ms).toISOString();
+        const { count, error } = await supabase
+          .from(table)
+          .select("*", { count: "exact", head: true })
+          .gte(column, since);
+        if (error) { out[r.label] = -1; continue; }
+        out[r.label] = count ?? 0;
+      }
+      return out;
+    }
+
+    // Count zapier hits from KV logs by hook
+    async function countZapierHook(hook: string): Promise<Record<string, number>> {
+      const entries: any[] = await kv.getByPrefix("zapier-log:");
+      const out: Record<string, number> = {};
+      for (const r of ranges) {
+        const since = now - r.ms;
+        out[r.label] = entries.filter((e) => e?.hook === hook && e?.ok && new Date(e.ts).getTime() >= since).length;
+      }
+      return out;
+    }
+
+    const funnels = await Promise.all([
+      countTable("homepage_leads").then((v) => ({ name: "Homepage Hero Lead", source: "homepage_leads", ...v })),
+      countTable("handshake_leads").then((v) => ({ name: "Handshake Lead", source: "handshake_leads", ...v })),
+      countTable("Quote Request").then((v) => ({ name: "Quote Request", source: "Quote Request", ...v })),
+      countTable("fp3d_leads").then((v) => ({ name: "Floor Plan 3D Lead", source: "fp3d_leads", ...v })),
+      countZapierHook("hero-lead").then((v) => ({ name: "Zapier: hero-lead", source: "zapier", ...v })),
+      countZapierHook("render-lead").then((v) => ({ name: "Zapier: render-lead", source: "zapier", ...v })),
+      countZapierHook("cost-guide-lead").then((v) => ({ name: "Zapier: cost-guide-lead", source: "zapier", ...v })),
+      countZapierHook("handshake-lead").then((v) => ({ name: "Zapier: handshake-lead", source: "zapier", ...v })),
+    ]);
+
+    return c.json({ funnels });
+  } catch (err) {
+    return c.json({ error: "Failed to load funnel metrics: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// --- Admin: integration health check (pings each service) ---
+app.get("/make-server-4808de5e/debug/health", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+
+  type HealthStatus = "ok" | "degraded" | "down" | "unknown";
+  type HealthResult = { name: string; status: HealthStatus; latencyMs: number; detail: string };
+
+  const withTimeout = async <T,>(p: Promise<T>, ms = 5000): Promise<T> => {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timeout after ${ms}ms`)), ms)),
+    ]);
+  };
+
+  async function probeZapier(): Promise<HealthResult> {
+    // Zapier catch hooks are write-only — summarize recent activity instead
+    const t0 = Date.now();
+    try {
+      const entries: any[] = await kv.getByPrefix("zapier-log:");
+      const last = entries.sort((a, b) => String(b?.ts || "").localeCompare(String(a?.ts || "")))[0];
+      const recent24h = entries.filter((e) => new Date(e?.ts || 0).getTime() > Date.now() - 24 * 60 * 60 * 1000);
+      const failed24h = recent24h.filter((e) => !e?.ok).length;
+      const status: HealthStatus = recent24h.length === 0 ? "unknown" : failed24h === 0 ? "ok" : failed24h < recent24h.length ? "degraded" : "down";
+      const detail = recent24h.length === 0
+        ? "No activity in last 24h (write-only hook)"
+        : `${recent24h.length} sends / ${failed24h} failed (24h); last: ${last?.hook || "—"} @ ${last?.ts?.slice(11, 19) || "—"}`;
+      return { name: "Zapier Webhooks", status, latencyMs: Date.now() - t0, detail };
+    } catch (err) {
+      return { name: "Zapier Webhooks", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeKieAi(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const keysRaw = await kv.get("ai_model_keys");
+      const apiKey = keysRaw?.kie_ai || keysRaw?.kieAi || Deno.env.get("KIE_AI_API_KEY");
+      if (!apiKey) return { name: "kie.ai (Render)", status: "unknown", latencyMs: Date.now() - t0, detail: "API key not configured" };
+      const res = await withTimeout(fetch("https://api.kie.ai/api/v1/chat/credit", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }));
+      const body = await res.text();
+      if (!res.ok) return { name: "kie.ai (Render)", status: "down", latencyMs: Date.now() - t0, detail: `HTTP ${res.status}: ${body.slice(0, 120)}` };
+      let credits = "—";
+      try {
+        const j = JSON.parse(body);
+        credits = String(j?.data ?? j?.credit ?? j?.credits ?? "—");
+      } catch {}
+      return { name: "kie.ai (Render)", status: "ok", latencyMs: Date.now() - t0, detail: `Credits: ${credits}` };
+    } catch (err) {
+      return { name: "kie.ai (Render)", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeGooglePlaces(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+      if (!apiKey) return { name: "Google Places", status: "unknown", latencyMs: Date.now() - t0, detail: "API key not configured" };
+      const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=Singapore&inputtype=textquery&fields=place_id&key=${apiKey}`;
+      const res = await withTimeout(fetch(url));
+      const j = await res.json();
+      const status: HealthStatus = j?.status === "OK" ? "ok" : j?.status === "REQUEST_DENIED" ? "down" : "degraded";
+      return { name: "Google Places", status, latencyMs: Date.now() - t0, detail: `status=${j?.status || "?"}` };
+    } catch (err) {
+      return { name: "Google Places", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeSupabaseDb(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { count, error } = await withTimeout(
+        supabase.from("designers").select("*", { count: "exact", head: true }) as any
+      );
+      if (error) return { name: "Supabase DB", status: "down", latencyMs: Date.now() - t0, detail: String(error.message).slice(0, 150) };
+      return { name: "Supabase DB", status: "ok", latencyMs: Date.now() - t0, detail: `designers rows: ${count ?? "?"}` };
+    } catch (err) {
+      return { name: "Supabase DB", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeSupabaseStorage(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data, error } = await withTimeout(supabase.storage.from("designer-assets").list("", { limit: 1 }) as any);
+      if (error) return { name: "Supabase Storage", status: "down", latencyMs: Date.now() - t0, detail: String(error.message).slice(0, 150) };
+      return { name: "Supabase Storage", status: "ok", latencyMs: Date.now() - t0, detail: `bucket reachable (${(data || []).length} sample)` };
+    } catch (err) {
+      return { name: "Supabase Storage", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeVercel(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const token = Deno.env.get("VERCEL_TOKEN");
+      if (!token) return { name: "Vercel", status: "unknown", latencyMs: Date.now() - t0, detail: "VERCEL_TOKEN not configured" };
+      const res = await withTimeout(fetch("https://api.vercel.com/v6/deployments?limit=1", {
+        headers: { Authorization: `Bearer ${token}` },
+      }));
+      const j = await res.json();
+      if (!res.ok) return { name: "Vercel", status: "down", latencyMs: Date.now() - t0, detail: `HTTP ${res.status}` };
+      const latest = j?.deployments?.[0];
+      const state = latest?.state || latest?.readyState || "?";
+      return {
+        name: "Vercel",
+        status: state === "READY" || state === "ready" ? "ok" : state === "ERROR" ? "down" : "degraded",
+        latencyMs: Date.now() - t0,
+        detail: `latest: ${state} (${latest?.name || "—"})`,
+      };
+    } catch (err) {
+      return { name: "Vercel", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  async function probeResend(): Promise<HealthResult> {
+    const t0 = Date.now();
+    try {
+      const apiKey = Deno.env.get("RESEND_API_KEY");
+      if (!apiKey) return { name: "Resend Email", status: "unknown", latencyMs: Date.now() - t0, detail: "RESEND_API_KEY not configured" };
+      const res = await withTimeout(fetch("https://api.resend.com/domains", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }));
+      if (!res.ok) return { name: "Resend Email", status: "down", latencyMs: Date.now() - t0, detail: `HTTP ${res.status}` };
+      const j = await res.json();
+      const count = j?.data?.length ?? 0;
+      return { name: "Resend Email", status: "ok", latencyMs: Date.now() - t0, detail: `${count} domain(s) configured` };
+    } catch (err) {
+      return { name: "Resend Email", status: "down", latencyMs: Date.now() - t0, detail: String(err).slice(0, 150) };
+    }
+  }
+
+  const results = await Promise.all([
+    probeZapier(),
+    probeKieAi(),
+    probeGooglePlaces(),
+    probeSupabaseDb(),
+    probeSupabaseStorage(),
+    probeVercel(),
+    probeResend(),
+  ]);
+
+  return c.json({ services: results, ts: new Date().toISOString() });
 });
 
 Deno.serve(app.fetch);
