@@ -4,7 +4,6 @@ import { SocialProof3 } from "../homepage/v8/sections/SocialProof3";
 import { FreeTools } from "../homepage/v8/sections/FreeTools";
 import { SiteFooter } from "../shared/SiteFooter";
 import { FunnelHero } from "./FunnelHero";
-import { PainPointSection } from "./PainPointSection";
 import { ValueProps } from "./ValueProps";
 import { GoogleReviewsLive } from "./GoogleReviewsLive";
 import { useHomeownerCount } from "../homepage/v8/useHomeownerCount";
@@ -67,8 +66,6 @@ export function FunnelLeadPage() {
         <GoogleReviewsLive />
         <Divider />
         <SocialProof3 />
-        <Divider />
-        <PainPointSection />
         <Divider />
         <ValueProps />
         <Divider />

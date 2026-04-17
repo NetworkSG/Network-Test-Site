@@ -6,7 +6,7 @@ export const FUNNEL_HERO = {
     "Get 3 verified firms hand-picked for your home — free, within the day. No endless searching, no quote-chasing, no pressure.",
   trustBullets: [
     "3,214 homeowners matched this year",
-    "Every firm verified & CaseTrust-accredited",
+    "Every firm verified as a Network Trusted Partner",
     "Zero cost, zero spam, zero pressure",
   ],
   microTrust: "Free · No obligations · Unsubscribe anytime",
@@ -52,8 +52,8 @@ export const FUNNEL_VALUE_PROPS = {
     },
     {
       icon: "ShieldCheck",
-      title: "Verified & CaseTrust only.",
-      body: "Every firm passes our quality check — no cowboys, no ghosting.",
+      title: "Network Trusted Partners.",
+      body: "Every firm is verified as a Network Trusted Partner — no cowboys, no ghosting.",
     },
     {
       icon: "Clock",

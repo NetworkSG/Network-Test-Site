@@ -29,7 +29,7 @@ function isValidEmail(email: string) {
 
 type Step = 1 | 2 | 3 | 4; // 4 = complete
 
-export function CompactLeadForm() {
+export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode } = {}) {
   const [step, setStep] = useState<Step>(1);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [form, setForm] = useState<LeadFormData>({ name: "", phone: "", email: "" });
@@ -104,55 +104,56 @@ export function CompactLeadForm() {
         {/* Header */}
         {step !== 4 && (
           <>
-            <h2
-              className="text-[22px] leading-[1.2] mb-1.5"
-              style={{ fontFamily: serif, color: C.black }}
-            >
-              {FUNNEL_HERO.formTitle}
-            </h2>
-            <p
-              className="text-[13px] leading-[1.5] mb-5"
-              style={{ color: C.gray, fontFamily: sans }}
-            >
-              {FUNNEL_HERO.formSubtitle}
-            </p>
-
-            {/* Progress bar */}
-            <div
-              className="w-full h-[3px] rounded-full mb-5 overflow-hidden"
-              style={{ background: C.creamBorder }}
-            >
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: C.black }}
-                initial={false}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.3 }}
-              />
-            </div>
-
-            {/* Back link + step counter */}
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => (step === 2 ? goBack(1) : step === 3 ? goBack(2) : undefined)}
-                disabled={step === 1}
-                className="text-[12px] flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer hover:opacity-60"
-                style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+            {mobileHero && <div className="lg:hidden mb-5">{mobileHero}</div>}
+            <div className={mobileHero ? "hidden lg:block" : ""}>
+              <h2
+                className="text-[22px] leading-[1.2] mb-1.5"
+                style={{ fontFamily: serif, color: C.black }}
               >
-                <ChevronLeft size={14} /> Back
-              </button>
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  color: C.grayLight,
-                  fontFamily: sans,
-                }}
+                {FUNNEL_HERO.formTitle}
+              </h2>
+              <p
+                className="text-[13px] leading-[1.5] mb-5"
+                style={{ color: C.gray, fontFamily: sans }}
               >
-                Step {step} of 3
-              </span>
+                {FUNNEL_HERO.formSubtitle}
+              </p>
+
+              {/* Desktop: progress + back/step above form */}
+              <div
+                className="w-full h-[3px] rounded-full mb-5 overflow-hidden"
+                style={{ background: C.creamBorder }}
+              >
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: C.black }}
+                  initial={false}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => (step === 2 ? goBack(1) : step === 3 ? goBack(2) : undefined)}
+                  disabled={step === 1}
+                  className="text-[12px] flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer hover:opacity-60"
+                  style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+                >
+                  <ChevronLeft size={14} /> Back
+                </button>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    color: C.grayLight,
+                    fontFamily: sans,
+                  }}
+                >
+                  Step {step} of 3
+                </span>
+              </div>
             </div>
           </>
         )}
@@ -442,6 +443,45 @@ export function CompactLeadForm() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {step !== 4 && (
+          <div className="lg:hidden">
+            <div
+              className="w-full h-[3px] rounded-full mt-5 mb-4 overflow-hidden"
+              style={{ background: C.creamBorder }}
+            >
+              <motion.div
+                className="h-full rounded-full"
+                style={{ background: C.black }}
+                initial={false}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => (step === 2 ? goBack(1) : step === 3 ? goBack(2) : undefined)}
+                disabled={step === 1}
+                className="text-[12px] flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer hover:opacity-60"
+                style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+              >
+                <ChevronLeft size={14} /> Back
+              </button>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: C.grayLight,
+                  fontFamily: sans,
+                }}
+              >
+                Step {step} of 3
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
