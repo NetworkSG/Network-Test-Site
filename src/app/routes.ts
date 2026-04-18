@@ -34,6 +34,8 @@ const LazyStyleQuizPage = lazy(() => import("./components/style-quiz/StyleQuizPa
 const LazyMoodBoardLanding = lazy(() => import("./components/mood-board/MoodBoardLanding").then((m) => ({ default: m.MoodBoardLanding })));
 const LazyMoodBoardGate = lazy(() => import("./components/mood-board/MoodBoardGate").then((m) => ({ default: m.MoodBoardGate })));
 const LazyMoodBoardPage = lazy(() => import("./components/mood-board/MoodBoardPage").then((m) => ({ default: m.MoodBoardPage })));
+const LazyFirmOnboardingPage = lazy(() => import("./components/firm-onboarding/FirmOnboardingPage").then((m) => ({ default: m.FirmOnboardingPage })));
+const LazyProjectSubmissionPage = lazy(() => import("./components/firm-onboarding/ProjectSubmissionPage").then((m) => ({ default: m.ProjectSubmissionPage })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -112,6 +114,8 @@ export const router = createBrowserRouter([
   { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
   { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
   { path: "/edit-profile/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
+  { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },
+  { path: "/firm-onboarding/project", element: createElement(LazyRoute, { component: LazyProjectSubmissionPage }) },
   // { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   // { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

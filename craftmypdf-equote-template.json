@@ -1,0 +1,140 @@
+{
+  "name": "Network eQuote Result",
+  "description": "CraftMyPDF template data mapping for the Network Cost Guide PDF. Build this in CraftMyPDF's visual editor using the field names below.",
+  "template_id": "28177b236b53ee54",
+  "design_language": {
+    "fonts": {
+      "heading": "EB Garamond (serif) — used for section titles, 'eQuote Result', total label",
+      "body": "DM Sans (sans-serif) — used for labels, values, body text"
+    },
+    "colors": {
+      "background": "#f0ede6 (cream)",
+      "card_bg": "#fafaf8 (white)",
+      "text_primary": "#0f0f0d (black)",
+      "text_secondary": "#6b6860 (gray)",
+      "text_muted": "#a09a90 (light gray)",
+      "border": "#d8d3c8",
+      "divider_light": "#e8e3da",
+      "header_footer_bg": "#0f0f0d (black)",
+      "header_footer_text": "#fafaf8 (white)"
+    },
+    "border_radius": "12px for cards",
+    "label_style": "uppercase, 9pt DM Sans, color #a09a90, letter-spacing 1px"
+  },
+  "layout": {
+    "page": "A4 portrait, cream background (#f0ede6)",
+    "sections": [
+      {
+        "name": "Header Bar",
+        "description": "Black strip across top",
+        "elements": [
+          "NETWORK — EB Garamond 22pt, white, letter-spacing 4, left-aligned",
+          "{{date}} — DM Sans 10pt, #a09a90, right-aligned"
+        ]
+      },
+      {
+        "name": "Property Details",
+        "description": "Key-value grid on cream background",
+        "rows": [
+          { "label": "ADDRESS", "field": "{{address}}" },
+          { "label": "POSTAL CODE", "field": "{{zipcode}}", "label2": "PROPERTY", "field2": "{{property_type}} — {{unit_type}}" },
+          { "label": "STATUS", "field": "{{property_status}}", "label2": "KEY COLLECTION", "field2": "{{renovation_timeline}}" }
+        ]
+      },
+      {
+        "name": "Areas & Theme",
+        "description": "Below property details, separated by thin divider",
+        "rows": [
+          { "label": "AREAS", "field": "{{rooms_to_renovate}}" },
+          { "label": "THEME", "field": "{{preferred_themes}}" }
+        ]
+      },
+      {
+        "name": "Lifestyle Preferences",
+        "description": "Horizontal grid of Yes/No values",
+        "fields": [
+          { "label": "PETS", "field": "{{lifestyle_pets}}" },
+          { "label": "CHILDREN", "field": "{{lifestyle_children}}" },
+          { "label": "ACCESSIBLE", "field": "{{lifestyle_handicap}}" },
+          { "label": "SUSTAINABLE", "field": "{{lifestyle_ecoFriendly}}" },
+          { "label": "BOLD DESIGN", "field": "{{lifestyle_boldDesign}}" }
+        ]
+      },
+      {
+        "name": "eQuote Result Card",
+        "description": "White card (#fafaf8) with #d8d3c8 border, 12px radius",
+        "header": "eQuote Result (EB Garamond 22pt) — Budget: {{renovationcost}} right-aligned",
+        "line_items": [
+          { "label": "Living / Dining", "scope": "{{living_room}}", "price": "{{living_room_price}}", "includes": "{{living_room_include}}" },
+          { "label": "Kitchen", "scope": "{{kitchen}}", "price": "{{kitchen_price}}", "includes": "{{kitchen_include}}" },
+          { "label": "Bedrooms (x{{bedrooms_count}})", "scope": "{{bedrooms}}", "price": "{{bedrooms_price}}", "includes": "{{bed_room_include}}" },
+          { "label": "Bathrooms (x{{bathrooms_count}})", "scope": "{{bathrooms}}", "price": "{{bathrooms_price}}", "includes": "{{bath_room_include}}" },
+          { "label": "Others", "scope": "{{other_rooms}}", "price": "{{other_rooms_price}}", "includes": "{{other_room_include}}" }
+        ],
+        "total": {
+          "label": "Total Estimate (EB Garamond 16pt)",
+          "value": "{{renovationcost}} (DM Sans 14pt bold)"
+        }
+      },
+      {
+        "name": "Additional Info",
+        "description": "Only shown if fields are non-empty",
+        "fields": [
+          { "label": "MEETING PREFERENCE", "field": "{{meeting_preference}}" },
+          { "label": "ADDITIONAL NOTES", "field": "{{additional_notes}}" },
+          { "label": "REFERENCE PHOTOS", "field": "{{reference_photos}}" }
+        ]
+      },
+      {
+        "name": "Disclaimer",
+        "description": "Bordered box with muted text",
+        "text": "Numbers here are purely budgetary. A lot depends on actual site assessments, discussion, design direction and choice of materials. You can use this as a basis and a guide, but I'll suggest a meeting with designers to establish the design and direction to have a finalised set of numbers."
+      },
+      {
+        "name": "Footer Bar",
+        "description": "Black strip across bottom",
+        "elements": [
+          "NETWORK — EB Garamond 12pt, white, letter-spacing 3",
+          "network.com.sg — DM Sans 9pt, #a09a90, right-aligned"
+        ]
+      }
+    ]
+  },
+  "sample_data": {
+    "date": "9 April 2026",
+    "address": "969A TAMPINES STREET 96 TAMPINES GREENQUARTZ SINGAPORE 521969",
+    "zipcode": "521969",
+    "property_type": "HDB",
+    "unit_type": "4-Room",
+    "property_status": "New",
+    "renovation_timeline": "Wed Apr 15 2026",
+    "rooms_to_renovate": "Master Bedroom, Master Bathroom, Bedroom 2, Bedroom 3, Common Bathroom, Living & Dining, Kitchen",
+    "preferred_themes": "Wabi Sabi, Japanese",
+    "lifestyle_pets": "No",
+    "lifestyle_children": "Yes",
+    "lifestyle_handicap": "No",
+    "lifestyle_ecoFriendly": "Yes",
+    "lifestyle_boldDesign": "No",
+    "meeting_preference": "Virtual",
+    "additional_notes": "",
+    "reference_photos": "",
+    "renovationcost": "$55K - $65K",
+    "living_room": "Moderate",
+    "living_room_price": "$3K - $6K",
+    "living_room_include": "Feature wall, TV console, flooring, painting",
+    "kitchen": "Moderate",
+    "kitchen_price": "$8K - $14K",
+    "kitchen_include": "Kitchen cabinets, countertop, backsplash, sink & tap",
+    "bedrooms": "Moderate",
+    "bedrooms_price": "$2.5K - $4.5K",
+    "bedrooms_count": 3,
+    "bed_room_include": "Wardrobe, flooring, painting, curtain pelmet",
+    "bathrooms": "Moderate",
+    "bathrooms_price": "$4K - $7K",
+    "bathrooms_count": 2,
+    "bath_room_include": "Shower screen, vanity, mirror cabinet, rain shower",
+    "other_rooms": "N/A",
+    "other_rooms_price": "N/A",
+    "other_room_include": "Not selected"
+  }
+}

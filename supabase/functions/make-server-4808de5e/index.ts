@@ -1661,6 +1661,361 @@ app.post("/make-server-4808de5e/designer-upload", async (c) => {
   }
 });
 
+// ─── Firm Onboarding (hidden page) ──────────────────────────────────
+async function sendNtfyOnboarding(opts: { firmName: string; variant: string; projectTitle: string }) {
+  const topic = Deno.env.get("NTFY_TOPIC");
+  if (!topic) return;
+  const body = `Firm: ${opts.firmName || "(project-only submission)"}\nVariant: ${opts.variant}\nProject: ${opts.projectTitle}`;
+  try {
+    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers: { Title: "New firm onboarding submission", Priority: "default", Tags: "tada" },
+      body,
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+// ─── Firm onboarding helpers ────────────────────────────────────
+async function findDesignerByEmail(email: string): Promise<{ slug: string; data: any } | null> {
+  if (!email) return null;
+  const sb = getDesignerSupabase();
+  const normalized = email.trim().toLowerCase();
+  // Use ilike on the extracted JSON field — case-insensitive exact match.
+  const { data } = await sb
+    .from("designers")
+    .select("slug, data")
+    .ilike("data->>contactEmail", normalized)
+    .limit(1)
+    .maybeSingle();
+  return data ? { slug: data.slug, data: data.data } : null;
+}
+
+async function ensureUniqueSlug(base: string): Promise<string> {
+  const sanitized = (base || "firm").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "firm";
+  const sb = getDesignerSupabase();
+  let candidate = sanitized;
+  let i = 2;
+  while (true) {
+    const { data } = await sb.from("designers").select("slug").eq("slug", candidate).maybeSingle();
+    if (!data) return candidate;
+    candidate = `${sanitized}-${i}`;
+    i++;
+    if (i > 50) return `${sanitized}-${crypto.randomUUID().slice(0, 6)}`;
+  }
+}
+
+function buildProjectMeta(p: any): string {
+  const parts: string[] = [];
+  if (p?.propertyType) parts.push(String(p.propertyType));
+  if (p?.size) parts.push(`${p.size}${p.sizeUnit ? " " + p.sizeUnit : ""}`);
+  if (p?.cost) parts.push(`SGD ${p.cost}`);
+  if (p?.year) parts.push(String(p.year));
+  return parts.join(" · ");
+}
+
+app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many submissions. Please try again later.", retryAfterMs: rl.retryAfterMs }, 429);
+
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object") return c.json({ error: "Invalid payload" }, 400);
+    const variant = body.variant === "project-only" ? "project-only" : "full";
+    const project = body.project;
+    if (!project || typeof project !== "object" || !project.title) {
+      return c.json({ error: "Missing project details" }, 400);
+    }
+    if (variant === "full" && (!body.studio || !body.studio.firmName)) {
+      return c.json({ error: "Missing studio info" }, 400);
+    }
+
+    const contactEmail = typeof body.contactEmail === "string" ? body.contactEmail.trim().slice(0, 200) : "";
+    const studioEmail = typeof body.studio?.contactEmail === "string" ? body.studio.contactEmail.trim().slice(0, 200) : "";
+    const email = (contactEmail || studioEmail).toLowerCase();
+
+    // Audit log (KV) — keep existing behaviour for debugging
+    const id = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    await kv.set(`onboarding:submission:${id}`, {
+      id, variant,
+      studio: body.studio || null,
+      project,
+      contactEmail: email || null,
+      ip,
+      ts: new Date().toISOString(),
+    });
+
+    const now = new Date().toISOString();
+    const pendingProject = {
+      name: String(project.title || "").slice(0, 200),
+      meta: buildProjectMeta(project),
+      image: "",
+      driveUrl: String(project.driveUrl || "").slice(0, 500),
+      location: String(project.location || "").slice(0, 200),
+      cost: String(project.cost || "").slice(0, 100),
+      size: String(project.size || "").slice(0, 100),
+      sizeUnit: String(project.sizeUnit || "").slice(0, 20),
+      year: String(project.year || "").slice(0, 8),
+      propertyType: String(project.propertyType || "").slice(0, 60),
+      propertySubType: String(project.propertySubType || "").slice(0, 80),
+      style: String(project.style || "").slice(0, 100),
+      worksIncluded: Array.isArray(project.worksIncluded) ? project.worksIncluded.slice(0, 20).map(String) : [],
+      status: "pending",
+      submittedAt: now,
+    };
+
+    let resultSlug: string | null = null;
+
+    if (variant === "full") {
+      if (!email) return c.json({ error: "Contact email is required" }, 400);
+      const existing = await findDesignerByEmail(email);
+      if (existing) {
+        return c.json({ error: "Email already registered. Use the project-only link to add more projects." }, 409);
+      }
+      const slug = await ensureUniqueSlug(body.studio.firmName);
+      const studio = body.studio;
+      const s = (v: any) => (typeof v === "string" ? v.trim() : "");
+      const arr = (v: any) => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []);
+      const licenses = arr(studio.licenses);
+      const licensesOther = s(studio.licensesOther);
+      if (licensesOther) licenses.push(licensesOther);
+      const years = s(studio.yearsExperience);
+      const landedEligibility = s(studio.landedEligibility);
+      const financing = s(studio.financing);
+      const portfolioUrl = s(studio.portfolioUrl);
+
+      const profile = {
+        name: String(studio.firmName || "").slice(0, 120),
+        slug,
+        tagline: String(studio.tagline || "").slice(0, 200),
+        bio: String(studio.bio || "").slice(0, 2000),
+        images: {
+          logo: String(studio.logoImage || ""),
+          map: String(studio.googleMapsUrl || ""),
+        },
+        googleMapsLink: String(studio.googleMapsUrl || ""),
+        contactEmail: email,
+        status: "pending",
+        verified: false,
+        active: true,
+        acraUen: s(studio.acraUen),
+        yearsExperience: years,
+        licenses,
+        officeAddress: s(studio.officeAddress),
+        serviceArea: arr(studio.serviceArea),
+        serviceProvided: arr(studio.serviceProvided),
+        projectTypes: arr(studio.projectTypes),
+        designStyles: arr(studio.designStyles),
+        specialisation: arr(studio.specialisation),
+        budgetRange: arr(studio.budgetRange),
+        financing,
+        portfolioUrl,
+        location: arr(studio.serviceArea).join(", "),
+        stats: years ? { years: Number(years) || 0 } : undefined,
+        credentials: {
+          hdb: { active: licenses.some((l: string) => /hdb/i.test(l)), reg: "" },
+          bca: { active: licenses.some((l: string) => /bca/i.test(l)), reg: "" },
+          landedEligible: landedEligibility === "Landed Homes" || landedEligibility === "Selected Landed Homes",
+          landedEligibilityLabel: landedEligibility,
+        },
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const businessInfo = [
+        { label: "ACRA / UEN", value: s(studio.acraUen) },
+        { label: "Office address", value: s(studio.officeAddress) },
+        { label: "Project types", value: arr(studio.projectTypes).join(", ") },
+        { label: "Style specialisation", value: arr(studio.designStyles).join(", ") },
+        { label: "Service area", value: arr(studio.serviceArea).join(", ") },
+        { label: "Specialisation", value: arr(studio.specialisation).join(", ") },
+        { label: "Services", value: arr(studio.serviceProvided).join(", ") },
+        { label: "Financing", value: financing },
+        { label: "Budget range", value: arr(studio.budgetRange).join(", ") },
+        { label: "Licenses", value: licenses.join(", ") },
+        { label: "Portfolio", value: portfolioUrl },
+      ].filter((r) => r.value);
+
+      await saveDesignerProfile(slug, profile);
+      await saveDesignerSection(slug, "projects", [pendingProject]);
+      if (businessInfo.length) await saveDesignerSection(slug, "businessinfo", businessInfo);
+      resultSlug = slug;
+    } else {
+      if (!email) return c.json({ error: "Contact email is required" }, 400);
+      const existing = await findDesignerByEmail(email);
+      if (!existing) {
+        return c.json({ error: "No firm found for this email. Complete the full onboarding first." }, 404);
+      }
+      const slug = existing.slug;
+      const current = await getDesignerSection(slug, "projects");
+      const list = Array.isArray(current) ? current : [];
+      list.push(pendingProject);
+      await saveDesignerSection(slug, "projects", list);
+      resultSlug = slug;
+    }
+
+    sendNtfyOnboarding({
+      firmName: body.studio?.firmName || email || resultSlug || "(unknown)",
+      variant: `${variant} (pending)`,
+      projectTitle: String(project.title || "").slice(0, 120),
+    }).catch(() => {});
+
+    return c.json({ ok: true, id, slug: resultSlug });
+  } catch (err) {
+    console.log("firm-onboarding-submit error:", err);
+    return c.json({ error: "Submission failed" }, 500);
+  }
+});
+
+// Admin: list onboarding submissions
+app.get("/make-server-4808de5e/admin/onboarding-submissions", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const entries: any[] = await kv.getByPrefix("onboarding:submission:");
+    entries.sort((a, b) => String(b?.ts || "").localeCompare(String(a?.ts || "")));
+    return c.json({ submissions: entries, total: entries.length });
+  } catch (err) {
+    return c.json({ error: "Failed to load onboarding submissions: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list designers with data.status === "pending"
+app.get("/make-server-4808de5e/admin/pending-designers", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const { data, error } = await sb
+      .from("designers")
+      .select("slug, name, data")
+      .eq("data->>status", "pending");
+    if (error) return c.json({ error: error.message }, 500);
+    const rows = (data || []).map((r: any) => ({
+      slug: r.slug,
+      name: r.data?.name || r.name,
+      tagline: r.data?.tagline || "",
+      contactEmail: r.data?.contactEmail || "",
+      submittedAt: r.data?.submittedAt || "",
+    }));
+    rows.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+    return c.json({ designers: rows, total: rows.length });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list pending project items across all designers
+app.get("/make-server-4808de5e/admin/pending-projects", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const { data, error } = await sb
+      .from("designer_sections")
+      .select("slug, data")
+      .eq("section", "projects");
+    if (error) return c.json({ error: error.message }, 500);
+    const out: any[] = [];
+    for (const row of (data || []) as any[]) {
+      const arr = Array.isArray(row.data) ? row.data : [];
+      arr.forEach((p: any, index: number) => {
+        if (p?.status === "pending") {
+          out.push({
+            slug: row.slug,
+            index,
+            name: p?.name || "",
+            meta: p?.meta || "",
+            driveUrl: p?.driveUrl || "",
+            submittedAt: p?.submittedAt || "",
+          });
+        }
+      });
+    }
+    out.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+    return c.json({ projects: out, total: out.length });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: publish pending designer
+app.post("/make-server-4808de5e/admin/publish-designer/:slug", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const sb = getDesignerSupabase();
+    const { data: row } = await sb.from("designers").select("data").eq("slug", slug).maybeSingle();
+    if (!row) return c.json({ error: "Designer not found" }, 404);
+    const next = { ...(row.data || {}), status: "published", verified: true, publishedAt: new Date().toISOString() };
+    await saveDesignerProfile(slug, next);
+    return c.json({ ok: true, slug });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: publish pending project by index
+app.post("/make-server-4808de5e/admin/publish-project/:slug", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const index = Number(body?.index);
+    if (!Number.isInteger(index) || index < 0) return c.json({ error: "Invalid index" }, 400);
+    const current = await getDesignerSection(slug, "projects");
+    if (!Array.isArray(current) || !current[index]) return c.json({ error: "Project not found" }, 404);
+    const next = current.slice();
+    next[index] = { ...next[index], status: "published" };
+    await saveDesignerSection(slug, "projects", next);
+    return c.json({ ok: true, slug, index });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: reject (delete) pending designer + all sections
+app.post("/make-server-4808de5e/admin/reject-designer/:slug", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    await deleteDesignerAndSections(slug);
+    return c.json({ ok: true, slug });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: reject pending project by index
+app.post("/make-server-4808de5e/admin/reject-project/:slug", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    const index = Number(body?.index);
+    if (!Number.isInteger(index) || index < 0) return c.json({ error: "Invalid index" }, 400);
+    const current = await getDesignerSection(slug, "projects");
+    if (!Array.isArray(current) || !current[index]) return c.json({ error: "Project not found" }, 404);
+    const next = current.filter((_: any, i: number) => i !== index);
+    await saveDesignerSection(slug, "projects", next);
+    return c.json({ ok: true, slug, index });
+  } catch (err) {
+    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
 // Submit render task to kie.ai
 app.post("/make-server-4808de5e/render-task", async (c) => {
   try {
@@ -3742,7 +4097,9 @@ app.get("/make-server-4808de5e/designers", async (c) => {
       return designer;
     });
 
-    const activeDesigners = showAll ? allDesigners : allDesigners.filter((d: any) => d.active !== false);
+    const activeDesigners = showAll
+      ? allDesigners
+      : allDesigners.filter((d: any) => d.active !== false && d.status !== "pending");
     // Pagination — limit response size to prevent bulk scraping
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
@@ -3780,12 +4137,21 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Designer not found" }, 404);
     }
 
+    if (profile.status === "pending" && c.req.query("preview") !== "1") {
+      return c.json({ error: "Designer not found" }, 404);
+    }
+
+    const rawProjects = sections.projects || profile.projects || [];
+    const filteredProjects = c.req.query("preview") === "1"
+      ? rawProjects
+      : (Array.isArray(rawProjects) ? rawProjects.filter((p: any) => p?.status !== "pending") : rawProjects);
+
     console.log(`Fetched designer profile: ${slug}`);
     return c.json({
       data: {
         ...profile,
         team: sections.team || profile.team || [],
-        projects: sections.projects || profile.projects || [],
+        projects: filteredProjects,
         caseStudies: sections.casestudies || profile.caseStudies || [],
         reviews: sections.reviews || profile.reviews || [],
         latestReviews: sections.latestreviews || profile.latestReviews || [],

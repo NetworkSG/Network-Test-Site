@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Building2,
 } from "lucide-react";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -32,6 +33,16 @@ async function authHeaders(): Promise<Record<string, string>> {
 
 async function debugFetch<T = any>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`, { headers: await authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => "")}`.slice(0, 300));
+  return res.json();
+}
+
+async function debugPost<T = any>(path: string, body?: any): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => "")}`.slice(0, 300));
   return res.json();
 }
@@ -517,8 +528,345 @@ function ZapierActivityCard() {
   );
 }
 
+/* ─── Section: Onboarding Submissions ───────────────────────── */
+interface OnboardingSubmission {
+  id: string;
+  variant: "full" | "project-only";
+  studio?: { firmName?: string; tagline?: string; bio?: string; googleMapsUrl?: string; logoImage?: string } | null;
+  project?: { title?: string; location?: string; cost?: string; propertyType?: string; coverImage?: string };
+  contactEmail?: string | null;
+  ts: string;
+}
+
+function OnboardingSubmissionsCard() {
+  const [data, setData] = useState<OnboardingSubmission[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const j = await debugFetch<{ submissions: OnboardingSubmission[] }>("/admin/onboarding-submissions");
+      setData(j.submissions || []);
+    } catch (err: any) {
+      setError(String(err?.message || err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <section className="bg-white border border-[#e5e7eb] rounded-2xl p-6">
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="size-5 text-[#101828]" />
+          <h3 className="font-bold text-[16px] text-[#101828]">Firm Onboarding Submissions</h3>
+          {data && <span className="text-[11px] text-[#9ca3af]">{data.length} total</span>}
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6a7282] hover:text-[#101828] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-all cursor-pointer disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Refresh
+        </button>
+      </header>
+
+      {error && (
+        <div className="mb-3 p-3 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-[12px] text-[#991b1b] flex items-start gap-2">
+          <AlertCircle className="size-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!data && !error && (
+        <div className="flex items-center justify-center py-8 text-[13px] text-[#9ca3af]">
+          <Loader2 className="size-4 animate-spin mr-2" /> Loading submissions…
+        </div>
+      )}
+
+      {data && data.length === 0 && (
+        <div className="text-[13px] text-[#9ca3af] py-6 text-center">No submissions yet.</div>
+      )}
+
+      {data && data.length > 0 && (
+        <div className="divide-y divide-[#f1f5f9]">
+          {data.map((s) => {
+            const isOpen = expanded === s.id;
+            const label = s.studio?.firmName || s.contactEmail || s.project?.title || "(untitled)";
+            return (
+              <div key={s.id} className="py-3">
+                <button
+                  onClick={() => setExpanded(isOpen ? null : s.id)}
+                  className="w-full flex items-center justify-between text-left cursor-pointer hover:bg-[#f9fafb] rounded-lg px-2 py-1.5 -mx-2 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {isOpen ? <ChevronDown className="size-4 text-[#9ca3af] shrink-0" /> : <ChevronRight className="size-4 text-[#9ca3af] shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-[#101828] truncate">{label}</p>
+                      <p className="text-[11px] text-[#6a7282] truncate">
+                        {s.variant === "full" ? "Full onboarding" : "Project-only"} · {s.project?.title || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-[#9ca3af] tabular-nums shrink-0 ml-3">{timeAgo(s.ts)}</span>
+                </button>
+                {isOpen && (
+                  <pre className="mt-2 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-3 text-[11px] text-[#334155] overflow-x-auto whitespace-pre-wrap break-words">
+                    {JSON.stringify(s, null, 2)}
+                  </pre>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─── Section: Pending Designers ─────────────────────────────── */
+interface PendingDesigner {
+  slug: string;
+  name: string;
+  tagline: string;
+  contactEmail: string;
+  submittedAt: string;
+}
+
+function PendingDesignersCard() {
+  const [data, setData] = useState<PendingDesigner[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busySlug, setBusySlug] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const j = await debugFetch<{ designers: PendingDesigner[] }>("/admin/pending-designers");
+      setData(j.designers || []);
+    } catch (err: any) {
+      setError(String(err?.message || err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const publish = async (slug: string) => {
+    setBusySlug(slug);
+    try { await debugPost(`/admin/publish-designer/${slug}`); await load(); }
+    catch (err: any) { setError(String(err?.message || err)); }
+    finally { setBusySlug(null); }
+  };
+
+  const reject = async (slug: string) => {
+    if (!confirm(`Reject and permanently delete ${slug}?`)) return;
+    setBusySlug(slug);
+    try { await debugPost(`/admin/reject-designer/${slug}`); await load(); }
+    catch (err: any) { setError(String(err?.message || err)); }
+    finally { setBusySlug(null); }
+  };
+
+  return (
+    <section className="bg-white border border-[#e5e7eb] rounded-2xl p-6">
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="size-5 text-[#101828]" />
+          <h3 className="font-bold text-[16px] text-[#101828]">Pending Designers</h3>
+          {data && <span className="text-[11px] text-[#9ca3af]">{data.length} waiting</span>}
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6a7282] hover:text-[#101828] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-all cursor-pointer disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Refresh
+        </button>
+      </header>
+
+      {error && (
+        <div className="mb-3 p-3 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-[12px] text-[#991b1b] flex items-start gap-2">
+          <AlertCircle className="size-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {data && data.length === 0 && !loading && (
+        <div className="text-[13px] text-[#9ca3af] py-6 text-center">No pending firms.</div>
+      )}
+
+      {data && data.length > 0 && (
+        <div className="divide-y divide-[#f1f5f9]">
+          {data.map((d) => (
+            <div key={d.slug} className="py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[#101828] truncate">
+                  <a href={`/designer/${d.slug}?preview=1`} target="_blank" rel="noreferrer" className="hover:underline">
+                    {d.name || d.slug}
+                  </a>
+                </p>
+                <p className="text-[11px] text-[#6a7282] truncate">
+                  {d.tagline || "—"} · {d.contactEmail || "no email"} · {d.submittedAt ? timeAgo(d.submittedAt) : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => publish(d.slug)}
+                  disabled={busySlug === d.slug}
+                  className="px-3 py-1.5 text-[12px] font-medium text-white bg-[#101828] rounded-lg hover:bg-black transition cursor-pointer disabled:opacity-50"
+                >
+                  {busySlug === d.slug ? "…" : "Publish"}
+                </button>
+                <button
+                  onClick={() => reject(d.slug)}
+                  disabled={busySlug === d.slug}
+                  className="px-3 py-1.5 text-[12px] font-medium text-[#991b1b] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition cursor-pointer disabled:opacity-50"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ─── Section: Pending Projects ──────────────────────────────── */
+interface PendingProject {
+  slug: string;
+  index: number;
+  name: string;
+  meta: string;
+  driveUrl: string;
+  submittedAt: string;
+}
+
+function PendingProjectsCard() {
+  const [data, setData] = useState<PendingProject[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const j = await debugFetch<{ projects: PendingProject[] }>("/admin/pending-projects");
+      setData(j.projects || []);
+    } catch (err: any) {
+      setError(String(err?.message || err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const key = (p: PendingProject) => `${p.slug}#${p.index}`;
+
+  const publish = async (p: PendingProject) => {
+    setBusyKey(key(p));
+    try { await debugPost(`/admin/publish-project/${p.slug}`, { index: p.index }); await load(); }
+    catch (err: any) { setError(String(err?.message || err)); }
+    finally { setBusyKey(null); }
+  };
+
+  const reject = async (p: PendingProject) => {
+    if (!confirm(`Remove project "${p.name}" from ${p.slug}?`)) return;
+    setBusyKey(key(p));
+    try { await debugPost(`/admin/reject-project/${p.slug}`, { index: p.index }); await load(); }
+    catch (err: any) { setError(String(err?.message || err)); }
+    finally { setBusyKey(null); }
+  };
+
+  return (
+    <section className="bg-white border border-[#e5e7eb] rounded-2xl p-6">
+      <header className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="size-5 text-[#101828]" />
+          <h3 className="font-bold text-[16px] text-[#101828]">Pending Projects</h3>
+          {data && <span className="text-[11px] text-[#9ca3af]">{data.length} waiting</span>}
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6a7282] hover:text-[#101828] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-all cursor-pointer disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Refresh
+        </button>
+      </header>
+
+      {error && (
+        <div className="mb-3 p-3 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-[12px] text-[#991b1b] flex items-start gap-2">
+          <AlertCircle className="size-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {data && data.length === 0 && !loading && (
+        <div className="text-[13px] text-[#9ca3af] py-6 text-center">No pending projects.</div>
+      )}
+
+      {data && data.length > 0 && (
+        <div className="divide-y divide-[#f1f5f9]">
+          {data.map((p) => {
+            const k = key(p);
+            return (
+              <div key={k} className="py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[#101828] truncate">
+                    {p.name || "(untitled)"} <span className="text-[#9ca3af] font-normal">— {p.slug}</span>
+                  </p>
+                  <p className="text-[11px] text-[#6a7282] truncate">
+                    {p.meta || "—"}
+                    {p.driveUrl && (
+                      <> · <a href={p.driveUrl} target="_blank" rel="noreferrer" className="text-[#101828] hover:underline">Drive link</a></>
+                    )}
+                    {p.submittedAt && <> · {timeAgo(p.submittedAt)}</>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => publish(p)}
+                    disabled={busyKey === k}
+                    className="px-3 py-1.5 text-[12px] font-medium text-white bg-[#101828] rounded-lg hover:bg-black transition cursor-pointer disabled:opacity-50"
+                  >
+                    {busyKey === k ? "…" : "Publish"}
+                  </button>
+                  <button
+                    onClick={() => reject(p)}
+                    disabled={busyKey === k}
+                    className="px-3 py-1.5 text-[12px] font-medium text-[#991b1b] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition cursor-pointer disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ─── Main Panel ─────────────────────────────────────────────── */
 export function AdminDebugPanel() {
+  const [showAudit, setShowAudit] = useState(false);
   return (
     <div className="space-y-6">
       <div>
@@ -527,6 +875,16 @@ export function AdminDebugPanel() {
       </div>
       <SystemHealthCard />
       <FunnelMetricsCard />
+      <div>
+        <button
+          onClick={() => setShowAudit((v) => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6a7282] hover:text-[#101828] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-all cursor-pointer"
+        >
+          {showAudit ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          {showAudit ? "Hide" : "Show"} onboarding audit log
+        </button>
+        {showAudit && <div className="mt-4"><OnboardingSubmissionsCard /></div>}
+      </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <RecentErrorsCard />
         <ZapierActivityCard />

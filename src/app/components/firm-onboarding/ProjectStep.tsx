@@ -1,0 +1,354 @@
+import { C, serif, sans } from "../homepage/v8/primitives";
+import {
+  Hammer,
+  Layers,
+  Square as SquareIcon,
+  Wind,
+  Zap,
+  Droplet,
+  Paintbrush,
+  Lightbulb,
+} from "lucide-react";
+import { ProjectSubmission } from "./onboardingApi";
+
+const PROPERTY_TYPES = ["HDB", "Condominium", "Landed", "Commercial"];
+const SIZE_UNITS = ["sqft", "sqm", "m²"] as const;
+type SizeUnit = (typeof SIZE_UNITS)[number];
+
+const AVAILABLE_WORKS = [
+  { key: "carpentry", icon: Hammer, label: "Carpentry" },
+  { key: "feature-wall", icon: Layers, label: "Feature Wall" },
+  { key: "tiling", icon: SquareIcon, label: "Tiling" },
+  { key: "aircon", icon: Wind, label: "Aircon" },
+  { key: "electrical", icon: Zap, label: "Electrical Rewiring" },
+  { key: "plumbing", icon: Droplet, label: "Plumbing" },
+  { key: "painting", icon: Paintbrush, label: "Painting" },
+  { key: "lighting", icon: Lightbulb, label: "Lighting" },
+];
+
+function formatCost(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return "$" + Number(digits).toLocaleString("en-US");
+}
+function parseSizeDigits(raw: string): string {
+  return raw.replace(/[^0-9]/g, "");
+}
+function formatSizeNumber(raw: string): string {
+  const digits = parseSizeDigits(raw);
+  if (!digits) return "";
+  return Number(digits).toLocaleString("en-US");
+}
+function detectSizeUnit(raw: string): SizeUnit {
+  if (raw.includes("m²")) return "m²";
+  if (raw.toLowerCase().includes("sqm")) return "sqm";
+  return "sqft";
+}
+function buildSizeString(num: string, unit: SizeUnit): string {
+  if (!num) return unit;
+  return `${num} ${unit}`;
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 600,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: C.grayLight,
+  fontFamily: sans,
+  display: "block",
+  marginBottom: "6px",
+};
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  height: "44px",
+  padding: "0 14px",
+  background: C.white,
+  border: `1px solid ${C.creamBorder}`,
+  borderRadius: "10px",
+  color: C.black,
+  fontFamily: sans,
+  fontSize: "14px",
+  outline: "none",
+};
+const selectBgImg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239a9790' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`;
+
+function isValidDriveUrl(url: string): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!/^https:\/\//i.test(trimmed)) return false;
+  return /(drive\.google\.com|docs\.google\.com|photos\.app\.goo\.gl|photos\.google\.com)/i.test(trimmed);
+}
+
+export function validateProject(p: ProjectSubmission): Record<string, string> {
+  const e: Record<string, string> = {};
+  if (!p.title.trim()) e.title = "Project title is required";
+  if (!p.location.trim()) e.location = "Location is required";
+  if (!p.cost.trim()) e.cost = "Renovation cost is required";
+  if (!parseSizeDigits(p.size)) e.size = "Area size is required";
+  if (!p.year.trim() || p.year.length !== 4) e.year = "Enter a 4-digit year";
+  if (!p.propertyType) e.propertyType = "Select a property type";
+  if (!p.style.trim()) e.style = "Interior style is required";
+  if (!isValidDriveUrl(p.driveUrl))
+    e.driveUrl = "Paste a Google Drive, Docs, or Photos share link (must start with https://)";
+  return e;
+}
+
+export function ProjectStep({
+  value,
+  onChange,
+  submitAttempted,
+}: {
+  value: ProjectSubmission;
+  onChange: (v: ProjectSubmission) => void;
+  submitAttempted: boolean;
+}) {
+  const errors = submitAttempted ? validateProject(value) : {};
+
+  const patch = (p: Partial<ProjectSubmission>) => onChange({ ...value, ...p });
+
+  const toggleWork = (key: string) =>
+    onChange({
+      ...value,
+      worksIncluded: value.worksIncluded.includes(key)
+        ? value.worksIncluded.filter((k) => k !== key)
+        : [...value.worksIncluded, key],
+    });
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h2
+          className="font-normal leading-[1.15] mb-2"
+          style={{ fontFamily: serif, color: C.black, fontSize: "clamp(24px, 3vw, 32px)", letterSpacing: "-0.01em" }}
+        >
+          Submit a project
+        </h2>
+        <p className="text-[14px] leading-[1.6]" style={{ color: C.gray, fontFamily: sans }}>
+          Share one completed project. You can add more anytime from your dashboard.
+        </p>
+      </div>
+
+      {/* Google Drive link */}
+      <div>
+        <label style={labelStyle}>
+          Project Photos · Google Drive Link <span style={{ color: "#c14" }}>*</span>
+        </label>
+        <input
+          type="url"
+          value={value.driveUrl}
+          placeholder="https://drive.google.com/…"
+          onChange={(e) => patch({ driveUrl: e.target.value })}
+          style={inputStyle}
+          onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+        />
+        <p className="mt-1 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
+          Paste a shareable link to the project folder. Make sure link access is set to <strong>Anyone with the link</strong>.
+        </p>
+        {errors.driveUrl && <p className="text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.driveUrl}</p>}
+      </div>
+
+      {/* Title */}
+      <div>
+        <label style={labelStyle}>
+          Project Title <span style={{ color: "#c14" }}>*</span>
+        </label>
+        <input
+          type="text"
+          value={value.title}
+          placeholder="e.g. The Aldrich Residence"
+          onChange={(e) => patch({ title: e.target.value })}
+          style={inputStyle}
+          onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+        />
+        {errors.title && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.title}</p>}
+      </div>
+
+      {/* Location */}
+      <div>
+        <label style={labelStyle}>
+          Location <span style={{ color: "#c14" }}>*</span>
+        </label>
+        <input
+          type="text"
+          value={value.location}
+          placeholder="e.g. Orchard Road, Singapore"
+          onChange={(e) => patch({ location: e.target.value })}
+          style={inputStyle}
+          onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+        />
+        {errors.location && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.location}</p>}
+      </div>
+
+      {/* Cost + Area */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label style={labelStyle}>
+            Renovation Cost <span style={{ color: "#c14" }}>*</span>
+          </label>
+          <input
+            type="text"
+            value={value.cost}
+            placeholder="e.g. $120,000"
+            onChange={(e) => patch({ cost: formatCost(e.target.value) })}
+            style={inputStyle}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+          />
+          {errors.cost && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.cost}</p>}
+        </div>
+        <div>
+          <label style={labelStyle}>
+            Area Size <span style={{ color: "#c14" }}>*</span>
+          </label>
+          <div className="flex gap-0">
+            <input
+              type="text"
+              value={formatSizeNumber(value.size)}
+              placeholder="e.g. 1,450"
+              onChange={(e) => {
+                const num = formatSizeNumber(e.target.value);
+                const unit = detectSizeUnit(value.size);
+                patch({ size: buildSizeString(num, unit) });
+              }}
+              style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+            />
+            <select
+              value={detectSizeUnit(value.size)}
+              onChange={(e) => {
+                const num = formatSizeNumber(value.size);
+                patch({ size: buildSizeString(num, e.target.value as SizeUnit) });
+              }}
+              style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}
+            >
+              {SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          {errors.size && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.size}</p>}
+        </div>
+      </div>
+
+      {/* Property type + year */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label style={labelStyle}>
+            Property Type <span style={{ color: "#c14" }}>*</span>
+          </label>
+          <select
+            value={value.propertyType}
+            onChange={(e) => patch({ propertyType: e.target.value })}
+            style={{ ...inputStyle, appearance: "none", paddingRight: "36px", backgroundImage: selectBgImg, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+          >
+            <option value="">Select type…</option>
+            {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {errors.propertyType && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.propertyType}</p>}
+        </div>
+        <div>
+          <label style={labelStyle}>
+            Year of Completion <span style={{ color: "#c14" }}>*</span>
+          </label>
+          <input
+            type="number"
+            value={value.year}
+            placeholder="e.g. 2024"
+            min={1990}
+            max={2100}
+            onChange={(e) => patch({ year: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
+            style={inputStyle}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+          />
+          {errors.year && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.year}</p>}
+        </div>
+      </div>
+
+      {/* Sub-type + style */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label style={labelStyle}>Property Sub-type</label>
+          <input
+            type="text"
+            value={value.propertySubType}
+            placeholder="e.g. Resale, BTO, 5-Room"
+            onChange={(e) => patch({ propertySubType: e.target.value })}
+            style={inputStyle}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>
+            Interior Style <span style={{ color: "#c14" }}>*</span>
+          </label>
+          <input
+            type="text"
+            value={value.style}
+            placeholder="e.g. Modern Luxe"
+            onChange={(e) => patch({ style: e.target.value })}
+            style={inputStyle}
+            onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+          />
+          {errors.style && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.style}</p>}
+        </div>
+      </div>
+
+      {/* Works included */}
+      <div>
+        <label style={labelStyle}>Works Included</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2" style={{ border: `1px solid ${C.creamBorder}`, borderRadius: "10px", overflow: "hidden" }}>
+          {AVAILABLE_WORKS.map(({ key, icon: Icon, label }, i) => {
+            const isYes = value.worksIncluded.includes(key);
+            const setYes = () => {
+              if (!isYes) patch({ worksIncluded: [...value.worksIncluded, key] });
+            };
+            const setNo = () => {
+              if (isYes) patch({ worksIncluded: value.worksIncluded.filter((k) => k !== key) });
+            };
+            const pillStyle = (active: boolean) => ({
+              padding: "4px 12px",
+              fontSize: "11px",
+              fontFamily: sans,
+              fontWeight: 500,
+              background: active ? C.black : "transparent",
+              color: active ? C.white : C.gray,
+              border: `1px solid ${active ? C.black : C.creamBorder}`,
+              borderRadius: "999px",
+              cursor: "pointer",
+              transition: "background-color 150ms, color 150ms, border-color 150ms",
+            });
+            return (
+              <div
+                key={key}
+                className="flex items-center justify-between gap-2 px-3 py-2"
+                style={{
+                  background: C.white,
+                  borderTop: i < 2 ? "none" : `1px solid ${C.creamBorder}`,
+                  borderLeft: i % 2 === 1 ? `1px solid ${C.creamBorder}` : "none",
+                }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icon size={15} strokeWidth={1.6} style={{ color: C.black }} />
+                  <span className="text-[13px]" style={{ color: C.black, fontFamily: sans }}>{label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={setYes} style={pillStyle(isYes)}>Yes</button>
+                  <button type="button" onClick={setNo} style={pillStyle(!isYes)}>No</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+    </div>
+  );
+}
