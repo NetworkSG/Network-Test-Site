@@ -49,7 +49,6 @@ import { AdminFloorPlanTemplates } from "./AdminFloorPlanTemplates";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
 import { AdminOverview } from "./AdminOverview";
 import { AdminDebugPanel } from "./AdminDebugPanel";
-import { PendingQueueModal, usePendingCounts, type PendingTab } from "./admin/PendingQueueModal";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH = { Authorization: `Bearer ${publicAnonKey}` };
@@ -1748,8 +1747,6 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor" | "debug">("overview");
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [pendingModal, setPendingModal] = useState<PendingTab | null>(null);
-  const { counts: pendingCounts, refresh: refreshPendingCounts } = usePendingCounts(adminSection === "designers");
 
   // Filtered designers
   const filteredDesigners = designers.filter((d: any) => {
@@ -2054,32 +2051,6 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                     </span>
                   )}
                 </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPendingModal("designers")}
-                  className="relative inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#e5e7eb] rounded-xl text-[13px] font-medium text-[#364153] hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-all cursor-pointer"
-                >
-                  <UserPlus className="size-4 text-[#6a7282]" />
-                  Pending Designers
-                  {pendingCounts && pendingCounts.designers > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 bg-[#f59e0b] text-white text-[11px] font-semibold rounded-full">
-                      {pendingCounts.designers}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setPendingModal("projects")}
-                  className="relative inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#e5e7eb] rounded-xl text-[13px] font-medium text-[#364153] hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-all cursor-pointer"
-                >
-                  <FolderOpen className="size-4 text-[#6a7282]" />
-                  Pending Projects
-                  {pendingCounts && pendingCounts.projects > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 bg-[#f59e0b] text-white text-[11px] font-semibold rounded-full">
-                      {pendingCounts.projects}
-                    </span>
-                  )}
-                </button>
               </div>
             </div>
 
@@ -2820,16 +2791,6 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
         </div>,
         document.body
       )}
-
-      <PendingQueueModal
-        open={pendingModal !== null}
-        initialTab={pendingModal ?? "designers"}
-        onClose={() => setPendingModal(null)}
-        onPublished={() => {
-          refreshPendingCounts();
-          fetchDesigners();
-        }}
-      />
 
       {/* Keyframe for toast */}
       <style>{`

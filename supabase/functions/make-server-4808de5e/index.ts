@@ -1050,7 +1050,7 @@ app.use(
   "/*",
   cors({
     origin: ALLOWED_ORIGINS,
-    allowHeaders: ["Content-Type", "Authorization", "X-User-Token", "X-Designer-Token", "X-Homeowner-Token"],
+    allowHeaders: ["Content-Type", "Authorization", "X-User-Token", "X-Designer-Token", "X-Homeowner-Token", "X-Onboarding-Token"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length", "X-RateLimit-Remaining"],
     maxAge: 600,
@@ -1678,8 +1678,41 @@ async function sendNtfyOnboarding(opts: { firmName: string; variant: string; pro
 }
 
 // ─── Firm onboarding helpers ────────────────────────────────────
+async function findDesignerByPortalEmail(email: string): Promise<{ slug: string; data: any } | null> {
+  if (!email) return null;
+  const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+  const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+  if (!portalUrl || !portalKey) return null;
+  try {
+    const portal = createClient(portalUrl, portalKey);
+    const { data: acc } = await portal
+      .from("portal_accounts")
+      .select("username, email, active")
+      .ilike("email", email.trim())
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+    if (!acc?.username) return null;
+    const sb = getDesignerSupabase();
+    const { data } = await sb
+      .from("designers")
+      .select("slug, data")
+      .eq("slug", acc.username)
+      .limit(1)
+      .maybeSingle();
+    return data ? { slug: data.slug, data: data.data } : null;
+  } catch (err) {
+    console.log("findDesignerByPortalEmail error:", err);
+    return null;
+  }
+}
+
 async function findDesignerByEmail(email: string): Promise<{ slug: string; data: any } | null> {
   if (!email) return null;
+  // 1) Authoritative: match against ons-portal portal_accounts → username = slug
+  const viaPortal = await findDesignerByPortalEmail(email);
+  if (viaPortal) return viaPortal;
+  // 2) Fallback: legacy profiles that only have contactEmail stamped on designers.data
   const sb = getDesignerSupabase();
   const normalized = email.trim().toLowerCase();
   // Use ilike on the extracted JSON field — case-insensitive exact match.
@@ -1703,6 +1736,120 @@ async function ensureUniqueSlug(base: string): Promise<string> {
     candidate = `${sanitized}-${i}`;
     i++;
     if (i > 50) return `${sanitized}-${crypto.randomUUID().slice(0, 6)}`;
+  }
+}
+
+// ─── Airtable sync for firm onboarding → Clients Pipeline ────────────
+const AIRTABLE_BASE_ID = "appGjpb5nuJA3abDN";
+const AIRTABLE_TABLE_ID = "tblbnvUlMukbK2NRy"; // Clients Pipeline
+
+// PATCH the existing Airtable ID Profiles record the user picked during onboarding.
+async function updateAirtableFirmProfile(recordId: string, studio: any, email: string) {
+  const token = Deno.env.get("AIRTABLE_TOKEN");
+  if (!token || !recordId) return;
+  const s = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const arr = (v: any) => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []);
+  const licenses = arr(studio.licenses);
+  const licensesOther = s(studio.licensesOther);
+  if (licensesOther) licenses.push(licensesOther);
+  const notesParts = [
+    s(studio.tagline) && `Tagline: ${s(studio.tagline)}`,
+    s(studio.bio) && `Bio: ${s(studio.bio)}`,
+    s(studio.googleMapsUrl) && `Google Maps: ${s(studio.googleMapsUrl)}`,
+    s(studio.logoImage) && `Logo: ${s(studio.logoImage)}`,
+  ].filter(Boolean);
+  const fields: Record<string, any> = {};
+  if (email) fields["Email"] = email;
+  if (notesParts.length) fields["Notes"] = notesParts.join("\n\n");
+  const yearsNum = Number(s(studio.yearsExperience));
+  if (Number.isFinite(yearsNum) && yearsNum > 0) fields["Years of Experience"] = yearsNum;
+  if (s(studio.acraUen)) fields["ACRA/UEN"] = s(studio.acraUen);
+  if (s(studio.officeAddress)) fields["Office Address"] = s(studio.officeAddress);
+  if (s(studio.landedEligibility)) fields["Landed Project Eligibility"] = s(studio.landedEligibility);
+  if (s(studio.financing)) fields["Renovation Financing"] = s(studio.financing);
+  if (s(studio.portfolioUrl)) fields["Portfolio"] = s(studio.portfolioUrl);
+  if (arr(studio.serviceArea).length) fields["Service Area"] = arr(studio.serviceArea);
+  if (arr(studio.serviceProvided).length) fields["Services"] = arr(studio.serviceProvided);
+  if (arr(studio.projectTypes).length) fields["Typical Project Type"] = arr(studio.projectTypes);
+  if (arr(studio.designStyles).length) fields["Design Styles"] = arr(studio.designStyles);
+  if (arr(studio.specialisation).length) fields["Specialization"] = arr(studio.specialisation);
+  if (arr(studio.budgetRange).length) fields["Budget Range"] = arr(studio.budgetRange);
+  if (licenses.length) fields["Licenses"] = licenses;
+  try {
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}/${recordId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ fields, typecast: true }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.log("Airtable PATCH failed:", res.status, text.slice(0, 300));
+    } else {
+      console.log("Airtable PATCH ok for record:", recordId);
+    }
+  } catch (err) {
+    console.log("Airtable PATCH error:", err);
+  }
+}
+
+// unused — kept for reference. Creates a NEW Airtable row (legacy push flow).
+async function syncFirmToAirtable(studio: any, email: string, slug: string) {
+  const token = Deno.env.get("AIRTABLE_TOKEN");
+  if (!token) {
+    console.log("AIRTABLE_TOKEN not set, skipping Airtable sync");
+    return;
+  }
+  const s = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const arr = (v: any) => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []);
+  const licenses = arr(studio.licenses);
+  const licensesOther = s(studio.licensesOther);
+  if (licensesOther) licenses.push(licensesOther);
+  const notesParts = [
+    s(studio.tagline) && `Tagline: ${s(studio.tagline)}`,
+    s(studio.bio) && `Bio: ${s(studio.bio)}`,
+    s(studio.googleMapsUrl) && `Google Maps: ${s(studio.googleMapsUrl)}`,
+    slug && `Slug: ${slug}`,
+  ].filter(Boolean);
+  const fields: Record<string, any> = {
+    "Client": String(studio.firmName || "").slice(0, 200),
+    "Email": email,
+    "Classification": "Renovator",
+    "Stage": "Closed Won",
+    "Won Status": "Ongoing",
+    "Lead Source": "Website",
+    "Notes": notesParts.join("\n\n"),
+  };
+  const yearsNum = Number(s(studio.yearsExperience));
+  if (Number.isFinite(yearsNum) && yearsNum > 0) fields["Years of Experience"] = yearsNum;
+  if (s(studio.acraUen)) fields["ACRA/UEN"] = s(studio.acraUen);
+  if (s(studio.officeAddress)) fields["Office Address"] = s(studio.officeAddress);
+  if (s(studio.landedEligibility)) fields["Landed Project Eligibility"] = s(studio.landedEligibility);
+  if (s(studio.financing)) fields["Renovation Financing"] = s(studio.financing);
+  if (s(studio.portfolioUrl)) fields["Portfolio"] = s(studio.portfolioUrl);
+  if (arr(studio.serviceArea).length) fields["Service Area"] = arr(studio.serviceArea);
+  if (arr(studio.serviceProvided).length) fields["Services"] = arr(studio.serviceProvided);
+  if (arr(studio.projectTypes).length) fields["Typical Project Type"] = arr(studio.projectTypes);
+  if (arr(studio.designStyles).length) fields["Design Styles"] = arr(studio.designStyles);
+  if (arr(studio.specialisation).length) fields["Specialization"] = arr(studio.specialisation);
+  if (arr(studio.budgetRange).length) fields["Budget Range"] = arr(studio.budgetRange);
+  if (licenses.length) fields["Licenses"] = licenses;
+  try {
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fields, typecast: true }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.log("Airtable sync failed:", res.status, text.slice(0, 300));
+    } else {
+      console.log("Airtable sync ok for firm:", slug);
+    }
+  } catch (err) {
+    console.log("Airtable sync error:", err);
   }
 }
 
@@ -1763,7 +1910,6 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       propertySubType: String(project.propertySubType || "").slice(0, 80),
       style: String(project.style || "").slice(0, 100),
       worksIncluded: Array.isArray(project.worksIncluded) ? project.worksIncluded.slice(0, 20).map(String) : [],
-      status: "pending",
       submittedAt: now,
     };
 
@@ -1798,9 +1944,8 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
         },
         googleMapsLink: String(studio.googleMapsUrl || ""),
         contactEmail: email,
-        status: "pending",
         verified: false,
-        active: true,
+        active: false,
         acraUen: s(studio.acraUen),
         yearsExperience: years,
         licenses,
@@ -1844,11 +1989,14 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       await saveDesignerSection(slug, "projects", [pendingProject]);
       if (businessInfo.length) await saveDesignerSection(slug, "businessinfo", businessInfo);
       resultSlug = slug;
+      if (studio?.airtableRecordId) {
+        await updateAirtableFirmProfile(studio.airtableRecordId, studio, email);
+      }
     } else {
       if (!email) return c.json({ error: "Contact email is required" }, 400);
       const existing = await findDesignerByEmail(email);
       if (!existing) {
-        return c.json({ error: "No firm found for this email. Complete the full onboarding first." }, 404);
+        return c.json({ error: "No firm found for this email." }, 404);
       }
       const slug = existing.slug;
       const current = await getDesignerSection(slug, "projects");
@@ -1860,7 +2008,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
 
     sendNtfyOnboarding({
       firmName: body.studio?.firmName || email || resultSlug || "(unknown)",
-      variant: `${variant} (pending)`,
+      variant: `${variant} (inactive — awaiting activation)`,
       projectTitle: String(project.title || "").slice(0, 120),
     }).catch(() => {});
 
@@ -1868,6 +2016,191 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
   } catch (err) {
     console.log("firm-onboarding-submit error:", err);
     return c.json({ error: "Submission failed" }, 500);
+  }
+});
+
+// ─── Airtable PULL: ID Profiles → /firm-onboarding dropdown + prefill ───
+
+const AIRTABLE_FIRMS_CACHE: { at: number; data: { id: string; firmName: string }[] } = { at: 0, data: [] };
+const AIRTABLE_FIRMS_TTL_MS = 5 * 60 * 1000;
+
+async function fetchAirtableIdProfiles(fields: string[] = ["Client"]): Promise<any[]> {
+  const token = Deno.env.get("AIRTABLE_TOKEN");
+  if (!token) throw new Error("AIRTABLE_TOKEN not configured");
+  const records: any[] = [];
+  let offset: string | undefined;
+  const baseQs = `view=${encodeURIComponent("ID Profiles")}&pageSize=100${fields.map((f) => `&fields%5B%5D=${encodeURIComponent(f)}`).join("")}`;
+  for (let i = 0; i < 10; i++) {
+    const qs = offset ? `${baseQs}&offset=${encodeURIComponent(offset)}` : baseQs;
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}?${qs}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Airtable list failed: ${res.status}`);
+    const json = await res.json();
+    records.push(...(json.records || []));
+    offset = json.offset;
+    if (!offset) break;
+  }
+  return records;
+}
+
+app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const now = Date.now();
+    if (now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
+      return c.json({ firms: AIRTABLE_FIRMS_CACHE.data, cached: true });
+    }
+    const records = await fetchAirtableIdProfiles(["Client"]);
+    const firms = records
+      .map((r) => ({ id: r.id as string, firmName: String(r.fields?.Client || "").trim() }))
+      .filter((f) => f.id && f.firmName)
+      .sort((a, b) => a.firmName.localeCompare(b.firmName));
+    AIRTABLE_FIRMS_CACHE.at = now;
+    AIRTABLE_FIRMS_CACHE.data = firms;
+    return c.json({ firms, cached: false });
+  } catch (err) {
+    console.log("airtable-firms error:", err);
+    return c.json({ error: "Failed to load firms" }, 500);
+  }
+});
+
+function digitsOnly(s: string): string { return String(s || "").replace(/\D+/g, ""); }
+
+// Lightweight check: "is this email registered to a firm we can attach a project to?"
+// Mirrors the submit-time resolution order (portal_accounts → designers).
+app.post("/make-server-4808de5e/firm-onboarding/project-email-check", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many attempts" }, 429);
+    const body = await c.req.json().catch(() => null);
+    const email = typeof body?.email === "string" ? body.email.trim() : "";
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return c.json({ ok: false, message: "Enter a valid email" }, 400);
+    }
+    const match = await findDesignerByEmail(email);
+    if (!match) {
+      return c.json({ ok: false, message: "No firm found for this email." }, 404);
+    }
+    const firmName = match.data?.name || match.data?.firmName || match.slug;
+    return c.json({ ok: true, firmName, slug: match.slug });
+  } catch (err) {
+    console.log("project-email-check error:", err);
+    return c.json({ ok: false, message: "Lookup failed" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/firm-onboarding/airtable-lookup", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many attempts" }, 429);
+    const body = await c.req.json().catch(() => null);
+    const recordId = typeof body?.recordId === "string" ? body.recordId.trim() : "";
+    const identifier = typeof body?.identifier === "string" ? body.identifier.trim() : "";
+    if (!recordId || !identifier) return c.json({ ok: false, message: "Missing record or identifier" }, 400);
+    if (!/^rec[a-zA-Z0-9]{14}$/.test(recordId)) return c.json({ ok: false, message: "Invalid record id" }, 400);
+
+    const token = Deno.env.get("AIRTABLE_TOKEN");
+    if (!token) return c.json({ ok: false, message: "Airtable not configured" }, 500);
+
+    const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}/${recordId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 404) return c.json({ ok: false, message: "Firm not found" }, 404);
+    if (!res.ok) return c.json({ ok: false, message: "Lookup failed" }, 500);
+    const rec = await res.json();
+    const f = rec.fields || {};
+
+    const isEmailIdentifier = identifier.includes("@");
+    let matched = false;
+    if (isEmailIdentifier) {
+      const got = String(f.Email || "").trim().toLowerCase();
+      matched = !!got && got === identifier.toLowerCase();
+    } else {
+      const userDigits = digitsOnly(identifier);
+      const recDigits = digitsOnly(String(f.Phone || ""));
+      if (userDigits.length >= 8 && recDigits.length >= 8) {
+        matched = userDigits.slice(-8) === recDigits.slice(-8);
+      }
+    }
+    if (!matched) {
+      return c.json({ ok: false, message: "Email or phone doesn't match the one registered for this firm. Please check or contact us." }, 404);
+    }
+
+    const asArr = (v: any) => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []);
+    const asStr = (v: any) => (v == null ? "" : String(v).trim());
+
+    // Normalize Airtable values → client-side option strings so checkboxes/radios highlight.
+    // Match by "canonical" form: lowercase, strip all non-alphanumerics.
+    const canon = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const ALIASES: Record<string, string> = {
+      "designbuild": "designandbuild",
+      "designplusbuild": "designandbuild",
+    };
+    const normalizeTo = (raw: string, options: string[]): string => {
+      if (!raw) return raw;
+      const k0 = canon(raw);
+      if (!k0) return raw;
+      const k = ALIASES[k0] || k0;
+      const hit = options.find((o) => canon(o) === k);
+      if (hit) return hit;
+      const starts = options.find((o) => canon(o).startsWith(k) || k.startsWith(canon(o)));
+      return starts || raw;
+    };
+    const normArr = (arr: string[], options: string[]) => arr.map((v) => normalizeTo(v, options));
+
+    const CLIENT_LICENSES = ["HDB License", "BCA", "ISO", "SIDAC", "BizSafe"];
+    const CLIENT_SERVICE_AREA = ["West", "East", "North", "North-East", "Central"];
+    const CLIENT_SERVICES = ["Design and Build", "Design Only Service", "Project Management"];
+    const CLIENT_PROJECT_TYPES = [
+      "HDB (BTO, Resale, Maisonette)",
+      "Executive Condominium (EC)",
+      "Condominium (New Launch, Resale)",
+      "Landed Homes",
+    ];
+    const CLIENT_LANDED = ["Landed Homes", "Selected Landed Homes", "Not Suitable for Landed Projects"];
+    const CLIENT_DESIGN_STYLES = [
+      "Modern", "Contemporary", "Scandinavian", "Japandi", "Industrial", "Mid-Century",
+      "Minimalist", "Luxury/High-End", "Classic/Traditional", "Eclectic", "Muji-style", "Resort-style",
+    ];
+    const CLIENT_SPECIALISATION = [
+      "Design & Build", "Commercial", "Complimentary (Below 30K budget)", "Carpentry-Focused",
+      "Full Home Renovation", "Partial Renovation", "Premium / High-End Works",
+    ];
+    const CLIENT_BUDGET = [
+      "Under $30K — Partial Renovation",
+      "$30K–$50K — Essential Renovation",
+      "$50K–$80K — Full Renovation",
+      "$80K–$120K — Upgraded Renovation",
+      "$120K+ — High-End Renovation",
+    ];
+    const CLIENT_FINANCING = ["Renovation Loan Available", "Flexible Payment Staging", "No Financing Available"];
+
+    const yrs = f["Years of Experience"];
+    const prefill = {
+      contactEmail: String(f.Email || "").trim(),
+      acraUen: asStr(f["ACRA/UEN"]),
+      yearsExperience: yrs == null || yrs === "" ? "" : String(yrs),
+      officeAddress: asStr(f["Office Address"]),
+      serviceArea: normArr(asArr(f["Service Area"]), CLIENT_SERVICE_AREA),
+      serviceProvided: normArr(asArr(f.Services), CLIENT_SERVICES),
+      projectTypes: normArr(asArr(f["Typical Project Type"]), CLIENT_PROJECT_TYPES),
+      landedEligibility: normalizeTo(asStr(f["Landed Project Eligibility"]), CLIENT_LANDED),
+      designStyles: normArr(asArr(f["Design Styles"]), CLIENT_DESIGN_STYLES),
+      specialisation: normArr(asArr(f.Specialization), CLIENT_SPECIALISATION),
+      budgetRange: normArr(asArr(f["Budget Range"]), CLIENT_BUDGET),
+      financing: normalizeTo(asStr(f["Renovation Financing"]), CLIENT_FINANCING),
+      portfolioUrl: asStr(f.Portfolio),
+      licenses: normArr(asArr(f.Licenses), CLIENT_LICENSES),
+    };
+    return c.json({ ok: true, firmName: asStr(f.Client), prefill });
+  } catch (err) {
+    console.log("airtable-lookup error:", err);
+    return c.json({ ok: false, message: "Lookup failed" }, 500);
   }
 });
 
@@ -1881,138 +2214,6 @@ app.get("/make-server-4808de5e/admin/onboarding-submissions", async (c) => {
     return c.json({ submissions: entries, total: entries.length });
   } catch (err) {
     return c.json({ error: "Failed to load onboarding submissions: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: list designers with data.status === "pending"
-app.get("/make-server-4808de5e/admin/pending-designers", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const sb = getDesignerSupabase();
-    const { data, error } = await sb
-      .from("designers")
-      .select("slug, name, data")
-      .eq("data->>status", "pending");
-    if (error) return c.json({ error: error.message }, 500);
-    const rows = (data || []).map((r: any) => ({
-      slug: r.slug,
-      name: r.data?.name || r.name,
-      tagline: r.data?.tagline || "",
-      contactEmail: r.data?.contactEmail || "",
-      submittedAt: r.data?.submittedAt || "",
-    }));
-    rows.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
-    return c.json({ designers: rows, total: rows.length });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: list pending project items across all designers
-app.get("/make-server-4808de5e/admin/pending-projects", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const sb = getDesignerSupabase();
-    const { data, error } = await sb
-      .from("designer_sections")
-      .select("slug, data")
-      .eq("section", "projects");
-    if (error) return c.json({ error: error.message }, 500);
-    const out: any[] = [];
-    for (const row of (data || []) as any[]) {
-      const arr = Array.isArray(row.data) ? row.data : [];
-      arr.forEach((p: any, index: number) => {
-        if (p?.status === "pending") {
-          out.push({
-            slug: row.slug,
-            index,
-            name: p?.name || "",
-            meta: p?.meta || "",
-            driveUrl: p?.driveUrl || "",
-            submittedAt: p?.submittedAt || "",
-          });
-        }
-      });
-    }
-    out.sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
-    return c.json({ projects: out, total: out.length });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: publish pending designer
-app.post("/make-server-4808de5e/admin/publish-designer/:slug", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!slug) return c.json({ error: "Invalid slug" }, 400);
-    const sb = getDesignerSupabase();
-    const { data: row } = await sb.from("designers").select("data").eq("slug", slug).maybeSingle();
-    if (!row) return c.json({ error: "Designer not found" }, 404);
-    const next = { ...(row.data || {}), status: "published", verified: true, publishedAt: new Date().toISOString() };
-    await saveDesignerProfile(slug, next);
-    return c.json({ ok: true, slug });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: publish pending project by index
-app.post("/make-server-4808de5e/admin/publish-project/:slug", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!slug) return c.json({ error: "Invalid slug" }, 400);
-    const body = await c.req.json().catch(() => ({}));
-    const index = Number(body?.index);
-    if (!Number.isInteger(index) || index < 0) return c.json({ error: "Invalid index" }, 400);
-    const current = await getDesignerSection(slug, "projects");
-    if (!Array.isArray(current) || !current[index]) return c.json({ error: "Project not found" }, 404);
-    const next = current.slice();
-    next[index] = { ...next[index], status: "published" };
-    await saveDesignerSection(slug, "projects", next);
-    return c.json({ ok: true, slug, index });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: reject (delete) pending designer + all sections
-app.post("/make-server-4808de5e/admin/reject-designer/:slug", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!slug) return c.json({ error: "Invalid slug" }, 400);
-    await deleteDesignerAndSections(slug);
-    return c.json({ ok: true, slug });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
-  }
-});
-
-// Admin: reject pending project by index
-app.post("/make-server-4808de5e/admin/reject-project/:slug", async (c) => {
-  const auth = await requireDebugAdmin(c);
-  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
-  try {
-    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!slug) return c.json({ error: "Invalid slug" }, 400);
-    const body = await c.req.json().catch(() => ({}));
-    const index = Number(body?.index);
-    if (!Number.isInteger(index) || index < 0) return c.json({ error: "Invalid index" }, 400);
-    const current = await getDesignerSection(slug, "projects");
-    if (!Array.isArray(current) || !current[index]) return c.json({ error: "Project not found" }, 404);
-    const next = current.filter((_: any, i: number) => i !== index);
-    await saveDesignerSection(slug, "projects", next);
-    return c.json({ ok: true, slug, index });
-  } catch (err) {
-    return c.json({ error: "Failed: " + String(err).slice(0, 200) }, 500);
   }
 });
 
@@ -4099,7 +4300,7 @@ app.get("/make-server-4808de5e/designers", async (c) => {
 
     const activeDesigners = showAll
       ? allDesigners
-      : allDesigners.filter((d: any) => d.active !== false && d.status !== "pending");
+      : allDesigners.filter((d: any) => d.active !== false);
     // Pagination — limit response size to prevent bulk scraping
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
@@ -4137,14 +4338,12 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Designer not found" }, 404);
     }
 
-    if (profile.status === "pending" && c.req.query("preview") !== "1") {
+    if (profile.active === false && c.req.query("preview") !== "1") {
       return c.json({ error: "Designer not found" }, 404);
     }
 
     const rawProjects = sections.projects || profile.projects || [];
-    const filteredProjects = c.req.query("preview") === "1"
-      ? rawProjects
-      : (Array.isArray(rawProjects) ? rawProjects.filter((p: any) => p?.status !== "pending") : rawProjects);
+    const filteredProjects = rawProjects;
 
     console.log(`Fetched designer profile: ${slug}`);
     return c.json({
@@ -6383,6 +6582,88 @@ app.post("/make-server-4808de5e/admin/sync-pipeline-to-designers", async (c) => 
     });
   } catch (err) {
     console.log("Error in sync-pipeline-to-designers:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// SYNC: ons-portal portal_accounts.email → ons-website designers.data.contactEmail
+// Keyed by username → slug. Only fills missing contactEmail unless ?force=true.
+// Protected by CRON_SECRET.
+// ─────────────────────────────────────────────────────────────
+app.post("/make-server-4808de5e/admin/sync-portal-emails", async (c) => {
+  try {
+    const cronSecret = c.req.header("x-cron-secret");
+    const expected = Deno.env.get("CRON_SECRET");
+    if (!cronSecret || !expected || cronSecret !== expected) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+
+    const portalUrl = Deno.env.get("ONS_PORTAL_URL");
+    const portalKey = Deno.env.get("ONS_PORTAL_SERVICE_ROLE_KEY");
+    if (!portalUrl || !portalKey) {
+      return c.json({ error: "Portal not configured" }, 500);
+    }
+    const forceSync = c.req.query("force") === "true";
+    const dryRun = c.req.query("dryRun") === "true";
+
+    const portalClient = createClient(portalUrl, portalKey);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const { data: accounts, error: accErr } = await portalClient
+      .from("portal_accounts")
+      .select("username, email, active")
+      .eq("active", true);
+    if (accErr || !accounts) {
+      return c.json({ error: "Failed to fetch portal_accounts", detail: accErr?.message }, 500);
+    }
+
+    const results = { updated: [] as string[], skipped: [] as string[], noEmail: [] as string[], noDesigner: [] as string[], errors: [] as string[] };
+
+    for (const acc of accounts) {
+      const slug = (acc.username || "").trim();
+      const email = (acc.email || "").trim().toLowerCase();
+      if (!slug) continue;
+      if (!email) { results.noEmail.push(slug); continue; }
+
+      try {
+        const { data: existing } = await supabase.from("designers").select("name, data").eq("slug", slug).maybeSingle();
+        if (!existing) { results.noDesigner.push(slug); continue; }
+
+        const currentEmail = (existing.data?.contactEmail || "").trim().toLowerCase();
+        if (currentEmail && !forceSync) { results.skipped.push(slug); continue; }
+        if (currentEmail === email) { results.skipped.push(slug); continue; }
+
+        if (dryRun) { results.updated.push(`${slug} (dry: "${currentEmail}" → "${email}")`); continue; }
+
+        const nextData = { ...(existing.data || {}), contactEmail: email };
+        const { error: upErr } = await supabase
+          .from("designers")
+          .update({ data: nextData, updated_at: new Date().toISOString() })
+          .eq("slug", slug);
+        if (upErr) { results.errors.push(`${slug}: ${upErr.message}`); continue; }
+        results.updated.push(slug);
+      } catch (e) {
+        results.errors.push(`${slug}: ${(e as Error).message}`);
+      }
+    }
+
+    console.log(`Portal email sync: updated=${results.updated.length}, skipped=${results.skipped.length}, noEmail=${results.noEmail.length}, noDesigner=${results.noDesigner.length}, errors=${results.errors.length}`);
+    return c.json({
+      success: true,
+      dryRun,
+      force: forceSync,
+      counts: {
+        updated: results.updated.length,
+        skipped: results.skipped.length,
+        noEmail: results.noEmail.length,
+        noDesigner: results.noDesigner.length,
+        errors: results.errors.length,
+      },
+      details: results,
+    });
+  } catch (err) {
+    console.log("Error in sync-portal-emails:", err);
     return c.json({ error: "Internal server error" }, 500);
   }
 });

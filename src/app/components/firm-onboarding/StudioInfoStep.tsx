@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { C, serif, sans } from "../homepage/v8/primitives";
 import { Camera, Loader2, Check } from "lucide-react";
-import { uploadOnboardingImage, StudioInfo } from "./onboardingApi";
+import { uploadOnboardingImage, lookupAirtableFirm, StudioInfo } from "./onboardingApi";
+import { FirmCombobox } from "./FirmCombobox";
 
 const labelStyle: React.CSSProperties = {
   fontSize: "11px",
@@ -85,11 +86,12 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateStudio(s: StudioInfo): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!s.firmName.trim()) errors.firmName = "Firm name is required";
+  if (!s.airtableRecordId) errors.firmName = "Select your firm from the dropdown";
+  else if (!s.firmName.trim()) errors.firmName = "Firm name is required";
   if (!s.tagline.trim()) errors.tagline = "Tagline is required";
   if (!s.bio.trim()) errors.bio = "About / bio is required";
   if (!s.logoImage) errors.logoImage = "Upload your firm logo";
-  if (!emailRe.test(s.contactEmail.trim())) errors.contactEmail = "Enter your firm's contact email";
+  if (!s.contactEmail.trim()) errors.contactEmail = "Confirm your registered email or phone";
   if (!isValidGoogleMaps(s.googleMapsUrl)) errors.googleMapsUrl = "Paste a valid Google Maps URL";
   if (!s.acraUen.trim()) errors.acraUen = "ACRA/UEN is required";
   if (!s.yearsExperience.trim()) errors.yearsExperience = "Years of experience is required";
@@ -227,9 +229,81 @@ export function StudioInfoStep({
   const logoRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [identifier, setIdentifier] = useState<string>(value.contactEmail || "");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "matched" | "mismatch">(
+    value.airtableRecordId && value.contactEmail ? "matched" : "idle"
+  );
+  const [lookupMessage, setLookupMessage] = useState<string>("");
   const errors = submitAttempted ? validateStudio(value) : {};
 
   const patch = (p: Partial<StudioInfo>) => onChange({ ...value, ...p });
+
+  const handleFirmSelect = (recordId: string, firmName: string) => {
+    onChange({
+      ...value,
+      airtableRecordId: recordId,
+      firmName,
+      contactEmail: "",
+      acraUen: "",
+      yearsExperience: "",
+      officeAddress: "",
+      licenses: [],
+      licensesOther: "",
+      serviceArea: [],
+      serviceProvided: [],
+      projectTypes: [],
+      landedEligibility: "",
+      designStyles: [],
+      specialisation: [],
+      budgetRange: [],
+      financing: "",
+      portfolioUrl: "",
+    });
+    setIdentifier("");
+    setLookupStatus("idle");
+    setLookupMessage("");
+  };
+
+  useEffect(() => {
+    const raw = identifier.trim();
+    if (!value.airtableRecordId) { setLookupStatus("idle"); setLookupMessage(""); return; }
+    const isEmail = raw.includes("@");
+    const digits = raw.replace(/\D+/g, "");
+    const ready = isEmail ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) : digits.length >= 8;
+    if (!ready) { setLookupStatus("idle"); setLookupMessage(""); return; }
+    setLookupStatus("checking");
+    const recordId = value.airtableRecordId;
+    const t = setTimeout(async () => {
+      const res = await lookupAirtableFirm(recordId, raw);
+      if (res.ok) {
+        const p = res.prefill;
+        const fill: Partial<StudioInfo> = { contactEmail: p.contactEmail || raw };
+        const emptyArr = (a?: string[]) => !Array.isArray(a) || a.length === 0;
+        const emptyStr = (s?: string) => !s || !s.trim();
+        if (emptyStr(value.acraUen) && p.acraUen) fill.acraUen = p.acraUen;
+        if (emptyStr(value.yearsExperience) && p.yearsExperience) fill.yearsExperience = p.yearsExperience;
+        if (emptyStr(value.officeAddress) && p.officeAddress) fill.officeAddress = p.officeAddress;
+        if (emptyStr(value.landedEligibility) && p.landedEligibility) fill.landedEligibility = p.landedEligibility;
+        if (emptyStr(value.financing) && p.financing) fill.financing = p.financing;
+        if (emptyStr(value.portfolioUrl) && p.portfolioUrl) fill.portfolioUrl = p.portfolioUrl;
+        if (emptyArr(value.serviceArea) && p.serviceArea?.length) fill.serviceArea = p.serviceArea;
+        if (emptyArr(value.serviceProvided) && p.serviceProvided?.length) fill.serviceProvided = p.serviceProvided;
+        if (emptyArr(value.projectTypes) && p.projectTypes?.length) fill.projectTypes = p.projectTypes;
+        if (emptyArr(value.designStyles) && p.designStyles?.length) fill.designStyles = p.designStyles;
+        if (emptyArr(value.specialisation) && p.specialisation?.length) fill.specialisation = p.specialisation;
+        if (emptyArr(value.budgetRange) && p.budgetRange?.length) fill.budgetRange = p.budgetRange;
+        if (emptyArr(value.licenses) && p.licenses?.length) fill.licenses = p.licenses;
+        onChange({ ...value, ...fill });
+        setLookupStatus("matched");
+        setLookupMessage("Prefilled from ID Profiles");
+      } else {
+        setLookupStatus("mismatch");
+        setLookupMessage(res.message);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identifier, value.airtableRecordId]);
 
   const handleLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -299,13 +373,68 @@ export function StudioInfoStep({
 
       <div>
         <label style={labelStyle}>Firm Name <span style={{ color: "#c14" }}>*</span></label>
-        <input
-          type="text" value={value.firmName} placeholder="e.g. Aldrich Studio" maxLength={80}
-          onChange={(e) => patch({ firmName: e.target.value })} style={inputStyle}
-          onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
+        <FirmCombobox
+          value={value.firmName}
+          recordId={value.airtableRecordId}
+          onSelect={handleFirmSelect}
         />
+        <p className="mt-1 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
+          Pick your firm from the list. Can't find it? Contact us to get listed.
+        </p>
         <FieldError msg={errors.firmName} />
+      </div>
+
+      <div>
+        <label style={labelStyle}>Registered Email or Phone <span style={{ color: "#c14" }}>*</span></label>
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            value={identifier}
+            placeholder="Email or phone registered on ID Profiles"
+            onChange={(e) => { setIdentifier(e.target.value); patch({ contactEmail: e.target.value.includes("@") ? e.target.value.trim() : value.contactEmail }); }}
+            disabled={!value.airtableRecordId}
+            style={{
+              ...inputStyle,
+              paddingRight: "40px",
+              borderColor: lookupStatus === "matched" ? "#1f7a3a" : lookupStatus === "mismatch" ? "#c14" : C.creamBorder,
+              opacity: value.airtableRecordId ? 1 : 0.55,
+            }}
+            onFocus={(e) => { if (lookupStatus === "idle") e.currentTarget.style.borderColor = C.black; }}
+            onBlur={(e) => {
+              if (lookupStatus === "matched") e.currentTarget.style.borderColor = "#1f7a3a";
+              else if (lookupStatus === "mismatch") e.currentTarget.style.borderColor = "#c14";
+              else e.currentTarget.style.borderColor = C.creamBorder;
+            }}
+          />
+          <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", pointerEvents: "none" }}>
+            {lookupStatus === "checking" && <Loader2 size={16} className="animate-spin" style={{ color: C.grayLight }} />}
+            {lookupStatus === "matched" && <Check size={16} strokeWidth={3} style={{ color: "#1f7a3a" }} />}
+            {lookupStatus === "mismatch" && <span style={{ color: "#c14", fontSize: 18, lineHeight: 1, fontWeight: 600 }}>×</span>}
+          </span>
+        </div>
+        {lookupStatus === "checking" && (
+          <p className="mt-1.5 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
+            Checking ID Profiles…
+          </p>
+        )}
+        {lookupStatus === "matched" && (
+          <p className="mt-1.5 text-[11px] flex items-center gap-1.5" style={{ color: "#1f7a3a", fontFamily: sans }}>
+            <Check size={11} strokeWidth={3} /> {lookupMessage}
+          </p>
+        )}
+        {lookupStatus === "mismatch" && (
+          <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>
+            {lookupMessage}
+          </p>
+        )}
+        {lookupStatus === "idle" && (
+          <p className="mt-1 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
+            Confirms you're authorised to manage this firm's profile.
+          </p>
+        )}
+        {submitAttempted && errors.contactEmail && lookupStatus !== "matched" && (
+          <FieldError msg={errors.contactEmail} />
+        )}
       </div>
 
       <div>
@@ -337,21 +466,7 @@ export function StudioInfoStep({
       {/* ── Contact & registration ───────────────── */}
       <div>
         <h3 style={sectionHeadingStyle}>Contact & registration</h3>
-        <p style={helperStyle}>So we can match new project submissions to your profile and verify your firm.</p>
-      </div>
-
-      <div>
-        <label style={labelStyle}>Contact Email <span style={{ color: "#c14" }}>*</span></label>
-        <input
-          type="email" value={value.contactEmail} placeholder="hello@yourfirm.com"
-          onChange={(e) => patch({ contactEmail: e.target.value })} style={inputStyle}
-          onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
-        />
-        <p className="mt-1 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
-          Use this same email later when adding new projects to your profile.
-        </p>
-        <FieldError msg={errors.contactEmail} />
+        <p style={helperStyle}>Review and edit anything we prefilled from your ID Profiles record.</p>
       </div>
 
       <div>

@@ -77,6 +77,7 @@ export interface StudioInfo {
   budgetRange: string[];
   financing: string;
   portfolioUrl: string;
+  airtableRecordId: string;
 }
 
 export interface ProjectSubmission {
@@ -97,6 +98,45 @@ export interface OnboardingPayload {
   studio?: StudioInfo;
   project: ProjectSubmission;
   contactEmail?: string;
+}
+
+export async function listAirtableFirms(): Promise<{ id: string; firmName: string }[]> {
+  const res = await fetch(`${API}/firm-onboarding/airtable-firms`, {
+    headers: { Authorization: `Bearer ${publicAnonKey}` },
+  });
+  if (!res.ok) throw new Error(`Failed to load firms (${res.status})`);
+  const json = await res.json();
+  return Array.isArray(json.firms) ? json.firms : [];
+}
+
+export type LookupResult =
+  | { ok: true; firmName: string; prefill: Partial<StudioInfo> }
+  | { ok: false; message: string };
+
+export type ProjectEmailCheck =
+  | { ok: true; firmName: string; slug: string }
+  | { ok: false; message: string };
+
+export async function checkProjectEmail(email: string): Promise<ProjectEmailCheck> {
+  const res = await fetch(`${API}/firm-onboarding/project-email-check`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const json = await res.json().catch(() => null);
+  if (res.ok && json?.ok) return { ok: true, firmName: json.firmName, slug: json.slug };
+  return { ok: false, message: (json && json.message) || `Lookup failed (${res.status})` };
+}
+
+export async function lookupAirtableFirm(recordId: string, identifier: string): Promise<LookupResult> {
+  const res = await fetch(`${API}/firm-onboarding/airtable-lookup`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ recordId, identifier }),
+  });
+  const json = await res.json().catch(() => null);
+  if (res.ok && json?.ok) return { ok: true, firmName: json.firmName, prefill: json.prefill || {} };
+  return { ok: false, message: (json && json.message) || `Lookup failed (${res.status})` };
 }
 
 export async function submitOnboarding(payload: OnboardingPayload): Promise<{ ok: true; id: string }> {

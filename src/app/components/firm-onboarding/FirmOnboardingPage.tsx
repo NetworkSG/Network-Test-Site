@@ -27,6 +27,7 @@ const initialStudio: StudioInfo = {
   budgetRange: [],
   financing: "",
   portfolioUrl: "",
+  airtableRecordId: "",
 };
 
 const initialProject: ProjectSubmission = {
