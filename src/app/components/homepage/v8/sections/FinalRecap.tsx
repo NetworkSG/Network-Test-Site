@@ -1,5 +1,6 @@
 import { C, serif, sans, FadeIn, TagLabel } from "../primitives";
 import { FINAL_RECAP } from "../../content";
+import { useHomeownerCount } from "../useHomeownerCount";
 
 const bulletIcons = [
   /* BadgeCheck */ <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" /><path d="m9 12 2 2 4-4" /></svg>,
@@ -10,6 +11,7 @@ const bulletIcons = [
 ];
 
 export function FinalRecap({ scrollToForm }: { scrollToForm: () => void }) {
+  const homeownerCount = useHomeownerCount();
   return (
     <section className="px-6 md:px-10 pb-10">
       <div className="max-w-[1280px] mx-auto">
@@ -20,7 +22,7 @@ export function FinalRecap({ scrollToForm }: { scrollToForm: () => void }) {
               Ready to find <span style={{ color: "rgba(255,255,255,0.5)" }}>a designer you can trust?</span>
             </h2>
             <p className="text-[15px] font-normal leading-[1.75] max-w-[480px] mx-auto mb-10" style={{ color: "rgba(255,255,255,0.55)", fontFamily: sans }}>
-              {FINAL_RECAP.subheadline}
+              {homeownerCount} Singapore homeowners got matched this year. Takes 2 minutes. Completely free.
             </p>
 
             {/* Icon pill badges */}

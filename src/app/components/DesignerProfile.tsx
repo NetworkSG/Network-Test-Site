@@ -352,7 +352,9 @@ export function HeroSection() {
   const editCtx = useContext(ProfileEditContext);
   const p = ctx?.profile;
   const cp = p?.coverProject;
-  const coverImg = p?.images?.cover ? resolveImg(p.images.cover) : PLACEHOLDER_COVER;
+  // Check for a featured project in the projects array as override
+  const featuredProject = ctx?.projects?.find((proj: any) => proj.isFeatured);
+  const coverImg = featuredProject?.coverImage ? resolveImg(featuredProject.coverImage) : (featuredProject?.image ? resolveImg(featuredProject.image) : (p?.images?.cover ? resolveImg(p.images.cover) : PLACEHOLDER_COVER));
   const logoImg = p?.images?.logo ? resolveImg(p.images.logo) : PLACEHOLDER_LOGO;
   const companyName = p?.name || "Input Interior Designer name";
   const taglineText = p?.tagline || "Add your tagline";
@@ -361,43 +363,11 @@ export function HeroSection() {
   const isVerified = p?.verified ?? false;
   const hasGoogleR = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
   const rating = hasGoogleR ? String(ctx!.googleMeta!.rating) : (p?.stats?.rating || "4.9");
-  const coverName = cp?.name || "Featured project name";
-  const coverCost = cp?.cost || "";
-  const coverArea = cp?.area || "";
-  const coverYear = cp?.year || "";
-  const coverStyle = cp?.style || "";
-
-  const [coverEditing, setCoverEditing] = useState(false);
-  const [coverDraft, setCoverDraft] = useState({ name: coverName, cost: coverCost, area: coverArea, year: coverYear, style: coverStyle });
-  const [coverUploading, setCoverUploading] = useState(false);
-  const coverFileRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!coverEditing) {
-      setCoverDraft({ name: coverName, cost: coverCost, area: coverArea, year: coverYear, style: coverStyle });
-    }
-  }, [coverName, coverCost, coverArea, coverYear, coverStyle, coverEditing]);
-
-  const handleCoverImagePick = async (file: File) => {
-    if (!editCtx?.uploadImage) return;
-    setCoverUploading(true);
-    try {
-      const url = await editCtx.uploadImage(file);
-      if (url) await editCtx.save("images.cover", url);
-    } finally {
-      setCoverUploading(false);
-    }
-  };
-
-  const handleCoverSave = async () => {
-    if (!editCtx) return;
-    if (coverDraft.name !== coverName) await editCtx.save("coverProject.name", coverDraft.name);
-    if (coverDraft.cost !== coverCost) await editCtx.save("coverProject.cost", coverDraft.cost);
-    if (coverDraft.area !== coverArea) await editCtx.save("coverProject.area", coverDraft.area);
-    if (coverDraft.year !== coverYear) await editCtx.save("coverProject.year", coverDraft.year);
-    if (coverDraft.style !== coverStyle) await editCtx.save("coverProject.style", coverDraft.style);
-    setCoverEditing(false);
-  };
+  const coverName = featuredProject?.name || featuredProject?.title || cp?.name || "Featured project name";
+  const coverCost = featuredProject?.cost || cp?.cost || "";
+  const coverArea = featuredProject?.size || cp?.area || "";
+  const coverYear = featuredProject?.year || cp?.year || "";
+  const coverStyle = featuredProject?.style || cp?.style || "";
 
   return (
     <section className="relative w-full">
@@ -420,83 +390,8 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Edit pencil */}
-        {editCtx && !coverEditing && (
-          <button
-            type="button"
-            onClick={() => setCoverEditing(true)}
-            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 bg-white/95 hover:bg-white text-[#0f0f0d] rounded-full px-3 py-1.5 transition-colors"
-            title="Edit cover image and project details"
-          >
-            <svg className="size-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            </svg>
-            <span style={{ fontFamily: sans }} className="text-[12px] font-medium uppercase tracking-[0.08em]">Edit cover</span>
-          </button>
-        )}
       </div>
 
-      {/* Cover edit panel (preserved for editor) */}
-      {editCtx && coverEditing && (
-        <div className="relative z-20 mt-4 bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#d8d3c8]" style={{ background: C.cream }}>
-            <div className="flex items-center gap-2">
-              <svg className="size-[14px]" style={{ color: C.black }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-              </svg>
-              <span style={{ fontFamily: sans, color: C.black }} className="text-[11px] font-semibold uppercase tracking-[0.12em]">Editing · Cover</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setCoverEditing(false)} style={{ fontFamily: sans, color: C.grayLight }} className="text-[13px] px-3 py-1.5 rounded-[8px] transition-colors hover:opacity-70">Cancel</button>
-              <button type="button" onClick={handleCoverSave} style={{ fontFamily: sans, background: C.black }} className="text-[13px] font-medium text-white hover:opacity-85 px-4 py-1.5 rounded-[8px] transition-opacity">Save</button>
-            </div>
-          </div>
-          <div className="p-6 grid md:grid-cols-[280px_1fr] gap-6">
-            <div>
-              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-2">Cover photo</p>
-              <button
-                type="button"
-                onClick={() => coverFileRef.current?.click()}
-                className="relative w-full h-[160px] rounded-[12px] overflow-hidden border-2 border-dashed border-[#d8d3c8] hover:border-[#0f0f0d] transition-colors group/cover"
-                style={{ background: C.cream }}
-              >
-                <img src={coverImg} alt="Cover preview" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span style={{ fontFamily: sans }} className="text-[12px] font-medium text-white">{coverUploading ? "Uploading…" : "Click to replace"}</span>
-                </div>
-              </button>
-              <input
-                ref={coverFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCoverImagePick(f); e.currentTarget.value = ""; }}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Project name", key: "name" as const, span: 2, ph: "Serangoon Terrace" },
-                { label: "Renovation cost", key: "cost" as const, span: 1, ph: "$128,500" },
-                { label: "Area size", key: "area" as const, span: 1, ph: "145m²" },
-                { label: "Year completed", key: "year" as const, span: 1, ph: "2024" },
-                { label: "Interior style", key: "style" as const, span: 1, ph: "Modern Contemporary" },
-              ].map((f) => (
-                <label key={f.key} className={`${f.span === 2 ? "col-span-2" : ""} block`}>
-                  <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[11px] font-semibold uppercase tracking-[0.12em]">{f.label}</span>
-                  <input
-                    type="text"
-                    value={coverDraft[f.key]}
-                    onChange={(e) => setCoverDraft({ ...coverDraft, [f.key]: e.target.value })}
-                    className="mt-1 w-full h-[44px] border border-[#d8d3c8] rounded-[10px] px-3 text-[14px] focus:outline-none focus:border-[#0f0f0d] transition-colors"
-                    style={{ fontFamily: sans, color: C.black, background: C.cream }}
-                    placeholder={f.ph}
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -1567,6 +1462,15 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
           <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
           <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
         </div>
+        {/* Featured badge */}
+        {p.isFeatured && (
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 shadow-sm">
+            <svg className="size-[12px]" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#d97706", fontFamily: "'DM_Sans',sans-serif" }}>Featured</span>
+          </div>
+        )}
         {editCtx && onRemove && (
           <button
             type="button"

@@ -208,7 +208,7 @@ export const COMPLETION = {
 export const TRUST_STATS: TrustStat[] = [
   { value: "120+", label: "verified firms" },
   { value: "4.8", label: "average rating" },
-  { value: "3,214", label: "matched this year" },
+  { value: "3,214", label: "homeowners" },
   { value: "$0", label: "fee to homeowners" },
 ];
 

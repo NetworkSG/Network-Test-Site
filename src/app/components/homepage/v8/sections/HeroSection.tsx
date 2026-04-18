@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { C, serif, sans, FadeIn, TagLabel } from "../primitives";
 import { HERO, QUALIFYING_QUESTIONS, COMPLETION, TESTIMONIALS } from "../../content";
+import { useHomeownerCount } from "../useHomeownerCount";
 import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
@@ -142,6 +143,7 @@ interface HeroProps {
 export function HeroSection({ formState, setFormState, form, setForm, isSubmitting, handleSubmit, heroRef }: HeroProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const avatars = TESTIMONIALS.items.slice(0, 3).map(t => t.avatar);
+  const homeownerCount = useHomeownerCount();
 
   return (
     <section ref={heroRef} id="lead-form" className="relative pt-[100px] md:pt-[100px] min-h-screen flex flex-col">
@@ -166,7 +168,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
                       className="flex items-center gap-2 mb-8">
                       <span className="w-6 h-[1.5px] inline-block" style={{ background: C.grayLight }} />
-                      <TagLabel>{HERO.eyebrow}</TagLabel>
+                      <TagLabel>Trusted by {homeownerCount} Singapore homeowners this year</TagLabel>
                     </motion.div>
 
                     <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
@@ -202,7 +204,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                           ))}
                         </div>
                         <span className="text-[12px] font-medium" style={{ color: C.gray, fontFamily: sans }}>
-                          3,214 homeowners matched this year
+                          {homeownerCount} homeowners matched this year
                         </span>
                       </div>
 

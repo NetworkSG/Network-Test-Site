@@ -43,10 +43,12 @@ import {
   Power,
   Search,
   Filter,
+  Activity,
 } from "lucide-react";
 import { AdminFloorPlanTemplates } from "./AdminFloorPlanTemplates";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
 import { AdminOverview } from "./AdminOverview";
+import { AdminDebugPanel } from "./AdminDebugPanel";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH = { Authorization: `Bearer ${publicAnonKey}` };
@@ -1742,7 +1744,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [showForm, setShowForm] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [designerToggleConfirm, setDesignerToggleConfirm] = useState<{ slug: string; currentlyActive: boolean } | null>(null);
-  const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor">("overview");
+  const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor" | "debug">("overview");
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
@@ -1961,7 +1963,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           </div>
           <div>
             <h1 className="font-bold text-[18px] text-[#101828] leading-tight">Admin Dashboard</h1>
-            <p className="text-[12px] text-[#9ca3af]">{adminSection === "overview" ? "Platform Analytics & Insights" : adminSection === "designers" ? "Manage Designer Profiles" : adminSection === "templates" ? "Manage Floor Plan Templates" : "Create & Edit Floor Plan Templates"}</p>
+            <p className="text-[12px] text-[#9ca3af]">{adminSection === "overview" ? "Platform Analytics & Insights" : adminSection === "designers" ? "Manage Designer Profiles" : adminSection === "templates" ? "Manage Floor Plan Templates" : adminSection === "debug" ? "Debug & Monitoring" : "Create & Edit Floor Plan Templates"}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -2005,6 +2007,9 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
             { key: "overview" as const, icon: LayoutDashboard, label: "Overview" },
             { key: "designers" as const, icon: Users, label: "Designer Profiles" },
             { key: "template-editor" as const, icon: PenLine, label: "Template Editor" },
+            ...((adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
+              ? [{ key: "debug" as const, icon: Activity, label: "Debug" }]
+              : []),
           ]).map((s) => (
             <button
               key={s.key}
@@ -2027,6 +2032,10 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           <AdminOverview onNavigate={(section) => setAdminSection(section as any)} />
         ) : adminSection === "template-editor" ? (
           <AdminTemplateEditorTab />
+        ) : adminSection === "debug" ? (
+          (adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
+            ? <AdminDebugPanel />
+            : <div className="p-8 text-center text-[#6a7282]">Access restricted.</div>
         ) : !showForm ? (
           /* ──────── DESIGNER LIST VIEW ──────── */
           <div>

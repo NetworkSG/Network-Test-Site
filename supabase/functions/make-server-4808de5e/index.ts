@@ -263,6 +263,59 @@ function getRateLimitKey(ip: string, route: string): string {
   return `${ip}:${route}`;
 }
 
+// --- ntfy push for client errors ---
+const NTFY_IGNORE_PATTERNS = [
+  /webkit\.messageHandlers/i,
+  /ResizeObserver loop/i,
+  /Non-Error promise rejection captured/i,
+  /Script error\.?$/i,
+  /Load failed/i,
+  /Failed to fetch/i,
+];
+const NTFY_IGNORE_UA = [
+  /FBAN|FBAV|FB_IAB/i, // Facebook in-app browser
+  /Instagram/i,
+  /Line\//i,
+  /bot|crawl|spider|facebookexternalhit|slurp/i,
+];
+const ntfyDedupe = new Map<string, number>();
+const NTFY_DEDUPE_MS = 5 * 60 * 1000;
+
+async function sendNtfyError(opts: { message: string; url: string; userAgent: string }) {
+  const topic = Deno.env.get("NTFY_TOPIC");
+  if (!topic) return;
+
+  const { message, url, userAgent } = opts;
+  if (NTFY_IGNORE_PATTERNS.some((r) => r.test(message))) return;
+  if (NTFY_IGNORE_UA.some((r) => r.test(userAgent))) return;
+
+  const fingerprint = message.slice(0, 120);
+  const now = Date.now();
+  const last = ntfyDedupe.get(fingerprint) || 0;
+  if (now - last < NTFY_DEDUPE_MS) return;
+  ntfyDedupe.set(fingerprint, now);
+  if (ntfyDedupe.size > 200) {
+    for (const [k, t] of ntfyDedupe) {
+      if (now - t > NTFY_DEDUPE_MS) ntfyDedupe.delete(k);
+    }
+  }
+
+  const body = `${message}\n\nRoute: ${url || "/"}\nUA: ${userAgent.slice(0, 80)}`;
+  try {
+    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      method: "POST",
+      headers: {
+        Title: "Network site error",
+        Priority: "default",
+        Tags: "warning",
+      },
+      body,
+    });
+  } catch {
+    // best-effort only
+  }
+}
+
 function checkRateLimit(ip: string, route: string): { allowed: boolean; remaining: number; retryAfterMs: number } {
   const limit = RATE_LIMITS[route] || RATE_LIMITS.default;
   const key = getRateLimitKey(ip, route);
@@ -7014,6 +7067,10 @@ app.post("/make-server-4808de5e/client-error", async (c) => {
       clientTs,
       ts: new Date().toISOString(),
     });
+
+    // Fire-and-forget push to ntfy (skip known noise + dedupe 5 min)
+    sendNtfyError({ message, url, userAgent }).catch(() => {});
+
     return c.json({ ok: true });
   } catch (err) {
     console.log("client-error endpoint error:", err);
