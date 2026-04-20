@@ -2019,7 +2019,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
   }
 });
 
-// ─── Airtable PULL: ID Profiles → /firm-onboarding dropdown + prefill ───
+// ─── Airtable PULL: Clients Pipeline "ALL" view → /firm-onboarding dropdown + prefill ───
 
 const AIRTABLE_FIRMS_CACHE: { at: number; data: { id: string; firmName: string }[] } = { at: 0, data: [] };
 const AIRTABLE_FIRMS_TTL_MS = 5 * 60 * 1000;
@@ -2029,7 +2029,7 @@ async function fetchAirtableIdProfiles(fields: string[] = ["Client"]): Promise<a
   if (!token) throw new Error("AIRTABLE_TOKEN not configured");
   const records: any[] = [];
   let offset: string | undefined;
-  const baseQs = `view=${encodeURIComponent("ID Profiles")}&pageSize=100${fields.map((f) => `&fields%5B%5D=${encodeURIComponent(f)}`).join("")}`;
+  const baseQs = `view=${encodeURIComponent("ALL")}&pageSize=100${fields.map((f) => `&fields%5B%5D=${encodeURIComponent(f)}`).join("")}`;
   for (let i = 0; i < 10; i++) {
     const qs = offset ? `${baseQs}&offset=${encodeURIComponent(offset)}` : baseQs;
     const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}?${qs}`, {
