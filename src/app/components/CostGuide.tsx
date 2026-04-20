@@ -1244,13 +1244,16 @@ export function CostGuide() {
           });
           const pdfData = await pdfRes.json();
           const pdfUrl = pdfData.pdfUrl || null;
+          // directPdfUrl is the unauthenticated storage URL Zapier/Slack can actually fetch;
+          // pdfUrl is our short /i/:id redirect which requires an Authorization header.
+          const directPdfUrl = pdfData.directPdfUrl || pdfUrl;
           console.log("PDF generated:", pdfUrl);
           // Send to Zapier only after PDF is ready
           sendToZapier("cost-guide-lead", {
             "Email Address": contact.email,
             "Property Type": propertyType,
             "Renovation Budget": budgetRange,
-            "Craftpdf Link": pdfUrl || "",
+            "Craftpdf Link": directPdfUrl || "",
             "First Name": contact.name,
             "Hook Id": data.qrId || "",
             "Meeting Preference": meetingPreference,
