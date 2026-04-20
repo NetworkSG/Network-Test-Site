@@ -5431,8 +5431,33 @@ app.post("/make-server-4808de5e/cost-guide-pdf", async (c) => {
       const allInclude = "Full home " + scopeLabel.toLowerCase() + " package — " + (fullHomeScope.carpentry || "Medium") + " carpentry, " + (fullHomeScope.layout === "No" ? "No" : fullHomeScope.layout) + " layout changes";
       living_room = scopeLabel; kitchen = scopeLabel; bedrooms = scopeLabel; bathrooms = scopeLabel; other_rooms = scopeLabel;
       livingRoom_include = allInclude; kitchen_include = allInclude; bed_room_include = allInclude; bath_room_include = allInclude; other_room_include = allInclude;
-      living_room_price = renovationcost;
-      kitchen_price = "Included"; bedrooms_price = "Included"; bathrooms_price = "Included"; other_rooms_price = "Included";
+
+      // Split the full-home total across rooms so every row shows its own
+      // estimate instead of stuffing the total into Living/Dining and marking
+      // the rest "Included". We use PDF_ROOM_PACKAGES at the chosen scope as
+      // relative weights, then scale so the per-room ranges sum to estMin/estMax.
+      const roomOrder: string[] = ["Living/Dining", "Kitchen", "Bedrooms", "Bathrooms", "Others"];
+      const raw = roomOrder.map((r) => {
+        const pkg = PDF_ROOM_PACKAGES[r]?.[scopeLabel] ?? { min: 0, max: 0 };
+        return { room: r, min: pkg.min, max: pkg.max };
+      });
+      const rawSumMin = raw.reduce((s, x) => s + x.min, 0) || 1;
+      const rawSumMax = raw.reduce((s, x) => s + x.max, 0) || 1;
+      const targetMin = isFloor ? 30000 : estMin;
+      const targetMax = isFloor ? 35000 : estMax;
+      const scaleMin = targetMin / rawSumMin;
+      const scaleMax = targetMax / rawSumMax;
+      const priced: Record<string, string> = {};
+      raw.forEach((x) => {
+        const mn = pdfRoundTo(x.min * scaleMin, 100);
+        const mx = pdfRoundTo(x.max * scaleMax, 100);
+        priced[x.room] = pdfFormatK(mn) + " - " + pdfFormatK(mx);
+      });
+      living_room_price = priced["Living/Dining"];
+      kitchen_price = priced["Kitchen"];
+      bedrooms_price = priced["Bedrooms"];
+      bathrooms_price = priced["Bathrooms"];
+      other_rooms_price = priced["Others"];
     }
 
     // Lifestyle labels
