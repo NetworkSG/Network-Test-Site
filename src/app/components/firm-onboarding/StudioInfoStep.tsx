@@ -92,7 +92,7 @@ export function validateStudio(s: StudioInfo): Record<string, string> {
   if (!s.bio.trim()) errors.bio = "About / bio is required";
   if (!s.logoImage) errors.logoImage = "Upload your firm logo";
   if (!s.contactEmail.trim()) errors.contactEmail = "Confirm your registered email or phone";
-  if (!isValidGoogleMaps(s.googleMapsUrl)) errors.googleMapsUrl = "Paste a valid Google Maps URL";
+  if (s.googleMapsUrl.trim() && !isValidGoogleMaps(s.googleMapsUrl)) errors.googleMapsUrl = "Paste a valid Google Maps URL";
   if (!s.acraUen.trim()) errors.acraUen = "ACRA/UEN is required";
   if (!s.yearsExperience.trim()) errors.yearsExperience = "Years of experience is required";
   if (!s.officeAddress.trim()) errors.officeAddress = "Office address is required";
@@ -503,7 +503,7 @@ export function StudioInfoStep({
       </div>
 
       <div>
-        <label style={labelStyle}>Google Maps Link <span style={{ color: "#c14" }}>*</span></label>
+        <label style={labelStyle}>Google Maps Link</label>
         <input
           type="url" value={value.googleMapsUrl} placeholder="https://maps.app.goo.gl/…"
           onChange={(e) => patch({ googleMapsUrl: e.target.value })} style={inputStyle}
