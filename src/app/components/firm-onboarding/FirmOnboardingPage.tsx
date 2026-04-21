@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { C, sans, FadeIn } from "../homepage/v8/primitives";
-import { OnboardingShell, OnboardingCard, StepPills, PrimaryButton, SecondaryButton } from "./OnboardingShell";
+import { sans, FadeIn } from "../homepage/v8/primitives";
+import { OnboardingShell, OnboardingCard, PrimaryButton } from "./OnboardingShell";
 import { StudioInfoStep, validateStudio } from "./StudioInfoStep";
-import { ProjectStep, validateProject } from "./ProjectStep";
 import { SuccessScreen } from "./SuccessScreen";
 import { submitOnboarding, StudioInfo, ProjectSubmission } from "./onboardingApi";
 
@@ -30,12 +29,12 @@ const initialStudio: StudioInfo = {
   airtableRecordId: "",
 };
 
-const initialProject: ProjectSubmission = {
+const emptyProject: ProjectSubmission = {
   title: "",
   location: "",
   cost: "",
   size: "",
-  year: String(new Date().getFullYear()),
+  year: "",
   propertyType: "",
   propertySubType: "",
   style: "",
@@ -44,51 +43,23 @@ const initialProject: ProjectSubmission = {
 };
 
 export function FirmOnboardingPage() {
-  const [step, setStep] = useState<0 | 1>(0);
   const [studio, setStudio] = useState<StudioInfo>(initialStudio);
-  const [project, setProject] = useState<ProjectSubmission>(initialProject);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
 
-  const handleContinue = () => {
+  const handleSubmit = async () => {
     setSubmitAttempted(true);
+    setSubmitError("");
     const errors = validateStudio(studio);
     if (Object.keys(errors).length) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    setSubmitAttempted(false);
-    setStep(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleSubmit = async () => {
-    setSubmitAttempted(true);
-    setSubmitError("");
-    const errors = validateProject(project);
-    if (Object.keys(errors).length) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
     setSubmitting(true);
     try {
-      await submitOnboarding({ variant: "full", studio, project });
-      setDone(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: any) {
-      setSubmitError(err?.message || "Submission failed. Please try again.");
-    }
-    setSubmitting(false);
-  };
-
-  const handleSkipProject = async () => {
-    setSubmitError("");
-    setSubmitting(true);
-    try {
-      // Submit studio only — project is optional on firm onboarding.
-      await submitOnboarding({ variant: "full", studio, project: initialProject });
+      await submitOnboarding({ variant: "full", studio, project: emptyProject });
       setDone(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
@@ -107,16 +78,9 @@ export function FirmOnboardingPage() {
 
   return (
     <OnboardingShell eyebrow="Firm Onboarding">
-      <FadeIn>
-        <StepPills steps={["Studio Info", "First Project (Optional)"]} activeIndex={step} />
-      </FadeIn>
       <FadeIn delay={0.05}>
         <OnboardingCard>
-          {step === 0 ? (
-            <StudioInfoStep value={studio} onChange={setStudio} submitAttempted={submitAttempted} />
-          ) : (
-            <ProjectStep value={project} onChange={setProject} submitAttempted={submitAttempted} />
-          )}
+          <StudioInfoStep value={studio} onChange={setStudio} submitAttempted={submitAttempted} />
         </OnboardingCard>
       </FadeIn>
 
@@ -126,36 +90,12 @@ export function FirmOnboardingPage() {
         </p>
       )}
 
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <div>
-          {step === 1 && (
-            <SecondaryButton label="← Back" onClick={() => setStep(0)} disabled={submitting} />
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className="text-[11px]"
-            style={{ color: C.grayLight, fontFamily: sans, letterSpacing: "0.08em", textTransform: "uppercase" }}
-          >
-            Step {step + 1} of 2
-          </span>
-          {step === 0 ? (
-            <PrimaryButton label="Continue" onClick={handleContinue} />
-          ) : (
-            <>
-              <SecondaryButton
-                label="Skip & Submit"
-                onClick={handleSkipProject}
-                disabled={submitting}
-              />
-              <PrimaryButton
-                label={submitting ? "Submitting…" : "Submit"}
-                onClick={handleSubmit}
-                disabled={submitting}
-              />
-            </>
-          )}
-        </div>
+      <div className="mt-6 flex items-center justify-end gap-3">
+        <PrimaryButton
+          label={submitting ? "Submitting…" : "Submit"}
+          onClick={handleSubmit}
+          disabled={submitting}
+        />
       </div>
     </OnboardingShell>
   );
