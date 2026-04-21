@@ -36,6 +36,7 @@ const LazyMoodBoardGate = lazy(() => import("./components/mood-board/MoodBoardGa
 const LazyMoodBoardPage = lazy(() => import("./components/mood-board/MoodBoardPage").then((m) => ({ default: m.MoodBoardPage })));
 const LazyFirmOnboardingPage = lazy(() => import("./components/firm-onboarding/FirmOnboardingPage").then((m) => ({ default: m.FirmOnboardingPage })));
 const LazyProjectSubmissionPage = lazy(() => import("./components/firm-onboarding/ProjectSubmissionPage").then((m) => ({ default: m.ProjectSubmissionPage })));
+const LazyQanvastImportTest = lazy(() => import("./components/qanvast-import/QanvastImportTest").then((m) => ({ default: m.QanvastImportTest })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -116,6 +117,7 @@ export const router = createBrowserRouter([
   { path: "/edit-profile/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
   { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },
   { path: "/firm-onboarding/project", element: createElement(LazyRoute, { component: LazyProjectSubmissionPage }) },
+  { path: "/qanvast-import-test", element: createElement(LazyRoute, { component: LazyQanvastImportTest }) },
   // { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   // { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

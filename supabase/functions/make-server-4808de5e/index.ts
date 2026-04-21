@@ -2094,6 +2094,169 @@ app.post("/make-server-4808de5e/firm-onboarding/project-email-check", async (c) 
   }
 });
 
+// ─── Qanvast scrape — diagnostic endpoint for /qanvast-import-test ───
+// Takes a qanvast.com URL server-side and returns parsed project/firm data.
+// No writes, no caching. Used only by the dev test page.
+app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
+  const started = Date.now();
+  try {
+    if (!(await verifyAuth(c))) return c.json({ ok: false, message: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ ok: false, message: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => null);
+    const rawUrl = typeof body?.url === "string" ? body.url.trim() : "";
+    if (!rawUrl) return c.json({ ok: false, message: "Missing url" }, 400);
+
+    let parsed: URL;
+    try { parsed = new URL(rawUrl); } catch {
+      return c.json({ ok: false, message: "Invalid URL" }, 400);
+    }
+    if (!/(^|\.)qanvast\.com$/i.test(parsed.hostname)) {
+      return c.json({ ok: false, message: "Only qanvast.com URLs allowed" }, 400);
+    }
+
+    // Fetch server-side with a realistic UA
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let html = "";
+    let httpStatus = 0;
+    try {
+      const res = await fetch(parsed.toString(), {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-SG,en-US;q=0.9,en;q=0.8",
+        },
+      });
+      httpStatus = res.status;
+      html = await res.text();
+    } catch (err: any) {
+      clearTimeout(timeout);
+      return c.json({ ok: false, message: "Fetch failed: " + (err?.message || String(err)), status: httpStatus, elapsedMs: Date.now() - started });
+    }
+    clearTimeout(timeout);
+
+    if (!html || httpStatus < 200 || httpStatus >= 400) {
+      return c.json({ ok: false, message: `Upstream responded ${httpStatus}`, status: httpStatus, elapsedMs: Date.now() - started, htmlPreview: html.slice(0, 500) });
+    }
+
+    // ── Next.js hydration payload ──
+    let nextData: any = null;
+    const nextMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
+    if (nextMatch) {
+      try { nextData = JSON.parse(nextMatch[1]); } catch { /* leave null */ }
+    }
+
+    // ── OG tags fallback ──
+    const ogTags: Record<string, string> = {};
+    const ogRe = /<meta[^>]+property=["']og:([a-zA-Z_:]+)["'][^>]+content=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = ogRe.exec(html))) ogTags[m[1]] = m[2];
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    const pageTitle = titleMatch ? titleMatch[1].trim() : "";
+
+    // ── Images ──
+    const imgSet = new Set<string>();
+    const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+    while ((m = imgRe.exec(html))) {
+      const src = m[1];
+      if (/cdn\.qanvast|qanvast\.com|cloudfront|images\.qanvast/i.test(src)) imgSet.add(src);
+    }
+    if (ogTags.image) imgSet.add(ogTags.image);
+
+    // ── Classify kind from URL path ──
+    const pathname = parsed.pathname.toLowerCase();
+    const kind: "firm" | "project" | "unknown" =
+      /\/sg\/projects?\//.test(pathname) ? "project" :
+      /\/sg\/firm/.test(pathname) ? "firm" :
+      "unknown";
+
+    // ── Build projects[] best-effort from Next.js data ──
+    const projects: any[] = [];
+    const pushProject = (p: any, url: string) => {
+      if (!p) return;
+      projects.push({
+        title: String(p.title || p.name || pageTitle || "").slice(0, 300),
+        description: String(p.description || p.summary || p.content || ogTags.description || "").slice(0, 4000),
+        homeType: p.homeType || p.propertyType || p.home_type || undefined,
+        budget: p.budget || p.budgetRange || undefined,
+        size: p.size || p.areaSize || p.sqft || undefined,
+        year: p.year || p.completedYear || undefined,
+        rooms: p.rooms || p.numRooms || undefined,
+        style: p.style || p.designStyle || undefined,
+        images: Array.isArray(p.images) ? p.images.map((x: any) => typeof x === "string" ? x : (x?.url || x?.src)).filter(Boolean) : [],
+        sourceUrl: url,
+      });
+    };
+
+    // Walk Next.js pageProps heuristically
+    const walk = (node: any, depth = 0) => {
+      if (!node || depth > 6) return;
+      if (typeof node !== "object") return;
+      if (Array.isArray(node)) { node.forEach((x) => walk(x, depth + 1)); return; }
+      // Heuristic: object with title + images[] looks like a project
+      if ((node.title || node.name) && (Array.isArray(node.images) || Array.isArray(node.photos))) {
+        const normalized = { ...node, images: node.images || node.photos };
+        pushProject(normalized, rawUrl);
+      }
+      for (const k of Object.keys(node)) walk(node[k], depth + 1);
+    };
+    if (nextData) walk(nextData.props?.pageProps ?? nextData.props ?? nextData);
+
+    // Firm name heuristic
+    let firmName = "";
+    let qanvastId: string | undefined;
+    if (nextData) {
+      const pp = nextData.props?.pageProps || {};
+      firmName = pp.firm?.name || pp.company?.name || pp.vendor?.name || "";
+      qanvastId = pp.firm?.id || pp.company?.id || undefined;
+    }
+    if (!firmName && kind === "firm") {
+      const slugMatch = parsed.pathname.match(/\/sg\/firm\/([^/?#]+)/);
+      firmName = slugMatch ? slugMatch[1] : "";
+    }
+    if (!firmName) firmName = ogTags["site_name"] || "";
+
+    // Fallback: if kind=project and no projects found, synthesize one from OG tags + images
+    if (kind === "project" && projects.length === 0) {
+      projects.push({
+        title: (ogTags.title || pageTitle || "").slice(0, 300),
+        description: (ogTags.description || "").slice(0, 4000),
+        homeType: undefined,
+        budget: undefined,
+        size: undefined,
+        year: undefined,
+        images: Array.from(imgSet).slice(0, 30),
+        sourceUrl: rawUrl,
+      });
+    }
+
+    return c.json({
+      ok: true,
+      url: rawUrl,
+      kind,
+      status: httpStatus,
+      elapsedMs: Date.now() - started,
+      firm: firmName ? { name: firmName, qanvastId } : null,
+      projects,
+      raw: {
+        hasNextData: !!nextData,
+        ogTags,
+        pageTitle,
+        imageCount: imgSet.size,
+        nextDataPreview: nextData ? Object.keys(nextData.props?.pageProps || {}) : [],
+      },
+    });
+  } catch (err: any) {
+    console.log("qanvast-scrape error:", err);
+    return c.json({ ok: false, message: "Scrape failed: " + (err?.message || String(err)), elapsedMs: Date.now() - started }, 500);
+  }
+});
+
 app.post("/make-server-4808de5e/firm-onboarding/airtable-lookup", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
