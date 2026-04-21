@@ -117,7 +117,7 @@ export const router = createBrowserRouter([
   { path: "/edit-profile/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
   { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },
   { path: "/firm-onboarding/project", element: createElement(LazyRoute, { component: LazyProjectSubmissionPage }) },
-  { path: "/qanvast-import-test", element: createElement(LazyRoute, { component: LazyQanvastImportTest }) },
+  { path: "/project-import", element: createElement(LazyRoute, { component: LazyQanvastImportTest }) },
   // { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   // { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

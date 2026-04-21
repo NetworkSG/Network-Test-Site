@@ -5,7 +5,7 @@ const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-ser
 
 const tools = [
   {
-    title: "3D Preview Tool",
+    title: "Room Designer",
     description: "Upload a photo of your space and see it transformed with AI in minutes. Test different styles before committing to any designer.",
     bullets: ["Realistic 3D visualizations", "Multiple style options", "Results in 5 minutes"],
     cta: "Create My Render",

@@ -62,7 +62,7 @@ export function HomepageV8() {
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-8">
               <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Home</a>
-              <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>3D Preview</a>
+              <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Room Designer</a>
               <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Layout Planner</a>
               <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
               {/* <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Style Quiz</a> */}
@@ -103,7 +103,7 @@ export function HomepageV8() {
               >
                 <div className="px-6 py-4 flex flex-col gap-1">
                   <a href="/" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Home</a>
-                  <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>3D Preview</a>
+                  <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Room Designer</a>
                   <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Layout Planner</a>
                   <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
                   {/* <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Style Quiz</a> */}
