@@ -39,7 +39,7 @@ function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, s
   const handleNext = () => {
     if (selectedOption === null) return;
     if (currentQ === 2 && selectedOption === OTHER_PROPERTY_IDX && otherPropertyText.trim()) {
-      setAnswers(a => ({ ...a, home_type: `${question.options[OTHER_PROPERTY_IDX].label} — ${otherPropertyText.trim()}` }));
+      setAnswers(a => ({ ...a, home_type: `${question.options[OTHER_PROPERTY_IDX].label} - ${otherPropertyText.trim()}` }));
     }
     if (currentQ < 6) {
       setDirection(1);
@@ -180,7 +180,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
             {formState === "idle" && (
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }}>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-[80px] items-center">
-                  {/* Left — headline */}
+                  {/* Left - headline */}
                   <div>
                     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
                       className="flex items-center gap-2 mb-8">
@@ -203,7 +203,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                       style={{ color: C.gray, fontFamily: sans }}>{HERO.subheadline}</motion.p>
                   </div>
 
-                  {/* Right — Form card */}
+                  {/* Right - Form card */}
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
                     <div className="p-8 md:p-10" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px", borderTop: "none" }}>
                       <h2 className="text-[22px] md:text-[28px] font-normal leading-[1.2] mb-2" style={{ fontFamily: serif, color: C.black }}>
@@ -226,7 +226,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                       </div>
 
                       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                        {/* Honeypot — hidden from users, bots fill this */}
+                        {/* Honeypot - hidden from users, bots fill this */}
                         <div style={{ position: "absolute", left: "-9999px", opacity: 0, height: 0, overflow: "hidden" }} aria-hidden="true" tabIndex={-1}>
                           <input type="text" name="_hp_field" autoComplete="off" tabIndex={-1} />
                         </div>

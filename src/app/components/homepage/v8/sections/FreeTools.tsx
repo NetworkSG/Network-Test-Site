@@ -64,7 +64,7 @@ export function FreeTools() {
         </FadeIn>
         <FadeIn delay={0.08} className="text-center mb-14">
           <p className="text-[15px] font-normal leading-[1.75] max-w-[560px] mx-auto" style={{ color: C.gray, fontFamily: sans }}>
-            Not ready to meet designers yet? Use our free tools to understand your budget and visualize your space first — at your own pace.
+            Not ready to meet designers yet? Use our free tools to understand your budget and visualize your space first - at your own pace.
           </p>
         </FadeIn>
 
@@ -104,7 +104,7 @@ export function FreeTools() {
                       <p className="text-[14px] md:text-[15px] text-white/90 leading-relaxed mb-5 max-w-[380px]" style={{ fontFamily: sans }}>
                         {tool.description}
                       </p>
-                      {/* Bullets — reveal on hover (desktop) */}
+                      {/* Bullets - reveal on hover (desktop) */}
                       <div className="flex flex-col gap-2.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:translate-y-4 md:group-hover:translate-y-0 transition-all duration-500">
                         {tool.bullets.map((b) => (
                           <div key={b} className="flex items-center gap-2">

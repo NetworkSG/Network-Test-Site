@@ -22,7 +22,7 @@ export const HERO = {
   subheadline:
     "Struggling to find a reliable interior designer? Our concierge team handpicks 3 verified firms that fit your style, budget, and timeline. Free. Within the day. No obligation.",
   formTitle: "Get Your Free Designer Match",
-  formSubtitle: "Answer 7 questions about your home and how you want to live in it. As you go, we'll show typical costs for your property and scope. When you're done, our concierge handpicks 3 firms that fit — free, within the day.",
+  formSubtitle: "Answer 7 questions about your home and how you want to live in it. As you go, we'll show typical costs for your property and scope. When you're done, our concierge handpicks 3 firms that fit - free, within the day.",
   submitButton: "Get My Free Matches",
   trustMicrocopy: "3,214 homeowners matched this year · Free · No obligations",
 };
@@ -35,7 +35,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
     question: "What best describes your situation?",
     options: [
       {
-        label: "Collecting keys for a new home — BTO or new launch condo",
+        label: "Collecting keys for a new home - BTO or new launch condo",
         response:
           "Great. New homes are the best time to get the design right from the start. We'll make sure the firms we match you with specialise in new key collections and can work around your timeline.",
       },
@@ -45,7 +45,7 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
           "Good to know. Resale homes often need more considered planning around existing conditions. We'll match you with firms experienced in resale renovations who know how to work with what's already there.",
       },
       {
-        label: "I already own my home — Planning to renovate",
+        label: "I already own my home - Planning to renovate",
         response:
           "Noted. Whether it's a refresh or a full gut job, we'll find firms that have done it before and can give you an honest scope before you commit to anything.",
       },
@@ -72,9 +72,9 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
           "Still a bit out but worth starting conversations early. The best firms book up fast. We'll match you with designers who are happy to plan ahead.",
       },
       {
-        label: "Not ready yet — still early days",
+        label: "Not ready yet - still early days",
         response:
-          "No problem. We won't match you with a designer just yet — it's a bit early and wouldn't be a good use of anyone's time. We'll send you our cost guide and design style resources to help you plan. When you're within 6 months of starting, come back and we'll get you matched properly.",
+          "No problem. We won't match you with a designer just yet - it's a bit early and wouldn't be a good use of anyone's time. We'll send you our cost guide and design style resources to help you plan. When you're within 6 months of starting, come back and we'll get you matched properly.",
       },
     ],
   },
@@ -86,32 +86,32 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
       {
         label: "HDB BTO",
         response:
-          "Most of our matched firms specialise in BTOs — they know the HDB guidelines, timeline pressures, and how to make standard layouts feel custom.",
+          "Most of our matched firms specialise in BTOs - they know the HDB guidelines, timeline pressures, and how to make standard layouts feel custom.",
       },
       {
         label: "HDB Resale",
         response:
-          "Our matched firms understand resale work — existing conditions, hacking walls, reconfiguring layouts, and the hidden costs that come with older flats.",
+          "Our matched firms understand resale work - existing conditions, hacking walls, reconfiguring layouts, and the hidden costs that come with older flats.",
       },
       {
         label: "Executive Condo (EC)",
         response:
-          "Our matched firms work on ECs regularly — larger layouts, strata restrictions, and the upgrade potential that sits between HDB and private condo.",
+          "Our matched firms work on ECs regularly - larger layouts, strata restrictions, and the upgrade potential that sits between HDB and private condo.",
       },
       {
         label: "Private Condo",
         response:
-          "Our matched firms are experienced with condos — MCST guidelines, premium finishes, and the design choices that suit condo living.",
+          "Our matched firms are experienced with condos - MCST guidelines, premium finishes, and the design choices that suit condo living.",
       },
       {
         label: "Landed",
         response:
-          "Our matched firms handle landed work — full overhauls, structural changes, outdoor spaces, and the complexity that comes with your scale.",
+          "Our matched firms handle landed work - full overhauls, structural changes, outdoor spaces, and the complexity that comes with your scale.",
       },
       {
         label: "Penthouse / Cluster / Other",
         response:
-          "Tell us more about your property — we'll match you with firms who understand your specific situation.",
+          "Tell us more about your property - we'll match you with firms who understand your specific situation.",
       },
     ],
   },
@@ -122,28 +122,28 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
     note: "Select an option to see typical cost ranges.",
     options: [
       {
-        label: "Functional and clean — Everything works, nothing unfinished",
+        label: "Functional and clean - Everything works, nothing unfinished",
         response:
           "That's a clear brief. We'll match you with firms that are strong on practical execution and deliver clean, well-finished work without overcomplicating the scope.",
         reveal:
           "$30K–$60K for a typical HDB or condo. This covers the essentials well. Practical, liveable, done properly.",
       },
       {
-        label: "Nice home, good finishes — Friends will notice. You will every day.",
+        label: "Nice home, good finishes - Friends will notice. You will every day.",
         response:
           "Good direction. This is the level where design decisions start to feel cohesive and the finish quality becomes genuinely noticeable day to day. We'll match you with firms that work well in this range.",
         reveal:
           "$60K–$100K for a typical HDB or condo. This is where the home starts to feel considered. Better materials, cohesive decisions, spaces that flow into each other. You notice the difference every single day you live there. This is the threshold where full ID involvement becomes worth the investment.",
       },
       {
-        label: "Considered and design-led — Reflects who you are as a family",
+        label: "Considered and design-led - Reflects who you are as a family",
         response:
           "Understood. You're looking for a firm that thinks about how you actually live, not just how the home looks in photos. We'll match you with designers who lead with function and bring the aesthetic along with it.",
         reveal:
           "$100K–$150K for a typical HDB or condo. A home built around how you actually live. Custom details, intentional layout, materials that age well. A senior designer is usually involved from the start.",
       },
       {
-        label: "Fully customised, no compromises — Every corner is deliberate",
+        label: "Fully customised, no compromises - Every corner is deliberate",
         response:
           "Clear. You know what you want and you need a firm with the capability and process to execute at that level. We'll match you with designers who work at the top end and have the portfolio to back it up.",
         reveal:
@@ -157,22 +157,22 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
     question: "What is your biggest concern about renovating?",
     options: [
       {
-        label: "Worried about poor workmanship — I want it done right, not just done fast",
+        label: "Worried about poor workmanship - I want it done right, not just done fast",
         response:
           "That's the right thing to be thinking about. We only work with firms that have verified track records and real completed projects. We'll flag workmanship quality as a priority in your match brief.",
       },
       {
-        label: "Don't know what design direction I want yet — I need help finding a direction",
+        label: "Don't know what design direction I want yet - I need help finding a direction",
         response:
           "That's more common than you think. The best ID firms are good at drawing out what you actually want even when you can't articulate it yet. We'll match you with designers who are strong on the brief-building process. In the meantime, our design style quiz might help you get clearer before the first meeting.",
       },
       {
-        label: "Concerned about budget overruns — I want full cost transparency",
+        label: "Concerned about budget overruns - I want full cost transparency",
         response:
           "Completely valid. We'll match you with firms known for detailed, itemised quoting and transparent project management. No surprises mid-renovation.",
       },
       {
-        label: "Not sure how to choose the right firm — Too many options, not enough clarity",
+        label: "Not sure how to choose the right firm - Too many options, not enough clarity",
         response:
           "That's exactly what we're here for. Our concierge team will talk you through the options and make sure you feel confident in the shortlist before any meetings are scheduled.",
       },
@@ -370,7 +370,7 @@ export const FAQ_ITEMS: FAQItem[] = [
       "Yes. Every designer is HDB-registered with verified backgrounds and real completed projects.",
   },
   {
-    question: "ID vs contractor — what's the difference?",
+    question: "ID vs contractor - what's the difference?",
     answer:
       "Interior designers handle design and execution. Contractors execute existing designs only. Most homeowners need an ID. Our team will help you figure out what fits.",
   },
