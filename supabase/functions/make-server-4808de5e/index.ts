@@ -2144,14 +2144,28 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       return c.json({ ok: false, message: `Upstream responded ${httpStatus}`, status: httpStatus, elapsedMs: Date.now() - started, htmlPreview: html.slice(0, 500) });
     }
 
-    // ── Next.js hydration payload ──
+    // ── Next.js / Nuxt / generic hydration payload ──
     let nextData: any = null;
     const nextMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
-    if (nextMatch) {
-      try { nextData = JSON.parse(nextMatch[1]); } catch { /* leave null */ }
+    if (nextMatch) { try { nextData = JSON.parse(nextMatch[1]); } catch {} }
+    if (!nextData) {
+      const nuxtMatch = html.match(/window\.__NUXT__\s*=\s*(\{[\s\S]*?\});/);
+      if (nuxtMatch) { try { nextData = JSON.parse(nuxtMatch[1]); } catch {} }
+    }
+    if (!nextData) {
+      const initMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*(\{[\s\S]*?\});/);
+      if (initMatch) { try { nextData = JSON.parse(initMatch[1]); } catch {} }
     }
 
-    // ── OG tags fallback ──
+    // ── JSON-LD (schema.org) — often the cleanest source on SEO pages ──
+    const jsonLd: any[] = [];
+    const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let lm: RegExpExecArray | null;
+    while ((lm = ldRe.exec(html))) {
+      try { jsonLd.push(JSON.parse(lm[1].trim())); } catch {}
+    }
+
+    // ── OG tags ──
     const ogTags: Record<string, string> = {};
     const ogRe = /<meta[^>]+property=["']og:([a-zA-Z_:]+)["'][^>]+content=["']([^"']+)["']/gi;
     let m: RegExpExecArray | null;
@@ -2168,12 +2182,112 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     }
     if (ogTags.image) imgSet.add(ogTags.image);
 
-    // ── Classify kind from URL path ──
+    // ── Classify kind from URL path (broadened) ──
     const pathname = parsed.pathname.toLowerCase();
     const kind: "firm" | "project" | "unknown" =
       /\/sg\/projects?\//.test(pathname) ? "project" :
+      /\/sg\/interior-design-singapore\/[^/]+$/.test(pathname) ? "project" :
       /\/sg\/firm/.test(pathname) ? "firm" :
+      /\/sg\/interior-designer\/[^/]+$/.test(pathname) ? "firm" :
       "unknown";
+
+    // ── Heuristic field extraction from rendered HTML ──
+    // Qanvast project pages render labelled stats like "Budget $50,000" or "Size 1,100 sqft".
+    const stripTags = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const afterLabel = (label: string): string | undefined => {
+      const re = new RegExp(`${label}\\s*[:\\-–—]?\\s*(?:<[^>]+>\\s*)*([^<\\n\\r|]{2,80})`, "i");
+      const mm = html.match(re);
+      return mm ? stripTags(mm[1]).slice(0, 80) : undefined;
+    };
+    const htmlText = stripTags(html);
+    const firstMatch = (re: RegExp) => { const mm = htmlText.match(re); return mm ? mm[0] : undefined; };
+    const extractedBudget = firstMatch(/\$[\d,]+(?:\s*[-–]\s*\$[\d,]+)?/);
+    const extractedSize = firstMatch(/\b[\d,]{2,6}\s*(?:sqft|sq\.?\s*ft|sqm|m²)\b/i);
+    const extractedYear = afterLabel("Completed") || afterLabel("Year");
+    const extractedHome = afterLabel("Home Type") || afterLabel("Property Type");
+    const extractedStyle = afterLabel("Style");
+    const extractedRooms = afterLabel("Rooms");
+
+    // ── Normalizers that map scraped fields onto our /firm-onboarding/project schema ──
+    // Our form uses propertyType ∈ {HDB, Condominium, Landed, Commercial}. Map aggressively.
+    const classifyPropertyType = (text: string): { propertyType: string; propertySubType: string } => {
+      const t = text.toLowerCase();
+      if (/\bhdb\b|bto\b|\b\d-room\b|executive\s+apartment|maisonette|\bdbss\b/.test(t)) {
+        const sub = (text.match(/\b\d-Room\b/i) || text.match(/\bExecutive\b/i) || text.match(/\bMaisonette\b/i) || [""])[0];
+        return { propertyType: "HDB", propertySubType: sub };
+      }
+      if (/penthouse|\b\d-bedroom\b|\bcondo(minium)?\b|\bapartment\b|\bec\b|executive\s+condo/.test(t)) {
+        const sub = (text.match(/\bPenthouse\b/i) || text.match(/\b\d-Bedroom\b/i) || text.match(/\bStudio\b/i) || [""])[0];
+        return { propertyType: "Condominium", propertySubType: sub };
+      }
+      if (/\bterrace\b|semi[-\s]?detached|\bbungalow\b|\bgcb\b|good\s+class\s+bungalow|\blanded\b|\bdetached\b/.test(t)) {
+        let sub = "";
+        if (/good\s+class/i.test(text)) sub = "Good Class Bungalow";
+        else if (/bungalow/i.test(text)) sub = "Bungalow";
+        else if (/semi[-\s]?detached/i.test(text)) sub = "Semi-Detached";
+        else if (/terrace/i.test(text)) sub = "Terrace";
+        return { propertyType: "Landed", propertySubType: sub };
+      }
+      if (/\bcommercial\b|\boffice\b|\bretail\b|\bf&b\b|restaurant|cafe\b/.test(t)) {
+        return { propertyType: "Commercial", propertySubType: "" };
+      }
+      return { propertyType: "", propertySubType: "" };
+    };
+
+    // Split "1,100 sqft" → { num: "1,100", unit: "sqft" }
+    const splitSize = (s: string | undefined): { num: string; unit: string } => {
+      if (!s) return { num: "", unit: "" };
+      const mm = s.match(/^([\d,]+)\s*(sqft|sq\.?\s*ft|sqm|m²)?/i);
+      if (!mm) return { num: "", unit: "" };
+      const unitRaw = (mm[2] || "sqft").toLowerCase().replace(/\s|\./g, "");
+      const unit = unitRaw === "m²" ? "m²" : unitRaw === "sqm" ? "sqm" : "sqft";
+      return { num: mm[1], unit };
+    };
+
+    // Format a scraped budget like "$50,000" (pass-through, trimmed to first value)
+    const normalizeCost = (s: string | undefined): string => {
+      if (!s) return "";
+      const mm = s.match(/\$[\d,]+/);
+      return mm ? mm[0] : "";
+    };
+
+    // Known style keywords — hit test on title + description
+    const STYLE_WORDS = [
+      "Scandinavian", "Contemporary", "Modern", "Minimalist", "Industrial",
+      "Japandi", "Muji", "Classic", "Eclectic", "Vintage", "Bohemian",
+      "Mediterranean", "Transitional", "Mid-Century Modern", "Mid-Century",
+      "Resort", "Tropical", "Rustic", "Luxury", "Coastal", "Traditional", "Retro",
+    ];
+    const detectStyle = (haystack: string): string => {
+      const h = haystack || "";
+      for (const w of STYLE_WORDS) {
+        if (new RegExp(`\\b${w.replace(/\s/g, "\\s")}\\b`, "i").test(h)) return w;
+      }
+      return "";
+    };
+
+    // worksIncluded — map description hits onto our 8 canonical keys
+    const WORK_MAP: Array<{ key: string; re: RegExp }> = [
+      { key: "carpentry", re: /\bcarpentr(y|ies)|cabinet(ry)?|wardrobe|built[-\s]?in\b/i },
+      { key: "feature-wall", re: /\bfeature\s+wall|accent\s+wall\b/i },
+      { key: "tiling", re: /\btil(e|es|ing)\b/i },
+      { key: "aircon", re: /\baircon|air[-\s]?conditioning\b/i },
+      { key: "electrical", re: /\belectrical|rewir(e|ing)\b/i },
+      { key: "plumbing", re: /\bplumbing|piping\b/i },
+      { key: "painting", re: /\bpaint(ing)?\b/i },
+      { key: "lighting", re: /\blight(ing|s)?\b/i },
+    ];
+    const detectWorks = (haystack: string): string[] =>
+      WORK_MAP.filter((w) => w.re.test(haystack || "")).map((w) => w.key);
+
+    // Best-effort location from title e.g. "Waterway Sundew (Block 662A)" → "Waterway Sundew"
+    const extractLocation = (title: string): string => {
+      if (!title) return "";
+      // Strip "| HDB (2026) by Firm | Qanvast" tail
+      const clean = title.split("|")[0].trim();
+      // Strip "(Block XXX)" parenthetical
+      return clean.replace(/\s*\([^)]*\)\s*$/, "").trim();
+    };
 
     // ── Build projects[] best-effort from Next.js data ──
     const projects: any[] = [];
@@ -2221,18 +2335,67 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     }
     if (!firmName) firmName = ogTags["site_name"] || "";
 
-    // Fallback: if kind=project and no projects found, synthesize one from OG tags + images
-    if (kind === "project" && projects.length === 0) {
+    // Try JSON-LD to enrich a project (many Qanvast pages carry Article / Product schema)
+    const flatLd: any[] = [];
+    const flattenLd = (n: any) => {
+      if (!n) return;
+      if (Array.isArray(n)) { n.forEach(flattenLd); return; }
+      if (typeof n !== "object") return;
+      flatLd.push(n);
+      if (n["@graph"]) flattenLd(n["@graph"]);
+    };
+    jsonLd.forEach(flattenLd);
+    const ldByType = (t: string) => flatLd.find((x) => (x["@type"] || "").toLowerCase().includes(t.toLowerCase()));
+
+    // Fallback: always synthesize a project from OG tags + extracted fields + images when we have a title + images.
+    // This catches SEO-only pages where Qanvast doesn't ship hydration state.
+    const haveOgProject = (ogTags.title || pageTitle) && imgSet.size > 0 && projects.length === 0;
+    if (haveOgProject) {
+      const ld = ldByType("Article") || ldByType("Product") || ldByType("Thing");
       projects.push({
-        title: (ogTags.title || pageTitle || "").slice(0, 300),
-        description: (ogTags.description || "").slice(0, 4000),
-        homeType: undefined,
-        budget: undefined,
-        size: undefined,
-        year: undefined,
+        title: (ld?.name || ogTags.title || pageTitle || "").slice(0, 300),
+        description: (ld?.description || ogTags.description || "").slice(0, 4000),
+        homeType: extractedHome,
+        budget: extractedBudget,
+        size: extractedSize,
+        year: extractedYear,
+        rooms: extractedRooms,
+        style: extractedStyle,
         images: Array.from(imgSet).slice(0, 30),
         sourceUrl: rawUrl,
       });
+    }
+
+    // ── Build an `imported` payload shaped like /firm-onboarding/project's ProjectSubmission ──
+    // Paste-ready: if a firm pastes their Qanvast URL, this can pre-fill the project form.
+    const imported = projects.map((p: any) => {
+      const titleRaw = p.title || "";
+      const haystack = `${titleRaw} ${p.description || ""} ${p.homeType || ""} ${p.style || ""} ${p.rooms || ""}`;
+      const { propertyType, propertySubType } = classifyPropertyType(haystack);
+      const sz = splitSize(p.size);
+      // Year — prefer a 4-digit year anywhere in title/year field (e.g. "HDB (2026)")
+      const yearMatch = (titleRaw + " " + (p.year || "")).match(/\b(19|20)\d{2}\b/);
+      return {
+        title: extractLocation(titleRaw) || titleRaw.slice(0, 120),
+        location: extractLocation(titleRaw),
+        cost: normalizeCost(p.budget),
+        size: sz.num,
+        sizeUnit: sz.unit,
+        year: yearMatch ? yearMatch[0] : "",
+        propertyType,
+        propertySubType,
+        style: p.style || detectStyle(haystack),
+        worksIncluded: detectWorks(p.description || haystack),
+        driveUrl: "", // Qanvast doesn't expose one; firm will need to add
+        images: Array.isArray(p.images) ? p.images : [],
+        sourceUrl: p.sourceUrl || rawUrl,
+      };
+    });
+
+    // If we still had no firm name but JSON-LD has an author/publisher, use it
+    if (!firmName) {
+      const ld = ldByType("Article") || ldByType("Product");
+      firmName = ld?.author?.name || ld?.publisher?.name || ld?.brand?.name || firmName;
     }
 
     return c.json({
@@ -2243,12 +2406,23 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       elapsedMs: Date.now() - started,
       firm: firmName ? { name: firmName, qanvastId } : null,
       projects,
+      imported,
       raw: {
         hasNextData: !!nextData,
+        jsonLdCount: jsonLd.length,
+        jsonLdTypes: flatLd.map((x) => x["@type"]).filter(Boolean),
         ogTags,
         pageTitle,
         imageCount: imgSet.size,
-        nextDataPreview: nextData ? Object.keys(nextData.props?.pageProps || {}) : [],
+        extracted: {
+          budget: extractedBudget,
+          size: extractedSize,
+          year: extractedYear,
+          homeType: extractedHome,
+          style: extractedStyle,
+          rooms: extractedRooms,
+        },
+        nextDataPreview: nextData ? Object.keys(nextData.props?.pageProps || nextData) : [],
       },
     });
   } catch (err: any) {

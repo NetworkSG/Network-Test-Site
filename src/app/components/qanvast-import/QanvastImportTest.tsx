@@ -24,6 +24,21 @@ type ScrapeResult = {
     images: string[];
     sourceUrl: string;
   }>;
+  imported?: Array<{
+    title: string;
+    location: string;
+    cost: string;
+    size: string;
+    sizeUnit: string;
+    year: string;
+    propertyType: string;
+    propertySubType: string;
+    style: string;
+    worksIncluded: string[];
+    driveUrl: string;
+    images: string[];
+    sourceUrl: string;
+  }>;
   raw?: any;
   message?: string;
 };
@@ -201,6 +216,47 @@ export function QanvastImportTest() {
                       )}
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ready-to-import payload — shaped like ProjectSubmission */}
+            {(result.imported ?? []).length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, marginBottom: 10 }}>
+                  Mapped → firm-onboarding/project fields
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+                  {result.imported!.map((p, i) => {
+                    const rows: Array<[string, string]> = [
+                      ["Title", p.title],
+                      ["Location", p.location],
+                      ["Cost", p.cost],
+                      ["Size", p.size ? `${p.size} ${p.sizeUnit}` : ""],
+                      ["Year", p.year],
+                      ["Property type", p.propertyType],
+                      ["Sub-type", p.propertySubType],
+                      ["Style", p.style],
+                      ["Works", (p.worksIncluded || []).join(", ")],
+                      ["Drive URL", p.driveUrl],
+                      ["Images", `${p.images?.length || 0} found`],
+                      ["Source", p.sourceUrl],
+                    ];
+                    return (
+                      <div key={i} style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: 12, padding: 16 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: "6px 14px", fontSize: 13 }}>
+                          {rows.flatMap(([label, value]) => [
+                            <div key={label + "-l"} style={{ color: C.grayLight, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", paddingTop: 2 }}>
+                              {label}
+                            </div>,
+                            <div key={label + "-v"} style={{ color: value ? C.black : "#c14", wordBreak: "break-all", fontFamily: sans }}>
+                              {value || <em style={{ color: "#c14", fontStyle: "normal", fontSize: 12 }}>— missing —</em>}
+                            </div>,
+                          ])}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
