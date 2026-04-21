@@ -1916,14 +1916,14 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     };
 
     let resultSlug: string | null = null;
+    let isUpdate = false;
 
     if (variant === "full") {
       if (!email) return c.json({ error: "Contact email is required" }, 400);
       const existing = await findDesignerByEmail(email);
-      if (existing) {
-        return c.json({ error: "Email already registered. Use the project-only link to add more projects." }, 409);
-      }
-      const slug = await ensureUniqueSlug(body.studio.firmName);
+      // If the firm already exists, update their details instead of blocking
+      const slug = existing ? existing.slug : await ensureUniqueSlug(body.studio.firmName);
+      isUpdate = !!existing;
       const studio = body.studio;
       const s = (v: any) => (typeof v === "string" ? v.trim() : "");
       const arr = (v: any) => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []);
@@ -1935,19 +1935,24 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       const financing = s(studio.financing);
       const portfolioUrl = s(studio.portfolioUrl);
 
-      const profile = {
+      // For updates, preserve certain fields from the existing profile
+      const existingData = isUpdate ? (existing.data || {}) : {};
+
+      const profile: any = {
         name: String(studio.firmName || "").slice(0, 120),
         slug,
         tagline: String(studio.tagline || "").slice(0, 200),
         bio: String(studio.bio || "").slice(0, 2000),
         images: {
-          logo: String(studio.logoImage || ""),
-          map: String(studio.googleMapsUrl || ""),
+          logo: String(studio.logoImage || "") || existingData.images?.logo || "",
+          map: String(studio.googleMapsUrl || "") || existingData.images?.map || "",
+          ...(isUpdate && existingData.images?.cover ? { cover: existingData.images.cover } : {}),
         },
         googleMapsLink: String(studio.googleMapsUrl || ""),
         contactEmail: email,
-        verified: false,
-        active: false,
+        // Preserve verified/active status for existing firms
+        verified: isUpdate ? (existingData.verified ?? false) : false,
+        active: isUpdate ? (existingData.active ?? false) : false,
         acraUen: s(studio.acraUen),
         yearsExperience: years,
         licenses,
@@ -1961,15 +1966,15 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
         financing,
         portfolioUrl,
         location: arr(studio.serviceArea).join(", "),
-        stats: years ? { years: Number(years) || 0 } : undefined,
+        stats: years ? { years: Number(years) || 0, ...(isUpdate && existingData.stats ? { rating: existingData.stats.rating } : {}) } : (isUpdate ? existingData.stats : undefined),
         credentials: {
-          hdb: { active: licenses.some((l: string) => /hdb/i.test(l)), reg: "" },
-          bca: { active: licenses.some((l: string) => /bca/i.test(l)), reg: "" },
+          hdb: { active: licenses.some((l: string) => /hdb/i.test(l)), reg: isUpdate ? (existingData.credentials?.hdb?.reg || "") : "" },
+          bca: { active: licenses.some((l: string) => /bca/i.test(l)), reg: isUpdate ? (existingData.credentials?.bca?.reg || "") : "" },
           landedEligible: landedEligibility === "Landed Homes" || landedEligibility === "Selected Landed Homes",
           landedEligibilityLabel: landedEligibility,
         },
-        submittedAt: now,
-        createdAt: now,
+        submittedAt: isUpdate ? (existingData.submittedAt || now) : now,
+        createdAt: isUpdate ? (existingData.createdAt || now) : now,
         updatedAt: now,
       };
 
@@ -1988,7 +1993,17 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       ].filter((r) => r.value);
 
       await saveDesignerProfile(slug, profile);
-      if (hasProject) await saveDesignerSection(slug, "projects", [pendingProject]);
+      if (hasProject) {
+        if (isUpdate) {
+          // Append new project to existing projects list
+          const currentProjects = await getDesignerSection(slug, "projects");
+          const projectsList = Array.isArray(currentProjects) ? currentProjects : [];
+          projectsList.push(pendingProject);
+          await saveDesignerSection(slug, "projects", projectsList);
+        } else {
+          await saveDesignerSection(slug, "projects", [pendingProject]);
+        }
+      }
       if (businessInfo.length) await saveDesignerSection(slug, "businessinfo", businessInfo);
       resultSlug = slug;
       if (studio?.airtableRecordId) {
@@ -2010,11 +2025,13 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
 
     sendNtfyOnboarding({
       firmName: body.studio?.firmName || email || resultSlug || "(unknown)",
-      variant: `${variant} (inactive — awaiting activation)`,
+      variant: isUpdate
+        ? `${variant} UPDATE (existing firm details updated)`
+        : `${variant} (inactive — awaiting activation)`,
       projectTitle: String(project.title || "").slice(0, 120),
     }).catch(() => {});
 
-    return c.json({ ok: true, id, slug: resultSlug });
+    return c.json({ ok: true, id, slug: resultSlug, updated: isUpdate });
   } catch (err) {
     console.log("firm-onboarding-submit error:", err);
     return c.json({ error: "Submission failed" }, 500);
@@ -2553,10 +2570,25 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       const sz = splitSize(p.size);
       const yearMatch = (titleRaw + " " + (p.year || "")).match(/\b(19|20)\d{2}\b/);
 
-      // Works: prefer Qanvast structured list + supplement with description-based detection.
-      const structuredWorks = Array.isArray(p._works) ? mapQanvastWorks(p._works) : [];
-      const detectedWorks = detectWorks(p.description || haystack);
-      const worksIncluded = Array.from(new Set([...structuredWorks, ...detectedWorks]));
+      // Works: prefer Qanvast structured list; when the RSC payload lazy-loads it
+      // (e.g. `otherWorks: "$3d"` where ref 3d isn't streamed in the initial HTML),
+      // fall back to scanning the rendered page text. Qanvast renders the works
+      // list as visible tags (Carpentry, Feature Walls, Tiling, Electrical
+      // Re-wiring, Plumbing, Paint Job, etc.) so a labelled-phrase scan picks
+      // them up even without the structured array.
+      const structuredWorks = Array.isArray(p._works) && p._works.length ? mapQanvastWorks(p._works) : [];
+      const qanvastHtmlWorks: string[] = [];
+      for (const label of Object.keys(QANVAST_WORK_MAP)) {
+        const re = new RegExp(`>\\s*${label.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\s*<`, "i");
+        if (re.test(html)) qanvastHtmlWorks.push(label);
+      }
+      const htmlStructuredWorks = mapQanvastWorks(qanvastHtmlWorks);
+      const detectedWorks = detectWorks(p.description || htmlText || haystack);
+      const worksIncluded = Array.from(new Set([
+        ...structuredWorks,
+        ...htmlStructuredWorks,
+        ...detectedWorks,
+      ]));
 
       return {
         title: titleRaw.slice(0, 120),
@@ -2622,6 +2654,30 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
           rooms: extractedRooms,
         },
         projectRecordKeys: projectRecord ? Object.keys(projectRecord) : [],
+        otherWorksRaw: projectRecord ? projectRecord.otherWorks : undefined,
+        otherWorksResolved: projectRecord ? resolveRef(projectRecord.otherWorks) : undefined,
+        rscRefKeys: Object.keys(rscDict).slice(0, 400),
+        rsc3dPeek: (() => {
+          try {
+            const rsc = rscChunks.map((s) => s
+              .replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t")
+              .replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+              .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+            ).join("");
+            const hits: string[] = [];
+            const re = /3d[:\]]/g;
+            let mm: RegExpExecArray | null;
+            while ((mm = re.exec(rsc)) && hits.length < 6) {
+              hits.push(rsc.slice(Math.max(0, mm.index - 30), mm.index + 200));
+            }
+            return hits;
+          } catch { return [] as string[]; }
+        })(),
+        htmlCarpentryHit: /Carpentry/i.test(html),
+        htmlWorkHits: (() => {
+          const labels = ["Carpentry","Feature Walls","Tiling","Electrical Re-wiring","Plumbing","Paint Job","Lighting","False Ceiling","Hacking","Masonry","Flooring","Doors"];
+          return labels.filter((l) => new RegExp(l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(html));
+        })(),
       },
     });
   } catch (err: any) {

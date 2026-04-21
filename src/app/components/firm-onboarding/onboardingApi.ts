@@ -139,7 +139,7 @@ export async function lookupAirtableFirm(recordId: string, identifier: string): 
   return { ok: false, message: (json && json.message) || `Lookup failed (${res.status})` };
 }
 
-export async function submitOnboarding(payload: OnboardingPayload): Promise<{ ok: true; id: string }> {
+export async function submitOnboarding(payload: OnboardingPayload): Promise<{ ok: true; id: string; updated?: boolean }> {
   const res = await fetch(`${API}/firm-onboarding-submit`, {
     method: "POST",
     headers: {
