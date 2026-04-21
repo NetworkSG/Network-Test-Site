@@ -2157,6 +2157,37 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       if (initMatch) { try { nextData = JSON.parse(initMatch[1]); } catch {} }
     }
 
+    // ── Next.js App Router RSC payload (Qanvast uses this) ──
+    // Stream chunks look like: self.__next_f.push([1,"3c:{...}\n3d:[...]\n"])
+    // Concatenate all pushed strings, unescape, then parse ref-keyed chunks.
+    const rscDict: Record<string, any> = {};
+    const rscChunks: string[] = [];
+    const rscPushRe = /self\.__next_f\.push\(\s*\[\s*\d+\s*,\s*"((?:[^"\\]|\\.)*)"\s*\]\s*\)/g;
+    let rm: RegExpExecArray | null;
+    while ((rm = rscPushRe.exec(html))) rscChunks.push(rm[1]);
+    if (rscChunks.length) {
+      const unescape = (s: string) => s
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\")
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+      const rsc = rscChunks.map(unescape).join("");
+      // Refs look like `3c:{...}` or `3d:["..."]` at line start, one per line.
+      const refRe = /(^|\n)([0-9a-f]+):(\{[\s\S]*?\}|\[[\s\S]*?\])(?=\n|$)/g;
+      let refMatch: RegExpExecArray | null;
+      while ((refMatch = refRe.exec(rsc))) {
+        try { rscDict[refMatch[2]] = JSON.parse(refMatch[3]); } catch {}
+      }
+    }
+
+    // Resolve Qanvast RSC references like "$3e" → rscDict["3e"].
+    const resolveRef = (v: any): any => {
+      if (typeof v === "string" && /^\$[0-9a-f]+$/.test(v)) return rscDict[v.slice(1)] ?? v;
+      return v;
+    };
+
     // ── JSON-LD (schema.org) — often the cleanest source on SEO pages ──
     const jsonLd: any[] = [];
     const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
@@ -2347,8 +2378,53 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     jsonLd.forEach(flattenLd);
     const ldByType = (t: string) => flatLd.find((x) => (x["@type"] || "").toLowerCase().includes(t.toLowerCase()));
 
-    // Fallback: always synthesize a project from OG tags + extracted fields + images when we have a title + images.
-    // This catches SEO-only pages where Qanvast doesn't ship hydration state.
+    // ── Find the canonical project record inside the RSC dict ──
+    // Heuristic: object with both a numeric `price` and string `yearOfCompletion`.
+    const projectRecord: any = Object.values(rscDict).find((v: any) =>
+      v && typeof v === "object" && !Array.isArray(v) &&
+      typeof v.price === "number" && typeof v.yearOfCompletion === "string"
+    );
+    // Firm record: has `companyId`/`companyName`, or a firm-shaped object referenced by the project.
+    const firmRecord: any = Object.values(rscDict).find((v: any) =>
+      v && typeof v === "object" && !Array.isArray(v) &&
+      (v.companyName || v.companyId) && (v.description || v.overallRating || v.prettyUrl)
+    );
+    // Image base URLs — photo records carry `baseUrl` on the Cloudfront CDN.
+    const photoBaseUrls: string[] = [];
+    for (const v of Object.values(rscDict)) {
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item && typeof item === "object" && typeof item.baseUrl === "string" && /d1hy6t2xeg0mdl\.cloudfront\.net/.test(item.baseUrl)) {
+            photoBaseUrls.push(item.baseUrl + "/standard");
+          }
+        }
+      }
+    }
+
+    // If we found a structured project, use it as the canonical project entry.
+    if (projectRecord) {
+      const styles = resolveRef(projectRecord.styles);
+      const works = resolveRef(projectRecord.otherWorks);
+      const unit = projectRecord.areaUnit === "sqm" ? "sqm" : projectRecord.areaUnit === "m²" ? "m²" : "sqft";
+      projects.length = 0; // prefer the structured record over any fallback
+      projects.push({
+        title: String(projectRecord.title || ""),
+        description: "",
+        homeType: projectRecord.type,
+        budget: typeof projectRecord.price === "number" ? `S$${projectRecord.price.toLocaleString()}` : undefined,
+        size: typeof projectRecord.size === "number" ? `${projectRecord.size}${unit}` : undefined,
+        year: projectRecord.yearOfCompletion,
+        rooms: typeof projectRecord.noOfBedrooms === "number" ? `${projectRecord.noOfBedrooms}-Bedroom` : undefined,
+        style: Array.isArray(styles) ? styles.join(", ") : "",
+        images: photoBaseUrls.length ? photoBaseUrls : Array.from(imgSet).slice(0, 30),
+        sourceUrl: rawUrl,
+        _works: Array.isArray(works) ? works : [],
+        _isNew: !!projectRecord.isNewProperty,
+        _bedrooms: projectRecord.noOfBedrooms,
+      });
+    }
+
+    // Fallback: synthesize from OG tags + images when no structured record exists.
     const haveOgProject = (ogTags.title || pageTitle) && imgSet.size > 0 && projects.length === 0;
     if (haveOgProject) {
       const ld = ldByType("Article") || ldByType("Product") || ldByType("Thing");
@@ -2366,27 +2442,106 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       });
     }
 
+    // ── H3 header: "<span>New HDB</span><span>Modern</span>" — cleanest source of property type label ──
+    // Pull the first <h3>...</h3> block and grab its first <span> innerText.
+    const h3Match = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+    const h3Spans: string[] = [];
+    if (h3Match) {
+      const spanRe = /<span[^>]*>([^<]+)<\/span>/gi;
+      let sm: RegExpExecArray | null;
+      while ((sm = spanRe.exec(h3Match[1]))) h3Spans.push(sm[1].trim());
+    }
+    const h3PropertyLabel = h3Spans[0] || ""; // e.g. "New HDB" / "Resale Condo" / "Landed Terrace"
+
+    // Map a Qanvast property label (from h3) onto our { propertyType, propertySubType }.
+    const mapQanvastPropertyLabel = (label: string, isNew: boolean | undefined, bedrooms: number | undefined): { propertyType: string; propertySubType: string } => {
+      const l = label.toLowerCase();
+      const nbLabel = typeof bedrooms === "number" && bedrooms > 0 ? `${bedrooms}-Bedroom` : "";
+      if (/hdb/.test(l)) {
+        // HDB sub-type: "BTO" or "Resale" + room count (HDB N-Room == bedrooms + 1 roughly, but keep bedroom-based to avoid errors)
+        const status = isNew === true ? "BTO" : isNew === false ? "Resale" : "";
+        return { propertyType: "HDB", propertySubType: [status, nbLabel].filter(Boolean).join(", ") };
+      }
+      if (/condo|apartment|penthouse|ec\b/.test(l)) {
+        const status = isNew === true ? "New" : isNew === false ? "Resale" : "";
+        return { propertyType: "Condominium", propertySubType: [status, nbLabel].filter(Boolean).join(", ") };
+      }
+      if (/landed|terrace|bungalow|semi/.test(l)) {
+        let sub = "";
+        if (/good\s+class/i.test(label)) sub = "Good Class Bungalow";
+        else if (/bungalow/i.test(label)) sub = "Bungalow";
+        else if (/semi/i.test(label)) sub = "Semi-Detached";
+        else if (/terrace/i.test(label)) sub = "Terrace";
+        return { propertyType: "Landed", propertySubType: sub };
+      }
+      if (/commercial|office|retail|f&b|restaurant|cafe/.test(l)) {
+        return { propertyType: "Commercial", propertySubType: "" };
+      }
+      return { propertyType: "", propertySubType: "" };
+    };
+
+    // Map Qanvast's otherWorks list onto our 8 canonical keys.
+    const QANVAST_WORK_MAP: Record<string, string> = {
+      "carpentry": "carpentry",
+      "feature walls": "feature-wall",
+      "feature wall": "feature-wall",
+      "accent walls": "feature-wall",
+      "tiling": "tiling",
+      "electrical re-wiring": "electrical",
+      "electrical rewiring": "electrical",
+      "electrical": "electrical",
+      "plumbing": "plumbing",
+      "paint job": "painting",
+      "painting": "painting",
+    };
+    const mapQanvastWorks = (works: string[]): string[] => {
+      const out = new Set<string>();
+      for (const w of works) {
+        const key = QANVAST_WORK_MAP[w.toLowerCase().trim()];
+        if (key) out.add(key);
+      }
+      return Array.from(out);
+    };
+
     // ── Build an `imported` payload shaped like /firm-onboarding/project's ProjectSubmission ──
-    // Paste-ready: if a firm pastes their Qanvast URL, this can pre-fill the project form.
     const imported = projects.map((p: any) => {
       const titleRaw = p.title || "";
-      const haystack = `${titleRaw} ${p.description || ""} ${p.homeType || ""} ${p.style || ""} ${p.rooms || ""}`;
-      const { propertyType, propertySubType } = classifyPropertyType(haystack);
+      const haystack = `${titleRaw} ${p.description || ""} ${p.homeType || ""} ${p.style || ""} ${p.rooms || ""} ${h3PropertyLabel}`;
+
+      // Prefer structured h3 label when available, else fall back to freeform classifier.
+      let propertyType = "";
+      let propertySubType = "";
+      if (h3PropertyLabel) {
+        const mapped = mapQanvastPropertyLabel(h3PropertyLabel, p._isNew, p._bedrooms);
+        propertyType = mapped.propertyType;
+        propertySubType = mapped.propertySubType;
+      }
+      if (!propertyType) {
+        const fallback = classifyPropertyType(haystack);
+        propertyType = fallback.propertyType;
+        propertySubType = fallback.propertySubType;
+      }
+
       const sz = splitSize(p.size);
-      // Year — prefer a 4-digit year anywhere in title/year field (e.g. "HDB (2026)")
       const yearMatch = (titleRaw + " " + (p.year || "")).match(/\b(19|20)\d{2}\b/);
+
+      // Works: prefer Qanvast structured list + supplement with description-based detection.
+      const structuredWorks = Array.isArray(p._works) ? mapQanvastWorks(p._works) : [];
+      const detectedWorks = detectWorks(p.description || haystack);
+      const worksIncluded = Array.from(new Set([...structuredWorks, ...detectedWorks]));
+
       return {
-        title: extractLocation(titleRaw) || titleRaw.slice(0, 120),
+        title: titleRaw.slice(0, 120),
         location: extractLocation(titleRaw),
-        cost: normalizeCost(p.budget),
+        cost: normalizeCost(p.budget) || (p.budget || "").replace(/^S/i, ""),
         size: sz.num,
         sizeUnit: sz.unit,
-        year: yearMatch ? yearMatch[0] : "",
+        year: yearMatch ? yearMatch[0] : (p.year || ""),
         propertyType,
         propertySubType,
         style: p.style || detectStyle(haystack),
-        worksIncluded: detectWorks(p.description || haystack),
-        driveUrl: "", // Qanvast doesn't expose one; firm will need to add
+        worksIncluded,
+        driveUrl: "",
         images: Array.isArray(p.images) ? p.images : [],
         sourceUrl: p.sourceUrl || rawUrl,
       };
@@ -2396,6 +2551,16 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     if (!firmName) {
       const ld = ldByType("Article") || ldByType("Product");
       firmName = ld?.author?.name || ld?.publisher?.name || ld?.brand?.name || firmName;
+    }
+    // Prefer the structured firm record from RSC if we found one.
+    if (firmRecord?.companyName) {
+      firmName = firmRecord.companyName;
+      qanvastId = qanvastId || firmRecord.companyId || firmRecord.id;
+    }
+    // Also try the "Designed by <FirmName>" anchor in the h2 tag (cleanest for project pages).
+    if (!firmName) {
+      const h2Anchor = html.match(/<h2[^>]*>[\s\S]*?<a[^>]*href="\/sg\/interior-designers?-[^"]*"[^>]*>([^<]+)<\/a>/i);
+      if (h2Anchor) firmName = h2Anchor[1].trim();
     }
 
     return c.json({
@@ -2409,6 +2574,12 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       imported,
       raw: {
         hasNextData: !!nextData,
+        rscChunkCount: rscChunks.length,
+        rscRefCount: Object.keys(rscDict).length,
+        rscFoundProject: !!projectRecord,
+        rscFoundFirm: !!firmRecord,
+        photoBaseUrlCount: photoBaseUrls.length,
+        h3PropertyLabel,
         jsonLdCount: jsonLd.length,
         jsonLdTypes: flatLd.map((x) => x["@type"]).filter(Boolean),
         ogTags,
@@ -2422,7 +2593,7 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
           style: extractedStyle,
           rooms: extractedRooms,
         },
-        nextDataPreview: nextData ? Object.keys(nextData.props?.pageProps || nextData) : [],
+        projectRecordKeys: projectRecord ? Object.keys(projectRecord) : [],
       },
     });
   } catch (err: any) {
