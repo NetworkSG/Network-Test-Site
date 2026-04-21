@@ -83,6 +83,20 @@ export function FirmOnboardingPage() {
     setSubmitting(false);
   };
 
+  const handleSkipProject = async () => {
+    setSubmitError("");
+    setSubmitting(true);
+    try {
+      // Submit studio only — project is optional on firm onboarding.
+      await submitOnboarding({ variant: "full", studio, project: initialProject });
+      setDone(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setSubmitError(err?.message || "Submission failed. Please try again.");
+    }
+    setSubmitting(false);
+  };
+
   if (done) {
     return (
       <OnboardingShell>
@@ -94,7 +108,7 @@ export function FirmOnboardingPage() {
   return (
     <OnboardingShell eyebrow="Firm Onboarding">
       <FadeIn>
-        <StepPills steps={["Studio Info", "First Project"]} activeIndex={step} />
+        <StepPills steps={["Studio Info", "First Project (Optional)"]} activeIndex={step} />
       </FadeIn>
       <FadeIn delay={0.05}>
         <OnboardingCard>
@@ -128,11 +142,18 @@ export function FirmOnboardingPage() {
           {step === 0 ? (
             <PrimaryButton label="Continue" onClick={handleContinue} />
           ) : (
-            <PrimaryButton
-              label={submitting ? "Submitting…" : "Submit"}
-              onClick={handleSubmit}
-              disabled={submitting}
-            />
+            <>
+              <SecondaryButton
+                label="Skip & Submit"
+                onClick={handleSkipProject}
+                disabled={submitting}
+              />
+              <PrimaryButton
+                label={submitting ? "Submitting…" : "Submit"}
+                onClick={handleSubmit}
+                disabled={submitting}
+              />
+            </>
           )}
         </div>
       </div>

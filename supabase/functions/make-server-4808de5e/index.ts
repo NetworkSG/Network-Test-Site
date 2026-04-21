@@ -1872,8 +1872,10 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body || typeof body !== "object") return c.json({ error: "Invalid payload" }, 400);
     const variant = body.variant === "project-only" ? "project-only" : "full";
-    const project = body.project;
-    if (!project || typeof project !== "object" || !project.title) {
+    const project = body.project || {};
+    const hasProject = typeof project === "object" && !!project.title;
+    // project is required for "project-only" but optional for "full" (firm-onboarding)
+    if (variant === "project-only" && !hasProject) {
       return c.json({ error: "Missing project details" }, 400);
     }
     if (variant === "full" && (!body.studio || !body.studio.firmName)) {
@@ -1986,7 +1988,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       ].filter((r) => r.value);
 
       await saveDesignerProfile(slug, profile);
-      await saveDesignerSection(slug, "projects", [pendingProject]);
+      if (hasProject) await saveDesignerSection(slug, "projects", [pendingProject]);
       if (businessInfo.length) await saveDesignerSection(slug, "businessinfo", businessInfo);
       resultSlug = slug;
       if (studio?.airtableRecordId) {
