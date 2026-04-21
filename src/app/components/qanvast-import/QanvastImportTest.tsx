@@ -238,7 +238,6 @@ export function QanvastImportTest() {
                       ["Sub-type", p.propertySubType],
                       ["Style", p.style],
                       ["Works", (p.worksIncluded || []).join(", ")],
-                      ["Drive URL", p.driveUrl],
                       ["Images", `${p.images?.length || 0} found`],
                       ["Source", p.sourceUrl],
                     ];

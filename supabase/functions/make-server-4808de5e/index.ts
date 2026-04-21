@@ -2174,11 +2174,39 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         .replace(/\\\\/g, "\\")
         .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
       const rsc = rscChunks.map(unescape).join("");
-      // Refs look like `3c:{...}` or `3d:["..."]` at line start, one per line.
-      const refRe = /(^|\n)([0-9a-f]+):(\{[\s\S]*?\}|\[[\s\S]*?\])(?=\n|$)/g;
+      // Refs look like `3c:{...}` or `3d:["..."]`. Use a balanced-bracket scanner
+      // so nested arrays/objects (the entire shape of the project record, the long
+      // otherWorks array under `3d`, etc.) don't terminate prematurely on a regex's
+      // first closing bracket. Walks the string once, O(n).
+      const refHeadRe = /(?:^|\n)([0-9a-f]+):(?=[\{\[])/g;
       let refMatch: RegExpExecArray | null;
-      while ((refMatch = refRe.exec(rsc))) {
-        try { rscDict[refMatch[2]] = JSON.parse(refMatch[3]); } catch {}
+      while ((refMatch = refHeadRe.exec(rsc))) {
+        const key = refMatch[1];
+        const start = refMatch.index + refMatch[0].length;
+        const open = rsc[start];
+        const close = open === "{" ? "}" : "]";
+        let depth = 0;
+        let inStr = false;
+        let esc = false;
+        let end = -1;
+        for (let i = start; i < rsc.length; i++) {
+          const c = rsc[i];
+          if (inStr) {
+            if (esc) esc = false;
+            else if (c === "\\") esc = true;
+            else if (c === '"') inStr = false;
+            continue;
+          }
+          if (c === '"') { inStr = true; continue; }
+          if (c === open) depth++;
+          else if (c === close) {
+            depth--;
+            if (depth === 0) { end = i + 1; break; }
+          }
+        }
+        if (end > start) {
+          try { rscDict[key] = JSON.parse(rsc.slice(start, end)); } catch {}
+        }
       }
     }
 
