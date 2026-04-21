@@ -8,7 +8,7 @@ const serif = "'EB Garamond', Georgia, serif"
 
 const recommendedTools = [
   {
-    title: "AI 3D Render Tool",
+    title: "3D Preview Tool",
     description: "Upload a photo of your space and see it transformed with AI in minutes. Test different styles before committing to any designer.",
     cta: "Create My Render",
     href: "/render-tool",

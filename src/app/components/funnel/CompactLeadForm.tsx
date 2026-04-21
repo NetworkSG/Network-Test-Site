@@ -19,6 +19,7 @@ const ANSWER_KEYS = [
 
 const PAGE2_INDEXES = [0, 1, 2, 3]; // Q1–Q4
 const PAGE3_INDEXES = [4, 5, 6]; // Q5–Q7
+const HOME_TYPE_OTHER_LABEL = QUALIFYING_QUESTIONS[2].options[QUALIFYING_QUESTIONS[2].options.length - 1].label;
 
 function isValidSGPhone(phone: string) {
   return /^[689]\d{7}$/.test(phone.replace(/\s/g, ""));
@@ -35,6 +36,7 @@ export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode }
   const [form, setForm] = useState<LeadFormData>({ name: "", phone: "", email: "" });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [otherHomeText, setOtherHomeText] = useState("");
   const [consent, setConsent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -52,6 +54,7 @@ export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode }
       if (opt.reveal) next.budget_range = opt.reveal;
       return next;
     });
+    if (qIdx === 2 && opt.label !== HOME_TYPE_OTHER_LABEL) setOtherHomeText("");
   };
 
   const page2Complete = PAGE2_INDEXES.every((i) => answers[ANSWER_KEYS[i]]);
@@ -79,8 +82,12 @@ export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode }
   const handleFinalSubmit = async () => {
     if (!page3Complete || submitting) return;
     setSubmitting(true);
+    const finalAnswers = { ...answers };
+    if (finalAnswers.home_type === HOME_TYPE_OTHER_LABEL && otherHomeText.trim()) {
+      finalAnswers.home_type = `${HOME_TYPE_OTHER_LABEL} — ${otherHomeText.trim()}`;
+    }
     try {
-      await submitHomepageLead(form, answers as any, {
+      await submitHomepageLead(form, finalAnswers as any, {
         leadFormLabel: "Funnel Lead Form (/get-matched)",
       });
     } finally {
@@ -324,12 +331,24 @@ export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode }
               className="flex flex-col gap-5"
             >
               {PAGE2_INDEXES.map((qIdx) => (
-                <QuestionBlock
-                  key={qIdx}
-                  qIdx={qIdx}
-                  selectedLabel={answers[ANSWER_KEYS[qIdx]]}
-                  onSelect={(optIdx) => selectAnswer(qIdx, optIdx)}
-                />
+                <div key={qIdx} className="flex flex-col gap-2.5">
+                  <QuestionBlock
+                    qIdx={qIdx}
+                    selectedLabel={answers[ANSWER_KEYS[qIdx]]}
+                    onSelect={(optIdx) => selectAnswer(qIdx, optIdx)}
+                  />
+                  {qIdx === 2 && answers.home_type === HOME_TYPE_OTHER_LABEL && (
+                    <input
+                      type="text"
+                      value={otherHomeText}
+                      onChange={(e) => setOtherHomeText(e.target.value)}
+                      placeholder="Tell us more about your property (optional)"
+                      maxLength={120}
+                      className="w-full h-[44px] px-4 text-[13px] focus-visible:outline-none"
+                      style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}
+                    />
+                  )}
+                </div>
               ))}
               <button
                 onClick={() => goForward(3)}

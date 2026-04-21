@@ -5,7 +5,7 @@ const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-ser
 
 const tools = [
   {
-    title: "AI 3D Render Tool",
+    title: "3D Preview Tool",
     description: "Upload a photo of your space and see it transformed with AI in minutes. Test different styles before committing to any designer.",
     bullets: ["Realistic 3D visualizations", "Multiple style options", "Results in 5 minutes"],
     cta: "Create My Render",
@@ -23,7 +23,7 @@ const tools = [
     image: "/new interor 2.webp",
   },
   {
-    title: "Floor Layout Planner",
+    title: "Layout Planner",
     description: "Upload any floor plan and convert it to 3D. Stage furniture, test layouts, and plan your renovation visually.",
     bullets: ["2D to 3D conversion", "Drag & drop furniture", "Free to use"],
     cta: "Plan My Layout",

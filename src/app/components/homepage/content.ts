@@ -22,7 +22,7 @@ export const HERO = {
   subheadline:
     "Struggling to find a reliable interior designer? Our concierge team handpicks 3 verified firms that fit your style, budget, and timeline. Free. Within the day. No obligation.",
   formTitle: "Get Your Free Designer Match",
-  formSubtitle: "Answer 6 quick questions and get matched with verified designers who fit your project. Free, no obligations.",
+  formSubtitle: "Answer 7 questions about your home and how you want to live in it. As you go, we'll show typical costs for your property and scope. When you're done, our concierge handpicks 3 firms that fit — free, within the day.",
   submitButton: "Get My Free Matches",
   trustMicrocopy: "3,214 homeowners matched this year · Free · No obligations",
 };
@@ -84,14 +84,34 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
     question: "What type of home are you renovating?",
     options: [
       {
-        label: "HDB flat",
+        label: "HDB BTO",
         response:
-          "Most of our matched firms specialise in HDB renovations and understand the specific requirements, restrictions, and opportunities that come with the space.",
+          "Most of our matched firms specialise in BTOs — they know the HDB guidelines, timeline pressures, and how to make standard layouts feel custom.",
       },
       {
-        label: "Condo",
+        label: "HDB Resale",
         response:
-          "Noted. Condo renovations come with their own set of MCST rules and considerations. We'll match you with firms that have handled condo projects and know how to navigate that.",
+          "Our matched firms understand resale work — existing conditions, hacking walls, reconfiguring layouts, and the hidden costs that come with older flats.",
+      },
+      {
+        label: "Executive Condo (EC)",
+        response:
+          "Our matched firms work on ECs regularly — larger layouts, strata restrictions, and the upgrade potential that sits between HDB and private condo.",
+      },
+      {
+        label: "Private Condo",
+        response:
+          "Our matched firms are experienced with condos — MCST guidelines, premium finishes, and the design choices that suit condo living.",
+      },
+      {
+        label: "Landed",
+        response:
+          "Our matched firms handle landed work — full overhauls, structural changes, outdoor spaces, and the complexity that comes with your scale.",
+      },
+      {
+        label: "Penthouse / Cluster / Other",
+        response:
+          "Tell us more about your property — we'll match you with firms who understand your specific situation.",
       },
     ],
   },
@@ -181,14 +201,24 @@ export const QUALIFYING_QUESTIONS: QualifyingQuestion[] = [
     question: "How would you prefer to meet your matched designers?",
     options: [
       {
-        label: "Virtual",
+        label: "Virtual meeting (Zoom / Google Meet)",
         response:
-          "Got it. We'll let your matched designers know you prefer a virtual meeting. They'll schedule a video call at a time that works for you.",
+          "Got it. We'll let your matched firms know you prefer a virtual meeting. They'll schedule a Zoom or Google Meet at a time that works for you.",
       },
       {
-        label: "Physical",
+        label: "At their showroom",
         response:
-          "Noted. We'll let your matched designers know you'd like to meet in person. They'll arrange a face-to-face consultation at their studio or a convenient location.",
+          "Got it. We'll let your matched firms know you'd like to visit their showroom. They'll share their address and available slots.",
+      },
+      {
+        label: "At my renovation site",
+        response:
+          "Got it. We'll let your matched firms know to meet you at your renovation site. They'll coordinate a time that works for both of you.",
+      },
+      {
+        label: "At a cafe near me",
+        response:
+          "Got it. We'll let your matched firms know you'd prefer a casual catch-up. They'll suggest a cafe near you or meet you at one of your choice.",
       },
     ],
   },
@@ -562,8 +592,8 @@ export const FOOTER = {
   tagline: "Singapore's trusted platform for homeowner-designer matching.",
   links: [
     { label: "Home", href: "/" },
-    { label: "3D Render", href: "/render-tool" },
-    { label: "Floor Layout Planner", href: "/floorplan3d" },
+    { label: "3D Preview", href: "/render-tool" },
+    { label: "Layout Planner", href: "/floorplan3d" },
     { label: "Cost Guide", href: "/cost-guide" },
     // { label: "Style Quiz", href: "/style-quiz" },
     // { label: "Mood Board", href: "/mood-board" },

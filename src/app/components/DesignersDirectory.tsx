@@ -781,7 +781,7 @@ export function DesignersDirectory() {
                   {[
                     { label: "Home", href: "/" },
                     { label: "Designers", href: "/designers" },
-                    { label: "Floor Layout Planner", href: "/floorplan3d" },
+                    { label: "Layout Planner", href: "/floorplan3d" },
                     { label: "Cost Guide", href: "/cost-guide" },
                   ].map((link) => (
                     <a key={link.label} href={link.href}

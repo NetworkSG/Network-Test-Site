@@ -170,7 +170,7 @@ export function Navbar() {
               to="/floorplan3d"
               className="font-['Inter',sans-serif] text-[14px] text-black hover:text-[#71717a] transition-colors"
             >
-              Floor Layout Planner
+              Layout Planner
             </Link>
             <div
               ref={triggerRef}
@@ -218,20 +218,20 @@ export function Navbar() {
 
                     {/* Cards */}
                     <div className="flex gap-4 flex-1 h-full">
-                      {/* AI 3D Render Tool */}
+                      {/* 3D Preview Tool */}
                       <a
                         href="/render-tool"
                         className="group relative flex-1 rounded-[14px] overflow-hidden h-full block"
                       >
                         <ImageWithFallback
                           src="https://images.unsplash.com/photo-1745429523617-0d837856ca35?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwbGl2aW5nJTIwcm9vbSUyMGludGVyaW9yJTIwM0QlMjByZW5kZXJ8ZW58MXx8fHwxNzczMjI5MTU1fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
-                          alt="AI 3D Render Tool"
+                          alt="3D Preview Tool"
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/25 to-transparent" />
                         <div className="absolute bottom-5 left-5 right-5">
                           <h4 className="font-['Inter',sans-serif] font-semibold text-[14px] text-white leading-[1.3] mb-1">
-                            AI 3D Render Tool
+                            3D Preview Tool
                           </h4>
                           <p className="font-['Inter',sans-serif] text-[12px] text-white/75 leading-[1.45]">
                             Test different styles before committing to any designer.
@@ -402,13 +402,13 @@ export function Navbar() {
                 onClick={() => { setMobileMenuOpen(false); navigate("/floorplan3d"); }}
                 className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
               >
-                Floor Layout Planner <ArrowRight size={16} className="text-[#9ca3af]" />
+                Layout Planner <ArrowRight size={16} className="text-[#9ca3af]" />
               </button>
               <button
                 onClick={() => { setMobileMenuOpen(false); navigate("/render-tool"); }}
                 className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
               >
-                AI 3D Render Tool <ArrowRight size={16} className="text-[#9ca3af]" />
+                3D Preview Tool <ArrowRight size={16} className="text-[#9ca3af]" />
               </button>
               <button
                 onClick={() => { setMobileMenuOpen(false); navigate("/cost-guide"); }}

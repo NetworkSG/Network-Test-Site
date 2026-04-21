@@ -19,10 +19,12 @@ function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, s
   const [direction, setDirection] = useState<1 | -1>(1);
   const [consent, setConsent] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [otherPropertyText, setOtherPropertyText] = useState("");
   const question = QUALIFYING_QUESTIONS[currentQ];
   const progress = ((currentQ + 1) / 7) * 100;
 
   const ANSWER_KEYS = ["situation", "timeline", "home_type", "design_level", "biggest_concern", "is_decision_maker", "meeting_preference"];
+  const OTHER_PROPERTY_IDX = 5;
 
   const handleSelect = (idx: number) => {
     setSelectedOption(idx);
@@ -31,10 +33,14 @@ function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, s
     const newAnswers = { ...answers, [ANSWER_KEYS[currentQ]]: label };
     if (reveal) newAnswers.budget_range = reveal;
     setAnswers(newAnswers);
+    if (currentQ === 2 && idx !== OTHER_PROPERTY_IDX) setOtherPropertyText("");
   };
 
   const handleNext = () => {
     if (selectedOption === null) return;
+    if (currentQ === 2 && selectedOption === OTHER_PROPERTY_IDX && otherPropertyText.trim()) {
+      setAnswers(a => ({ ...a, home_type: `${question.options[OTHER_PROPERTY_IDX].label} — ${otherPropertyText.trim()}` }));
+    }
     if (currentQ < 6) {
       setDirection(1);
       setSelectedOption(null);
@@ -92,6 +98,17 @@ function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, s
                     <div className="mt-3 p-4 text-[13px] font-medium not-italic leading-[1.6]" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}>
                       {question.options[selectedOption].reveal}
                     </div>
+                  )}
+                  {currentQ === 2 && selectedOption === OTHER_PROPERTY_IDX && (
+                    <input
+                      type="text"
+                      value={otherPropertyText}
+                      onChange={(e) => setOtherPropertyText(e.target.value)}
+                      placeholder="Tell us more about your property (optional)"
+                      maxLength={120}
+                      className="w-full h-[44px] mt-3 px-4 text-[13px] font-normal focus-visible:outline-none"
+                      style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}
+                    />
                   )}
                 </div>
               </motion.div>
@@ -285,7 +302,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                         {[
                           { icon: "✓", text: "Free, no cost" },
                           { icon: "🛡", text: "No obligations" },
-                          { icon: "⏱", text: "2-minute process" },
+                          { icon: "⏱", text: "3-minute process" },
                         ].map((badge) => (
                           <span key={badge.text} className="flex items-center gap-1.5 text-[11px] font-normal" style={{ color: C.grayLight, fontFamily: sans }}>
                             <span className="text-[10px]">{badge.icon}</span>

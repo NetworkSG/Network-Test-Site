@@ -31,7 +31,7 @@ export function PlanningTools() {
       </div>
 
       <div className="max-w-[1293px] mx-auto flex flex-col md:flex-row gap-6 md:gap-8">
-        {/* AI 3D Render Tool */}
+        {/* 3D Preview Tool */}
         <div className="flex-1 relative group cursor-pointer isolate md:min-h-[666px]">
           {/* Soft ambient glow */}
           <div className="absolute -inset-10 md:-inset-[60px] z-0 opacity-0 md:group-hover:opacity-40 transition-opacity duration-700 pointer-events-none hidden md:block">
@@ -51,7 +51,7 @@ export function PlanningTools() {
             <div className="relative p-6 pb-0 md:p-12 flex flex-col h-full justify-between">
               <div>
                 <h3 className="font-['Inter',sans-serif] font-semibold text-[24px] md:text-[28px] text-white tracking-[-1.4px] max-w-[344px] mb-4">
-                  AI 3D Render Tool
+                  3D Preview Tool
                 </h3>
                 <p className="font-['Inter',sans-serif] text-[14px] md:text-[15px] text-white/90 leading-relaxed mb-5 max-w-[380px]">
                   Upload a photo of your space and see it transformed with AI in minutes. Test different styles before committing to any designer.
