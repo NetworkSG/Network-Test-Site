@@ -391,7 +391,7 @@ export function StudioInfoStep({
             type="text"
             value={identifier}
             placeholder="Email or phone registered on ID Profiles"
-            onChange={(e) => { setIdentifier(e.target.value); patch({ contactEmail: e.target.value.includes("@") ? e.target.value.trim() : value.contactEmail }); }}
+            onChange={(e) => { setIdentifier(e.target.value); if (value.contactEmail) patch({ contactEmail: "" }); }}
             disabled={!value.airtableRecordId}
             style={{
               ...inputStyle,
