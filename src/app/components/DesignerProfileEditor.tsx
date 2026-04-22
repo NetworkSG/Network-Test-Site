@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, createContext, useCo
 import { useParams } from "react-router";
 import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { supabase } from "./supabaseClient";
 import {
   DesignerDataContext,
   ProfileEditContext,
@@ -40,6 +41,10 @@ const PLACEHOLDER_COVER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/20
 const PLACEHOLDER_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Crect fill='%230f0f0d' width='160' height='160' rx='80'/%3E%3C/svg%3E";
 
 // ─── API helpers ──────────────────────────────────────────────────
+// Cached admin Supabase JWT — set once when the editor is opened from /admin.
+// Lets admin users bypass the portal designer-token auth.
+let cachedAdminToken: string | null = null;
+export function setCachedAdminToken(t: string | null) { cachedAdminToken = t; }
 function editorApi(path: string, opts: any = {}) {
   const token = localStorage.getItem("designer-token") || "";
   return fetch(`${API}${path}`, {
@@ -47,7 +52,8 @@ function editorApi(path: string, opts: any = {}) {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${publicAnonKey}`,
-      "X-Designer-Token": token,
+      ...(token ? { "X-Designer-Token": token } : {}),
+      ...(cachedAdminToken ? { "X-User-Token": cachedAdminToken } : {}),
       ...(opts.headers || {}),
     },
   });
@@ -4428,27 +4434,41 @@ export function DesignerProfileEditor() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  // Check existing session on mount
+  // Check existing session on mount. Priority:
+  //   1) portal designer-token (firm portal login)
+  //   2) admin Supabase session (lets admins skip the login screen)
   useEffect(() => {
-    const token = localStorage.getItem("designer-token");
-    if (!token) { setChecking(false); return; }
-
-    fetch(`${API}/portal-session`, {
-      headers: {
-        Authorization: `Bearer ${publicAnonKey}`,
-        "X-Designer-Token": token,
-      },
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.valid) {
-          setAuthed(true);
-        } else {
-          localStorage.removeItem("designer-token");
+    let cancelled = false;
+    (async () => {
+      const token = localStorage.getItem("designer-token");
+      if (token) {
+        try {
+          const r = await fetch(`${API}/portal-session`, {
+            headers: { Authorization: `Bearer ${publicAnonKey}`, "X-Designer-Token": token },
+          });
+          const json = await r.json();
+          if (!cancelled && json.valid) { setAuthed(true); setChecking(false); return; }
+          if (!json.valid) localStorage.removeItem("designer-token");
+        } catch {}
+      }
+      // Admin fallback — verify the Supabase session is an admin.
+      try {
+        const { data } = await supabase.auth.getSession();
+        const accessToken = data?.session?.access_token;
+        if (accessToken) {
+          const r = await fetch(`${API}/fp3d/admin/verify`, {
+            headers: { Authorization: `Bearer ${publicAnonKey}`, "X-User-Token": accessToken },
+          });
+          const json = await r.json();
+          if (!cancelled && json?.isAdmin === true) {
+            setCachedAdminToken(accessToken);
+            setAuthed(true);
+          }
         }
-      })
-      .catch(() => {})
-      .finally(() => setChecking(false));
+      } catch {}
+      if (!cancelled) setChecking(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   if (!urlSlug) {

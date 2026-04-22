@@ -18,7 +18,8 @@ export function useDesignerData(slug: string | undefined) {
     setLoading(true);
     setError(null);
 
-    fetch(`${API}/designers/${slug}`, {
+    const preview = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
+    fetch(`${API}/designers/${slug}${preview ? "?preview=1" : ""}`, {
       headers: { Authorization: `Bearer ${publicAnonKey}` },
     })
       .then((res) => {

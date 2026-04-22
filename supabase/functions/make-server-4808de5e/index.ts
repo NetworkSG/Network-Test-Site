@@ -1898,10 +1898,16 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     });
 
     const now = new Date().toISOString();
+    // Mirror any external image URLs (e.g. Qanvast CDN from project-import) into our storage.
+    const inboundImagesPre: string[] = Array.isArray(project.images) ? project.images.slice(0, 40).map(String) : [];
+    const mirroredImagesPre = (typeof project === "object" && inboundImagesPre.length)
+      ? await mirrorProjectImages(inboundImagesPre)
+      : [];
     const pendingProject = {
       name: String(project.title || "").slice(0, 200),
       meta: buildProjectMeta(project),
-      image: "",
+      image: mirroredImagesPre[0] || "",
+      gallery: mirroredImagesPre.slice(1).map((src) => ({ src, caption: "" })),
       driveUrl: String(project.driveUrl || "").slice(0, 500),
       location: String(project.location || "").slice(0, 200),
       cost: String(project.cost || "").slice(0, 100),
@@ -1914,6 +1920,10 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       worksIncluded: Array.isArray(project.worksIncluded) ? project.worksIncluded.slice(0, 20).map(String) : [],
       submittedAt: now,
     };
+
+    // Mirrored upstream at pendingProject construction.
+    const mirroredImages = mirroredImagesPre;
+    const inboundSourceUrl = String(project.sourceUrl || "").slice(0, 500);
 
     let resultSlug: string | null = null;
     let isUpdate = false;
@@ -2003,6 +2013,25 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
         } else {
           await saveDesignerSection(slug, "projects", [pendingProject]);
         }
+        // Dual-write: row-per-project table (keeps KV blob above for rollback).
+        await insertDesignerProjectRow(slug, {
+          title: pendingProject.name,
+          location: pendingProject.location,
+          cost: pendingProject.cost,
+          size: pendingProject.size,
+          sizeUnit: pendingProject.sizeUnit,
+          year: pendingProject.year,
+          propertyType: pendingProject.propertyType,
+          propertySubType: pendingProject.propertySubType,
+          style: pendingProject.style,
+          worksIncluded: pendingProject.worksIncluded,
+          driveUrl: pendingProject.driveUrl,
+          images: mirroredImages,
+          sourceUrl: inboundSourceUrl,
+          variant,
+          contactEmail: email,
+          submittedAt: now,
+        });
       }
       if (businessInfo.length) await saveDesignerSection(slug, "businessinfo", businessInfo);
       resultSlug = slug;
@@ -2020,6 +2049,24 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       const list = Array.isArray(current) ? current : [];
       list.push(pendingProject);
       await saveDesignerSection(slug, "projects", list);
+      await insertDesignerProjectRow(slug, {
+        title: pendingProject.name,
+        location: pendingProject.location,
+        cost: pendingProject.cost,
+        size: pendingProject.size,
+        sizeUnit: pendingProject.sizeUnit,
+        year: pendingProject.year,
+        propertyType: pendingProject.propertyType,
+        propertySubType: pendingProject.propertySubType,
+        style: pendingProject.style,
+        worksIncluded: pendingProject.worksIncluded,
+        driveUrl: pendingProject.driveUrl,
+        images: mirroredImages,
+        sourceUrl: inboundSourceUrl,
+        variant,
+        contactEmail: email,
+        submittedAt: now,
+      });
       resultSlug = slug;
     }
 
@@ -2795,6 +2842,166 @@ app.post("/make-server-4808de5e/firm-onboarding/airtable-lookup", async (c) => {
   } catch (err) {
     console.log("airtable-lookup error:", err);
     return c.json({ ok: false, message: "Lookup failed" }, 500);
+  }
+});
+
+// Admin: one-shot backfill of existing KV projects into designer_projects.
+// Idempotent on re-run: skips (slug, title, submittedAt) tuples that already exist.
+app.post("/make-server-4808de5e/admin/backfill-designer-projects", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    // Read all KV project sections.
+    const { data: sections, error: secErr } = await sb
+      .from("designer_sections")
+      .select("slug, data")
+      .eq("section", "projects");
+    if (secErr) return c.json({ error: secErr.message }, 500);
+    // Read existing rows to dedupe.
+    const { data: existingRows } = await sb
+      .from("designer_projects")
+      .select("designer_slug, title, submitted_at");
+    const seen = new Set<string>();
+    for (const r of existingRows || []) {
+      seen.add(`${r.designer_slug}|${r.title}|${r.submitted_at}`);
+    }
+    let inserted = 0;
+    let skipped = 0;
+    for (const row of sections || []) {
+      const slug = row.slug as string;
+      const list = Array.isArray(row.data) ? row.data : [];
+      for (const p of list) {
+        const title = String(p?.name || p?.title || "").slice(0, 300);
+        const submittedAt = p?.submittedAt || new Date().toISOString();
+        const key = `${slug}|${title}|${submittedAt}`;
+        if (seen.has(key)) { skipped++; continue; }
+        await insertDesignerProjectRow(slug, {
+          title,
+          location: p?.location || "",
+          cost: p?.cost || "",
+          size: p?.size || "",
+          sizeUnit: p?.sizeUnit || "",
+          year: p?.year || "",
+          propertyType: p?.propertyType || "",
+          propertySubType: p?.propertySubType || "",
+          style: p?.style || "",
+          worksIncluded: Array.isArray(p?.worksIncluded) ? p.worksIncluded : [],
+          driveUrl: p?.driveUrl || "",
+          images: Array.isArray(p?.images) ? p.images : [],
+          sourceUrl: p?.sourceUrl || "",
+          variant: "backfill",
+          contactEmail: "",
+          submittedAt,
+        });
+        seen.add(key);
+        inserted++;
+      }
+    }
+    return c.json({ ok: true, inserted, skipped, sections: sections?.length || 0 });
+  } catch (err: any) {
+    return c.json({ error: "Backfill failed: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list ALL designer profiles (no limit cap). Mirrors the shape
+// returned by GET /designers?showAll=true but without pagination, so the
+// admin Designers list can render the full set.
+app.get("/make-server-4808de5e/admin/designers", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const [designersRes, sectionsRes] = await Promise.all([
+      sb.from("designers").select("slug, name, data"),
+      sb.from("designer_sections").select("slug, section, data"),
+    ]);
+    if (designersRes.error) return c.json({ error: designersRes.error.message }, 500);
+
+    const sectionsBySlug: Record<string, Record<string, any>> = {};
+    for (const row of (sectionsRes.data || []) as any[]) {
+      if (!sectionsBySlug[row.slug]) sectionsBySlug[row.slug] = {};
+      sectionsBySlug[row.slug][row.section] = row.data;
+    }
+
+    const s = (v: any) => (typeof v === "string" ? v.trim() : "");
+    function completeness(d: any, sections: Record<string, any>): { filled: number; total: number; missing: string[] } {
+      const missing: string[] = [];
+      const bi = Array.isArray(sections.businessinfo) ? sections.businessinfo : Array.isArray(d.businessInfo) ? d.businessInfo : [];
+      const biByLabel = new Map<string, string>();
+      for (const b of bi) { if (b?.label && s(b?.value)) biByLabel.set(b.label, b.value); }
+      const projects = Array.isArray(sections.projects) ? sections.projects : Array.isArray(d.projects) ? d.projects : [];
+      const cp = d.coverProject || {};
+      if (!d.images?.cover && !s(cp.image)) missing.push("Cover Image");
+      if (!s(d.name)) missing.push("Firm Name");
+      if (!s(d.tagline)) missing.push("Tagline");
+      if (!s(d.bio)) missing.push("About / Bio");
+      if (!s(d.contactEmail)) missing.push("Contact Email");
+      if (!s(d.acraUen) && !biByLabel.get("ACRA / UEN")) missing.push("ACRA / UEN");
+      if (!s(d.officeAddress) && !biByLabel.get("Office address")) missing.push("Office Address");
+      if (!Array.isArray(projects) || projects.length === 0) missing.push("At least one project");
+      const total = 8;
+      const filled = total - missing.length;
+      return { filled, total, missing };
+    }
+
+    const designers = (designersRes.data || []).map((d: any) => {
+      const merged = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
+      merged.completeness = completeness(merged, sectionsBySlug[d.slug] || {});
+      return merged;
+    });
+    return c.json({ count: designers.length, data: designers });
+  } catch (err: any) {
+    return c.json({ error: "Failed to load designers: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list firm-onboarding submissions (designers with submittedAt set),
+// newest first, no result-count cap.
+app.get("/make-server-4808de5e/admin/submitted-firms", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const { data, error } = await sb
+      .from("designers")
+      .select("slug, name, data")
+      .not("data->>submittedAt", "is", null)
+      .order("data->>submittedAt", { ascending: false });
+    if (error) return c.json({ error: error.message }, 500);
+    const firms = (data || []).map((row: any) => ({
+      slug: row.slug,
+      name: row.data?.name || row.name,
+      contactEmail: row.data?.contactEmail || "",
+      active: row.data?.active,
+      verified: row.data?.verified,
+      submittedAt: row.data?.submittedAt,
+      acraUen: row.data?.acraUen || "",
+      yearsExperience: row.data?.yearsExperience || "",
+      serviceArea: Array.isArray(row.data?.serviceArea) ? row.data.serviceArea : [],
+    }));
+    return c.json({ firms, total: firms.length });
+  } catch (err: any) {
+    return c.json({ error: "Failed to load firms: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list rows from the dedicated designer_projects table.
+// Returns the same shape as /admin/onboarding-submissions so the UI can swap.
+app.get("/make-server-4808de5e/admin/designer-projects", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const { data, error } = await sb
+      .from("designer_projects")
+      .select("id, designer_slug, title, location, cost, size, size_unit, year, property_type, property_sub_type, style, drive_url, source_url, variant, contact_email, submitted_at, created_at, images")
+      .order("submitted_at", { ascending: false })
+      .limit(500);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ projects: data || [], total: (data || []).length });
+  } catch (err: any) {
+    return c.json({ error: "Failed to load designer_projects: " + String(err?.message || err).slice(0, 200) }, 500);
   }
 });
 
@@ -4760,6 +4967,90 @@ async function saveDesignerSection(slug: string, section: string, sectionData: a
   } else {
     await sb.from("designer_sections").insert({ slug, section, data: sectionData });
   }
+}
+
+// ── designer_projects (row-per-project) dual-write helpers ──
+// See supabase/migrations/20260422_designer_projects.sql.
+async function insertDesignerProjectRow(slug: string, payload: {
+  title?: string; location?: string; cost?: string; size?: string; sizeUnit?: string;
+  year?: string; propertyType?: string; propertySubType?: string; style?: string;
+  worksIncluded?: any[]; driveUrl?: string; images?: string[]; sourceUrl?: string;
+  variant?: string; contactEmail?: string; submittedAt?: string;
+}): Promise<void> {
+  const sb = getDesignerSupabase();
+  const { error } = await sb.from("designer_projects").insert({
+    designer_slug: slug,
+    title: String(payload.title || "").slice(0, 300),
+    location: String(payload.location || "").slice(0, 200),
+    cost: String(payload.cost || "").slice(0, 100),
+    size: String(payload.size || "").slice(0, 100),
+    size_unit: String(payload.sizeUnit || "").slice(0, 20),
+    year: String(payload.year || "").slice(0, 8),
+    property_type: String(payload.propertyType || "").slice(0, 60),
+    property_sub_type: String(payload.propertySubType || "").slice(0, 80),
+    style: String(payload.style || "").slice(0, 100),
+    works_included: Array.isArray(payload.worksIncluded) ? payload.worksIncluded.slice(0, 20) : [],
+    drive_url: String(payload.driveUrl || "").slice(0, 500),
+    images: Array.isArray(payload.images) ? payload.images.slice(0, 40).map(String) : [],
+    source_url: String(payload.sourceUrl || "").slice(0, 500),
+    variant: String(payload.variant || "full").slice(0, 30),
+    contact_email: String(payload.contactEmail || "").slice(0, 200),
+    submitted_at: payload.submittedAt || new Date().toISOString(),
+  });
+  if (error) console.log("insertDesignerProjectRow error:", error.message);
+}
+
+// Download an external image URL and upload to our Supabase storage.
+// Returns the public URL, or "" on failure (caller should fall back to the source URL).
+async function fetchAndUploadImage(sourceUrl: string): Promise<string> {
+  if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) return "";
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(sourceUrl, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "image/*,*/*;q=0.8",
+      },
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return "";
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    if (!/^image\//i.test(contentType)) return "";
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength < 100 || bytes.byteLength > MAX_IMAGE_SIZE_BYTES) return "";
+    const ext = contentType.split("/")[1]?.split(";")[0]?.replace(/[^a-z0-9]/gi, "") || "jpg";
+    const filePath = `imported/${crypto.randomUUID()}.${ext}`;
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { error } = await supabaseAdmin.storage
+      .from(DESIGNER_BUCKET_NAME)
+      .upload(filePath, bytes, { contentType, upsert: false });
+    if (error) { console.log("fetchAndUploadImage upload error:", error.message); return ""; }
+    return `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
+  } catch (err) {
+    console.log("fetchAndUploadImage error:", err instanceof Error ? err.message : String(err));
+    return "";
+  }
+}
+
+// Bounded-concurrency mirror of external images; returns final URLs in order.
+// Failed mirrors fall back to the original URL so the project doesn't lose photos.
+async function mirrorProjectImages(urls: string[]): Promise<string[]> {
+  const out: string[] = new Array(urls.length);
+  const CONCURRENCY = 3;
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= urls.length) break;
+      const mirrored = await fetchAndUploadImage(urls[idx]);
+      out[idx] = mirrored || urls[idx];
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker));
+  return out;
 }
 
 async function deleteDesignerAndSections(slug: string): Promise<void> {
@@ -7292,11 +7583,20 @@ app.post("/make-server-4808de5e/admin/sync-portal-emails", async (c) => {
 app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
-    const token = c.req.header("X-Designer-Token");
-    if (!token) return c.json({ error: "Auth required" }, 401);
-    const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
+
+    // Auth: portal designer-token OR admin Supabase session.
+    let authed = false;
+    const token = c.req.header("X-Designer-Token");
+    if (token) {
+      const session = await kv.get(`designer-session:${token}`);
+      if (isAuthorizedForSlug(session, slug)) authed = true;
+    }
+    if (!authed) {
+      const adminCheck = await requireDebugAdmin(c);
+      if (adminCheck.ok) authed = true;
+    }
+    if (!authed) return c.json({ error: "Auth required" }, 401);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -7338,11 +7638,20 @@ app.get("/make-server-4808de5e/designer-profile-data/:slug", async (c) => {
 app.put("/make-server-4808de5e/designer-profile-data/:slug/:section", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
-    const token = c.req.header("X-Designer-Token");
-    if (!token) return c.json({ error: "Auth required" }, 401);
-    const session = await kv.get(`designer-session:${token}`);
     const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!isAuthorizedForSlug(session, slug)) return c.json({ error: "Forbidden" }, 403);
+
+    // Auth: portal designer-token OR admin Supabase session (X-User-Token).
+    let authed = false;
+    const designerToken = c.req.header("X-Designer-Token");
+    if (designerToken) {
+      const session = await kv.get(`designer-session:${designerToken}`);
+      if (isAuthorizedForSlug(session, slug)) authed = true;
+    }
+    if (!authed) {
+      const adminCheck = await requireDebugAdmin(c);
+      if (adminCheck.ok) authed = true;
+    }
+    if (!authed) return c.json({ error: "Auth required" }, 401);
 
     const section = c.req.param("section");
     const allowedSections = ["profile", "team", "projects", "casestudies", "reviews", "latestreviews", "servicearea", "businessinfo"];
@@ -8239,7 +8548,14 @@ app.post("/mood-board-upload-url", async (c) => {
 // DEBUG & MONITORING — admin-only (gated to DEBUG_ADMIN_EMAIL)
 // =============================================
 
-const DEBUG_ADMIN_EMAIL = (Deno.env.get("DEBUG_ADMIN_EMAIL") || "raemerdr@gmail.com").toLowerCase().trim();
+// Comma-separated allowlist. Either DEBUG_ADMIN_EMAIL (single) or the default below may be overridden.
+const DEBUG_ADMIN_EMAILS = new Set(
+  (Deno.env.get("DEBUG_ADMIN_EMAIL") || "raemerdr@gmail.com,team@orangenetworkstudios.com")
+    .toLowerCase()
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
 
 // Resolve email + user-id from the Supabase user token, then ensure email matches DEBUG_ADMIN_EMAIL.
 async function requireDebugAdmin(c: any): Promise<{ ok: true; userId: string; email: string } | { ok: false; status: number; msg: string }> {
@@ -8252,13 +8568,16 @@ async function requireDebugAdmin(c: any): Promise<{ ok: true; userId: string; em
       return { ok: false, status: 401, msg: "Invalid session" };
     }
     const email = user.email.toLowerCase().trim();
-    if (email !== DEBUG_ADMIN_EMAIL) {
+    if (!DEBUG_ADMIN_EMAILS.has(email)) {
       return { ok: false, status: 403, msg: "Access denied" };
     }
-    // Also confirm admin flag is set, as belt-and-suspenders
+    // Belt-and-suspenders: require the admin flag. Skipped for allowlisted emails
+    // so a user on the allowlist can always access admin tools without a manual
+    // fp3dDb promote step.
     const adminFlag = await fp3dDb.getAdmin(user.id);
     if (!adminFlag || adminFlag.isAdmin !== true) {
-      return { ok: false, status: 403, msg: "Not an admin" };
+      // Auto-promote first time they hit an admin endpoint.
+      try { await fp3dDb.upsertAdmin(user.id, { isAdmin: true, email, promotedAt: new Date().toISOString(), promotedBy: "allowlist-auto" }); } catch {}
     }
     return { ok: true, userId: user.id, email };
   } catch (err) {

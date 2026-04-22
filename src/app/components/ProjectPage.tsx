@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import {
   MapPin, X, ChevronLeft, ChevronRight, ArrowUp, ArrowRight, Star, BadgeCheck,
@@ -64,6 +64,102 @@ function Lightbox({ images, currentIndex, onClose, onPrev, onNext }: {
 // ════════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════════════════
+function ThumbnailCarousel({
+  images,
+  activeIndex,
+  onSelect,
+}: {
+  images: string[];
+  activeIndex: number;
+  onSelect: (i: number) => void;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanPrev(el.scrollLeft > 4);
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    updateArrows();
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateArrows, { passive: true });
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", updateArrows); ro.disconnect(); };
+  }, [updateArrows, images.length]);
+
+  // Keep the active thumb visible as the main image changes.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>(`[data-thumb-index="${activeIndex}"]`);
+    if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [activeIndex]);
+
+  const scrollBy = (dir: 1 | -1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+  };
+
+  return (
+    <div className="mt-4 relative">
+      <div
+        ref={scrollerRef}
+        className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" as any }}
+      >
+        <style>{`.thumb-carousel::-webkit-scrollbar { display: none; }`}</style>
+        {images.map((img, i) => (
+          <button
+            key={i}
+            data-thumb-index={i}
+            onClick={() => onSelect(i)}
+            className="relative overflow-hidden transition-all shrink-0 snap-start"
+            style={{
+              borderRadius: "10px",
+              border: `1px solid ${i === activeIndex ? C.black : C.creamBorder}`,
+              height: "clamp(60px, 9vw, 92px)",
+              width: "clamp(90px, 13vw, 140px)",
+              opacity: i === activeIndex ? 1 : 0.7,
+            }}
+          >
+            <img src={img} alt="" className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+      {canPrev && (
+        <button
+          type="button"
+          onClick={() => scrollBy(-1)}
+          aria-label="Previous thumbnails"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 bg-white rounded-full shadow-md p-2 hover:bg-[#fafafa] transition-colors"
+          style={{ border: `1px solid ${C.creamBorder}` }}
+        >
+          <ChevronLeft size={18} />
+        </button>
+      )}
+      {canNext && (
+        <button
+          type="button"
+          onClick={() => scrollBy(1)}
+          aria-label="Next thumbnails"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 bg-white rounded-full shadow-md p-2 hover:bg-[#fafafa] transition-colors"
+          style={{ border: `1px solid ${C.creamBorder}` }}
+        >
+          <ChevronRight size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ProjectPage() {
   const { slug, projectId: projectIdParam } = useParams();
   const navigate = useNavigate();
@@ -229,25 +325,13 @@ export function ProjectPage() {
             </div>
           )}
 
-          {/* Thumbnail strip */}
+          {/* Thumbnail carousel */}
           {images.length > 1 && (
-            <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-3">
-              {images.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImage(i)}
-                  className="relative overflow-hidden transition-all"
-                  style={{
-                    borderRadius: "10px",
-                    border: `1px solid ${i === activeImage ? C.black : C.creamBorder}`,
-                    height: "clamp(60px, 9vw, 92px)",
-                    opacity: i === activeImage ? 1 : 0.7,
-                  }}
-                >
-                  <img src={img} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
+            <ThumbnailCarousel
+              images={images}
+              activeIndex={activeImage}
+              onSelect={setActiveImage}
+            />
           )}
         </section>
       </FadeIn>

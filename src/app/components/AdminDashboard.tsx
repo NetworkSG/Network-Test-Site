@@ -1764,7 +1764,8 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const fetchDesigners = useCallback(async () => {
     setLoadingList(true);
     try {
-      const res = await fetch(`${API}/designers?showAll=true&limit=100`, { headers: AUTH });
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`${API}/admin/designers`, { headers });
       const json = await res.json();
       setDesigners(json.data || []);
     } catch (err) {
@@ -1833,7 +1834,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
     const newActive = !currentlyActive;
     try {
       const toggleHeaders = await getAdminAuthHeaders();
-      const res = await fetch(`${API}/designers/${slug}`, { headers: toggleHeaders });
+      const res = await fetch(`${API}/designers/${slug}?preview=1`, { headers: toggleHeaders });
       const json = await res.json();
       if (json.data) {
         const updated = { ...json.data, active: newActive };
@@ -2184,7 +2185,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                     )}
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => loadDesigner(d.slug)}
+                        onClick={() => navigate(`/edit-profile/${d.slug}`)}
                         className="flex-1 flex items-center justify-center gap-1.5 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg py-2 text-[13px] font-medium text-[#364153] hover:bg-[#f3f4f6] transition-colors cursor-pointer"
                       >
                         <PenLine className="size-3.5" /> Edit

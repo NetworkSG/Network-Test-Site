@@ -3193,7 +3193,7 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
   const projectCount = ctx?.projects?.length ?? 0;
   const bInfo = ctx?.businessInfo ?? [];
   const yearsEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("year"));
-  const yearsVal = s?.years || yearsEntry?.value || "10+";
+  const yearsVal = String(s?.years ?? yearsEntry?.value ?? "10+");
   const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
   const budgetVal = budgetEntry?.value?.trim() || "$30k – $120k";
 

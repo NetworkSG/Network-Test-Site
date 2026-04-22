@@ -1,840 +1,1219 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { SiteNav } from "./SiteNav";
-import { motion, AnimatePresence } from "motion/react";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
-import { sendToZapier } from "@/app/utils/zapier";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { C, serif, sans } from "./homepage/v8/primitives";
+import { ChevronDown, Check, Lock, Star, ShieldCheck } from "lucide-react";
 
-// ─── Types ───────────────────────────────────────────────
-type PropertyType = "HDB" | "Condominium" | "Executive Condo (EC)" | "Landed";
-type RoomKey = "Living/Dining" | "Kitchen" | "Bedrooms" | "Bathrooms" | "Others";
-type ScopeLevel = "Light" | "Moderate" | "Extensive";
-type CarpentryLevel = "Low" | "Medium" | "High";
-type LayoutLevel = "No" | "Some" | "Major";
+// ═══════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════
+type Journey = "exploring" | "getting-ready" | "actively-planning" | "deep-in-quotes" | "already-chose";
+type Property = "HDB" | "Condo" | "EC" | "Landed";
+type NewResale = "new" | "resale";
+type OCS = "yes" | "no";
+type Intent = "basics" | "proper" | "special";
+type LandedWork = "aa" | "reconstruction" | "rebuild" | "unsure";
+type LandedScope = "under30" | "30-50" | "over50";
+type Layout = "No" | "Some" | "Major";
+type Carpentry = "Low" | "Medium" | "High";
+type Finish = "Budget" | "Quality" | "Premium";
+type Sourcing = "none" | "1-2" | "3+";
 
-interface RoomScope {
-  level: ScopeLevel;
-  count?: number;
+type ScreenId = 0 | "route" | 1 | 2 | 3 | 4 | 5 | 6;
+
+interface ComputedState {
+  anchor: number;
+  adjustedAnchor: number;
+  min: number;
+  max: number;
+  confidence: "high" | "medium" | "medium-low" | "low";
+  bandPct: number;
+  firmType: { type: string; desc: string } | null;
+  breakdown: BreakdownItem[];
+  isLanded?: boolean;
+  workType?: LandedWork | "aa";
 }
 
-interface FullHomeScope {
-  scope: ScopeLevel;
-  carpentry: CarpentryLevel;
-  layout: LayoutLevel;
-}
-
-interface CostEstimate {
-  estMin: number;
-  estMax: number;
-  isFloor: boolean;
-}
-
-// ─── Constants ───────────────────────────────────────────
-const TOTAL_STEPS = 12;
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
-
-const HERO_IMAGE = "https://images.unsplash.com/photo-1768144092684-c1a5dd6c7aad?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBpbnRlcmlvciUyMHJlbm92YXRpb24lMjBsaXZpbmclMjByb29tJTIwd2FybSUyMGxpZ2h0aW5nfGVufDF8fHx8MTc3MzI5NjkzMnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
-
-const UNIT_OPTIONS: Record<PropertyType, string[]> = {
-  HDB: ["2-Room Flexi", "3-Room", "4-Room", "5-Room", "Executive", "DBSS"],
-  Condominium: ["Studio", "1-Bedroom", "2-Bedroom", "3-Bedroom", "4-Bedroom", "Penthouse"],
-  "Executive Condo (EC)": ["2-Bedroom", "3-Bedroom", "4-Bedroom", "5-Bedroom"],
-  Landed: ["Terrace", "Semi-Detached", "Detached / Bungalow", "Good Class Bungalow"],
-};
-
-const TIMELINE_OPTIONS = [
-  "Already have keys",
-  "Within 3 months",
-  "3–6 months",
-  "6–12 months",
-  "Just exploring",
-];
-
-const ALL_ROOMS: RoomKey[] = ["Living/Dining", "Kitchen", "Bedrooms", "Bathrooms", "Others"];
-
-const SCOPE_DATA: Record<RoomKey, Record<ScopeLevel, string[]>> = {
-  "Living/Dining": {
-    Light: ["Repainting", "Small carpentry", "Simple fixtures"],
-    Moderate: ["Custom carpentry", "New flooring", "Updated lighting"],
-    Extensive: ["Full flooring change", "Feature wall", "Extensive carpentry"],
-  },
-  Kitchen: {
-    Light: ["Change cabinet doors", "Small carpentry", "Basic tiling"],
-    Moderate: ["New cabinetry", "Updated appliances", "Partial tiling"],
-    Extensive: ["Layout changes", "New cabinetry", "Full tiling"],
-  },
-  Bedrooms: {
-    Light: ["Paint", "Lighting", "Basic wardrobes"],
-    Moderate: ["New flooring", "Custom wardrobes", "Lighting updates"],
-    Extensive: ["Full carpentry fit-out", "Flooring", "Layout changes"],
-  },
-  Bathrooms: {
-    Light: ["Replace fixtures", "Partial tiling"],
-    Moderate: ["New fixtures", "Partial wall/floor tiling"],
-    Extensive: ["Full tiling", "Custom vanity", "Layout changes"],
-  },
-  Others: {
-    Light: ["Basic finishing", "Minor carpentry"],
-    Moderate: ["New flooring", "Partial carpentry"],
-    Extensive: ["Full custom carpentry and flooring"],
-  },
-};
-
-// ─── Pricing Constants (from renovation-cost-ref.md) ─────
-
-// Stage 1: Property Factor
-const PROPERTY_FACTOR: Record<PropertyType, number> = {
-  HDB: 1.0,
-  Condominium: 1.05,
-  "Executive Condo (EC)": 1.05,
-  Landed: 1.25,
-};
-
-// Stage 1: Resale Uplift (applied only when isResale = true)
-const RESALE_FACTOR: Record<PropertyType, number> = {
-  HDB: 1.1,
-  Condominium: 1.08,
-  "Executive Condo (EC)": 1.08,
-  Landed: 1.12,
-};
-
-// Stage 1: Size Weight (baseline: HDB 4-Room = 1.00)
-const SIZE_WEIGHT: Record<PropertyType, Record<string, number>> = {
-  HDB: {
-    "2-Room Flexi": 0.65,
-    "3-Room": 0.8,
-    "4-Room": 1.0,
-    "5-Room": 1.2,
-    Executive: 1.3,
-    DBSS: 1.4,
-  },
-  Condominium: {
-    Studio: 0.6,
-    "1-Bedroom": 0.75,
-    "2-Bedroom": 0.9,
-    "3-Bedroom": 1.05,
-    "4-Bedroom": 1.25,
-    Penthouse: 1.25,
-  },
-  "Executive Condo (EC)": {
-    "2-Bedroom": 0.9,
-    "3-Bedroom": 1.05,
-    "4-Bedroom": 1.25,
-    "5-Bedroom": 1.25,
-  },
-  Landed: {
-    Terrace: 1.4,
-    "Semi-Detached": 1.6,
-    "Detached / Bungalow": 1.8,
-    "Good Class Bungalow": 1.8,
-  },
-};
-
-// Stage 2 Path A: Full Home Package Values
-const FULL_HOME_PACKAGES: Record<ScopeLevel, { min: number; max: number }> = {
-  Light: { min: 12000, max: 25000 },
-  Moderate: { min: 28000, max: 55000 },
-  Extensive: { min: 60000, max: 110000 },
-};
-
-// Full Home: Carpentry Adjustment
-const CARPENTRY_ADJ_FULL: Record<CarpentryLevel, number> = {
-  Low: 0.9,
-  Medium: 1.0,
-  High: 1.15,
-};
-
-// Full Home: Layout Adjustment
-const LAYOUT_ADJ_FULL: Record<LayoutLevel, number> = {
-  No: 1.0,
-  Some: 1.07,
-  Major: 1.15,
-};
-
-// Stage 2 Path B: Room Package Values (per unit, at reference home)
-const ROOM_PACKAGES: Record<RoomKey, Record<ScopeLevel, { min: number; max: number }>> = {
-  "Living/Dining": {
-    Light: { min: 1000, max: 2000 },
-    Moderate: { min: 3000, max: 6000 },
-    Extensive: { min: 7000, max: 12000 },
-  },
-  Kitchen: {
-    Light: { min: 3000, max: 6000 },
-    Moderate: { min: 8000, max: 14000 },
-    Extensive: { min: 15000, max: 25000 },
-  },
-  Bedrooms: {
-    Light: { min: 1000, max: 2000 },
-    Moderate: { min: 2500, max: 4500 },
-    Extensive: { min: 5000, max: 8000 },
-  },
-  Bathrooms: {
-    Light: { min: 1500, max: 3000 },
-    Moderate: { min: 4000, max: 7000 },
-    Extensive: { min: 8000, max: 12000 },
-  },
-  Others: {
-    Light: { min: 800, max: 1500 },
-    Moderate: { min: 2000, max: 3500 },
-    Extensive: { min: 4000, max: 6000 },
-  },
-};
-
-// Contingency buffer on max
-const CONTINGENCY_MAX = 1.1;
-
-// Rounding helper
-function roundTo(value: number, nearest: number): number {
-  return Math.round(value / nearest) * nearest;
-}
-
-// ─── Cost Computation Engine ─────────────────────────────
-function computeEstimate(
-  propertyType: PropertyType,
-  propertyStatus: string,
-  unitType: string,
-  selectedRooms: RoomKey[],
-  roomScopes: Partial<Record<RoomKey, RoomScope>>,
-  fullHomeScope: FullHomeScope | null
-): CostEstimate {
-  // Stage 1 multipliers
-  const pf = PROPERTY_FACTOR[propertyType];
-  const isResale = propertyStatus === "Existing" || propertyStatus === "Resale";
-  const rf = isResale ? RESALE_FACTOR[propertyType] : 1;
-  const sw = SIZE_WEIGHT[propertyType]?.[unitType] ?? 1.0;
-
-  let sumMin = 0;
-  let sumMax = 0;
-
-  const isFullHome =
-    selectedRooms.length === ALL_ROOMS.length &&
-    ALL_ROOMS.every((r) => selectedRooms.includes(r));
-
-  if (isFullHome && fullHomeScope) {
-    // Path A: Full Home
-    const base = FULL_HOME_PACKAGES[fullHomeScope.scope];
-    const carpAdj = CARPENTRY_ADJ_FULL[fullHomeScope.carpentry];
-    const layAdj = LAYOUT_ADJ_FULL[fullHomeScope.layout];
-    sumMin = base.min * carpAdj * layAdj;
-    sumMax = base.max * carpAdj * layAdj;
-  } else {
-    // Path B: Specific Rooms
-    for (const room of selectedRooms) {
-      const scope = roomScopes[room];
-      if (!scope?.level) continue;
-      const pkg = ROOM_PACKAGES[room][scope.level];
-      const count = scope.count ?? 1;
-      sumMin += pkg.min * count;
-      sumMax += pkg.max * count;
-    }
-  }
-
-  // Final formula
-  const estMin = roundTo(sumMin * pf * rf * sw, 100);
-  const estMax = roundTo(sumMax * pf * rf * sw * CONTINGENCY_MAX, 100);
-
-  // Floor rule: if estMin < $5,000 → show $30k–$35k (safety net for unrealistically low estimates)
-  const isFloor = estMin < 5000;
-
-  return { estMin, estMax, isFloor };
-}
-
-// Format currency for display
-function formatCurrency(value: number): string {
-  if (value >= 1000) {
-    const k = value / 1000;
-    return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}K`;
-  }
-  return `$${value.toLocaleString()}`;
+interface BreakdownItem {
+  section: string;
+  label: string;
+  sub: string;
+  value: number;
+  valueMax?: number;
+  kind: "base" | "add" | "sub" | "neutral" | "range";
+  displayOverride?: string;
+  isLanded?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 1 — Property Type
-// ══════════════════════════════════════════════════════���════
-function StepProperty({
-  selected,
-  onSelect,
-}: {
-  selected: string;
-  onSelect: (v: string) => void;
-}) {
-  const options: { label: PropertyType; sub: string }[] = [
-    { label: "HDB", sub: "BTO, resale, DBSS" },
-    { label: "Condominium", sub: "Private apartments" },
-    { label: "Executive Condo (EC)", sub: "EC units" },
-    { label: "Landed", sub: "Terrace, semi-D, bungalow" },
-  ];
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const UNIT_TYPES: Record<Property, { value: string; label: string }[]> = {
+  HDB: [
+    { value: "2-Room", label: "2-Room" },
+    { value: "3-Room", label: "3-Room" },
+    { value: "4-Room", label: "4-Room" },
+    { value: "5-Room", label: "5-Room" },
+  ],
+  Condo: [
+    { value: "1BR", label: "1-Bedroom (~500 sqft)" },
+    { value: "2BR", label: "2-Bedroom (~700 sqft)" },
+    { value: "3BR", label: "3-Bedroom (~1000 sqft)" },
+    { value: "4BR", label: "4-Bedroom+ (~1400 sqft)" },
+  ],
+  EC: [
+    { value: "1BR", label: "1-Bedroom (~500 sqft)" },
+    { value: "2BR", label: "2-Bedroom (~700 sqft)" },
+    { value: "3BR", label: "3-Bedroom (~1000 sqft)" },
+    { value: "4BR", label: "4-Bedroom+ (~1400 sqft)" },
+  ],
+  Landed: [
+    { value: "1500-2500", label: "1,500 – 2,500 sqft" },
+    { value: "2500-4000", label: "2,500 – 4,000 sqft" },
+    { value: "4000-6000", label: "4,000 – 6,000 sqft" },
+    { value: "6000+", label: "6,000 sqft+" },
+  ],
+};
 
+const ANCHORS: Record<string, { basics: number; proper: number; special: number }> = {
+  "HDB_BTO_OCS_2-Room": { basics: 16320, proper: 25600, special: 33160 },
+  "HDB_BTO_OCS_3-Room": { basics: 22440, proper: 39680, special: 48648 },
+  "HDB_BTO_OCS_4-Room": { basics: 30600, proper: 51840, special: 62024 },
+  "HDB_BTO_OCS_5-Room": { basics: 35360, proper: 61440, special: 72584 },
+  "HDB_BTO_NOOCS_2-Room": { basics: 20400, proper: 32000, special: 40200 },
+  "HDB_BTO_NOOCS_3-Room": { basics: 28050, proper: 49600, special: 59560 },
+  "HDB_BTO_NOOCS_4-Room": { basics: 38250, proper: 64800, special: 76280 },
+  "HDB_BTO_NOOCS_5-Room": { basics: 44200, proper: 76800, special: 89480 },
+  "HDB_Resale_2-Room": { basics: 24000, proper: 40000, special: 49000 },
+  "HDB_Resale_3-Room": { basics: 33000, proper: 62000, special: 73200 },
+  "HDB_Resale_4-Room": { basics: 45000, proper: 81000, special: 94100 },
+  "HDB_Resale_5-Room": { basics: 52000, proper: 96000, special: 110600 },
+  "Condo_new_1BR": { basics: 18000, proper: 28000, special: 35000 },
+  "Condo_new_2BR": { basics: 24000, proper: 40000, special: 52000 },
+  "Condo_new_3BR": { basics: 32000, proper: 56000, special: 72000 },
+  "Condo_new_4BR": { basics: 42000, proper: 74000, special: 94000 },
+  "Condo_resale_1BR": { basics: 28800, proper: 48000, special: 57800 },
+  "Condo_resale_2BR": { basics: 39600, proper: 74400, special: 86840 },
+  "Condo_resale_3BR": { basics: 56250, proper: 101250, special: 116375 },
+  "Condo_resale_4BR": { basics: 67600, proper: 134400, special: 152840 },
+  "EC_new_1BR": { basics: 18000, proper: 28000, special: 35000 },
+  "EC_new_2BR": { basics: 24000, proper: 40000, special: 52000 },
+  "EC_new_3BR": { basics: 32000, proper: 56000, special: 72000 },
+  "EC_new_4BR": { basics: 42000, proper: 74000, special: 94000 },
+  "EC_resale_1BR": { basics: 28800, proper: 48000, special: 57800 },
+  "EC_resale_2BR": { basics: 39600, proper: 74400, special: 86840 },
+  "EC_resale_3BR": { basics: 56250, proper: 101250, special: 116375 },
+  "EC_resale_4BR": { basics: 67600, proper: 134400, special: 152840 },
+};
+
+const LANDED_BUA: Record<string, number> = { "1500-2500": 2000, "2500-4000": 3250, "4000-6000": 5000, "6000+": 7000 };
+const LANDED_PSF: Record<string, { low: number; high: number }> = {
+  aa: { low: 180, high: 400 },
+  reconstruction: { low: 250, high: 450 },
+  rebuild: { low: 400, high: 700 },
+};
+const LANDED_AA_PCT: Record<string, number | null> = { under30: 0.25, "30-50": 0.40, over50: null };
+const LANDED_SOFT = { min: 60000, max: 150000 };
+
+const LAYOUT_ADJ: Record<Layout, number> = { No: 0, Some: 5, Major: 12 };
+const CARPENTRY_ADJ: Record<Carpentry, number> = { Low: -5, Medium: 0, High: 10 };
+const FINISH_ADJ: Record<Finish, number> = { Budget: -10, Quality: 0, Premium: 18 };
+
+const OCS_PRICING: Record<string, Record<string, number>> = {
+  flooring: { "2-Room": 2200, "3-Room": 3340, "4-Room": 4970, "5-Room": 6060 },
+  doors: { "2-Room": 2200, "3-Room": 2770, "4-Room": 3180, "5-Room": 3180 },
+};
+
+// ═══════════════════════════════════════════════════════════
+// STYLE HELPERS
+// ═══════════════════════════════════════════════════════════
+const shell: React.CSSProperties = {
+  background: C.cream,
+  color: C.black,
+  fontFamily: sans,
+  minHeight: "100vh",
+};
+
+const app: React.CSSProperties = {
+  maxWidth: 680,
+  margin: "0 auto",
+  padding: "32px 24px 80px",
+};
+
+const subHeroStyle: React.CSSProperties = {
+  fontSize: 15,
+  color: C.gray,
+  lineHeight: 1.7,
+  marginBottom: 28,
+  maxWidth: 540,
+};
+
+const sub2Style: React.CSSProperties = {
+  fontSize: 14,
+  color: C.grayLight,
+  marginBottom: 22,
+  lineHeight: 1.6,
+};
+
+const qLabelStyle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: C.black, marginBottom: 4 };
+const qHelpStyle: React.CSSProperties = { fontSize: 12, color: C.grayLight, marginBottom: 12, lineHeight: 1.6 };
+
+const inputFieldStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  background: "#faf8f2",
+  border: `1px solid ${C.creamBorder}`,
+  borderRadius: 8,
+  fontSize: 14,
+  color: C.black,
+  fontFamily: sans,
+  outline: "none",
+};
+
+// ═══════════════════════════════════════════════════════════
+// UI PRIMITIVES
+// ═══════════════════════════════════════════════════════════
+function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        What's your property type?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        Different property types have different cost structures.
-      </p>
-
-      <div className="flex flex-col gap-3">
-        {options.map((opt) => (
-          <button
-            key={opt.label}
-            onClick={() => onSelect(opt.label)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
-              selected === opt.label
-                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
-                : "border-[#d8d3c8] hover:border-[#9a9790]"
-            }`}
-          >
-            <div>
-              <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">
-                {opt.label}
-              </span>
-              <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] block mt-0.5">
-                {opt.sub}
-              </span>
-            </div>
-            {selected === opt.label && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
+    <span
+      style={{
+        display: "inline-block",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        padding: "5px 12px",
+        background: C.creamDark,
+        color: C.gray,
+        borderRadius: 3,
+        marginBottom: 16,
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 2 — Unit Type + Resale
-// ═══════════════════════════════════════════════════════════
-function StepUnit({
-  propertyType,
-  unitType,
-  onUnitChange,
-}: {
-  propertyType: PropertyType;
-  unitType: string;
-  onUnitChange: (v: string) => void;
-}) {
-  const units = UNIT_OPTIONS[propertyType] || [];
-
+function Hero({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        What's your unit type?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        Choose the closest match to your home.
-      </p>
-
-      <div className="flex flex-col gap-3">
-        {units.map((unit) => (
-          <button
-            key={unit}
-            onClick={() => onUnitChange(unit)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
-              unitType === unit
-                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
-                : "border-[#d8d3c8] hover:border-[#9a9790]"
-            }`}
-          >
-            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
-              {unit}
-            </span>
-            {unitType === unit && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
+    <h1
+      style={{
+        fontFamily: serif,
+        fontSize: "clamp(28px, 4.2vw, 40px)",
+        fontWeight: 400,
+        lineHeight: 1.12,
+        letterSpacing: "-0.02em",
+        marginBottom: 14,
+        color: C.black,
+      }}
+    >
+      {children}
+    </h1>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 3 — Property Status
-// ═══════════════════════════════════════════════════════════
-function StepPropertyStatus({
-  propertyStatus,
-  onStatusChange,
-}: {
-  propertyStatus: string;
-  onStatusChange: (v: string) => void;
-}) {
-  const statusOptions: { label: string; sub: string }[] = [
-    { label: "New", sub: "BTO or new launch" },
-    { label: "Existing", sub: "Currently living in" },
-    { label: "Resale", sub: "Recently purchased resale" },
-  ];
-
+function H2({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        What's your property status?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        Existing & resale homes typically cost more to renovate.
-      </p>
-
-      <div className="flex flex-col gap-3">
-        {statusOptions.map((opt) => (
-          <button key={opt.label} onClick={() => onStatusChange(opt.label)}
-            className={`w-full flex items-start justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
-              propertyStatus === opt.label
-                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
-                : "border-[#d8d3c8] hover:border-[#9a9790]"
-            }`}>
-            <div>
-              <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">{opt.label}</span>
-              <span className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] block mt-0.5">{opt.sub}</span>
-            </div>
-            {propertyStatus === opt.label && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0 mt-1">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
+    <h2
+      style={{
+        fontFamily: serif,
+        fontSize: "clamp(22px, 3vw, 28px)",
+        fontWeight: 500,
+        lineHeight: 1.2,
+        marginBottom: 10,
+        color: C.black,
+        letterSpacing: "-0.01em",
+        ...style,
+      }}
+    >
+      {children}
+    </h2>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 4 — Postal Code
-// ═══════════════════════════════════════════════════════════
-function StepPostalCode({
-  postalCode,
-  onPostalChange,
-  onAddressVerified,
-}: {
-  postalCode: string;
-  onPostalChange: (v: string) => void;
-  onAddressVerified?: (address: string) => void;
-}) {
-  const [verifyState, setVerifyState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
-  const [addressHint, setAddressHint] = useState("");
-  const timerRef = useState<ReturnType<typeof setTimeout> | null>(null);
+function Em({ children }: { children: React.ReactNode }) {
+  return <span style={{ fontStyle: "italic", color: C.grayLight }}>{children}</span>;
+}
 
-  const verifyPostal = async (code: string) => {
-    if (code.length !== 6) {
-      setVerifyState("idle");
-      setAddressHint("");
-      return;
-    }
-    setVerifyState("checking");
-    try {
-      const res = await fetch(
-        `https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${code}&returnGeom=Y&getAddrDetails=Y&pageNum=1`
-      );
-      const data = await res.json();
-      if (data.found && data.found > 0 && data.results?.length > 0) {
-        const r = data.results[0];
-        const addr = r.ADDRESS || r.BLK_NO ? `${r.BLK_NO || ""} ${r.ROAD_NAME || ""}`.trim() : "";
-        setAddressHint(addr);
-        setVerifyState("valid");
-        onAddressVerified?.(addr);
-      } else {
-        setAddressHint("");
-        setVerifyState("invalid");
-        onAddressVerified?.("");
-      }
-    } catch {
-      // Network error — don't block the user
-      setVerifyState("idle");
-      setAddressHint("");
-    }
-  };
-
-  const handleChange = (raw: string) => {
-    const code = raw.replace(/\D/g, "").slice(0, 6);
-    onPostalChange(code);
-    // Debounce verification
-    if (timerRef[0]) clearTimeout(timerRef[0]);
-    if (code.length === 6) {
-      timerRef[0] = setTimeout(() => verifyPostal(code), 400);
-    } else {
-      setVerifyState("idle");
-      setAddressHint("");
-    }
-  };
-
+function Progress({ activeIndex, total = 6 }: { activeIndex: number; total?: number }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        What's your postal code?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        Helps us match you with nearby designers.
-      </p>
-
-      <div className="relative">
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={6}
-          placeholder="e.g. 520123"
-          value={postalCode}
-          onChange={(e) => handleChange(e.target.value)}
-          className={`w-full border rounded-[10px] h-[52px] px-5 pr-12 font-['DM_Sans',sans-serif] text-[16px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
-            verifyState === "valid" ? "border-green-600 focus:border-green-600" :
-            verifyState === "invalid" ? "border-red-500 focus:border-red-500" :
-            "border-[#d8d3c8] focus:border-[#0f0f0d]"
-          }`}
+    <div style={{ display: "flex", gap: 6, marginBottom: 28 }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            flex: 1,
+            height: 3,
+            borderRadius: 2,
+            background: i < activeIndex ? "#5a9460" : i === activeIndex ? C.black : C.creamBorder,
+            transition: "background 300ms",
+          }}
         />
-        {verifyState === "checking" && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="w-5 h-5 border-2 border-[#d8d3c8] border-t-[#0f0f0d] rounded-full animate-spin" />
-          </div>
-        )}
-        {verifyState === "valid" && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[22px] h-[22px] rounded-full bg-green-600 flex items-center justify-center">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-        )}
-        {verifyState === "invalid" && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 w-[22px] h-[22px] rounded-full bg-red-500 flex items-center justify-center">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {verifyState === "valid" && addressHint && (
-        <p className="font-['DM_Sans',sans-serif] text-[13px] text-green-700 mt-3 flex items-center gap-1.5">
-          <span>{addressHint}</span>
-        </p>
-      )}
-      {verifyState === "invalid" && (
-        <p className="font-['DM_Sans',sans-serif] text-[13px] text-red-500 mt-3">
-          We couldn't find this postal code. Please check and try again.
-        </p>
-      )}
+      ))}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 3 — Rooms
-// ═══════════════════════════════════════════════════════════
-function StepRooms({
+function OptionCard({
   selected,
-  onToggle,
+  onClick,
+  title,
+  desc,
+  anchor,
 }: {
-  selected: RoomKey[];
-  onToggle: (room: RoomKey) => void;
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  desc?: string;
+  anchor?: string;
 }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        Which rooms are you renovating?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        Select all that apply.
-      </p>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "block",
+        width: "100%",
+        padding: "14px 16px",
+        background: selected ? C.black : "#faf8f2",
+        border: `1px solid ${selected ? C.black : C.creamBorder}`,
+        borderRadius: 8,
+        color: selected ? C.white : C.black,
+        textAlign: "left",
+        cursor: "pointer",
+        fontFamily: sans,
+        transition: "all 150ms",
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+      {desc && (
+        <div style={{ fontSize: 12, color: selected ? "#bbb" : C.grayLight, lineHeight: 1.5 }}>{desc}</div>
+      )}
+      {anchor && (
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            marginTop: 6,
+            letterSpacing: "0.04em",
+            color: selected ? "#8eb895" : "#5a9460",
+          }}
+        >
+          {anchor}
+        </div>
+      )}
+    </button>
+  );
+}
 
-      <div className="grid grid-cols-2 gap-3">
-        {ALL_ROOMS.map((room) => {
-          const isSelected = selected.includes(room);
-          const iconMap: Record<RoomKey, JSX.Element> = {
-            "Living/Dining": (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3" />
-                <path d="M2 16a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v1.5H6V11a2 2 0 0 0-4 0v5z" />
-                <path d="M4 18v2" /><path d="M20 18v2" />
-              </svg>
-            ),
-            Kitchen: (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /><path d="M7 2v20" />
-                <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7" />
-              </svg>
-            ),
-            Bedrooms: (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 4v16" /><path d="M2 8h18a2 2 0 0 1 2 2v10" />
-                <path d="M2 17h20" /><path d="M6 8v9" />
-              </svg>
-            ),
-            Bathrooms: (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 12h16a1 1 0 0 1 1 1v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3a1 1 0 0 1 1-1z" />
-                <path d="M6 12V5a2 2 0 0 1 2-2h3v2.25" />
-                <path d="M4 21l1-1.5" /><path d="M20 21l-1-1.5" />
-              </svg>
-            ),
-            Others: (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2" />
-                <path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3" />
-                <path d="M12 12v4" /><path d="M10 14h4" />
-              </svg>
-            ),
-          };
-          return (
-            <button
-              key={room}
-              onClick={() => onToggle(room)}
-              className={`flex flex-col items-start p-4 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left relative ${
-                isSelected
-                  ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
-                  : "border-[#d8d3c8] hover:border-[#9a9790]"
-              }${room === "Others" ? " col-span-2" : ""}`}
-            >
-              {/* Checkbox top-right */}
-              <div
-                className={`absolute top-3.5 right-3.5 w-[20px] h-[20px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all duration-200 ${
-                  isSelected
-                    ? "bg-[#0f0f0d] border-[#0f0f0d]"
-                    : "bg-[#fafaf8] border-[#d8d3c8]"
-                }`}
-              >
-                {isSelected && (
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </div>
-              {/* Icon */}
-              <div className={`w-[40px] h-[40px] rounded-[10px] flex items-center justify-center mb-3 transition-colors duration-200 ${isSelected ? "bg-[#0f0f0d] text-white" : "bg-[#e8e4db] text-[#6b6860]"}`}>
-                {iconMap[room]}
-              </div>
-              {/* Label */}
-              <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] leading-[1.3]">
-                {room === "Others" ? "Others (Study, Balcony, etc.)" : room}
-              </span>
-            </button>
-          );
-        })}
+function OptionPill({
+  selected,
+  onClick,
+  label,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "12px 14px",
+        background: selected ? C.black : "#faf8f2",
+        border: `1px solid ${selected ? C.black : C.creamBorder}`,
+        borderRadius: 8,
+        color: selected ? C.white : C.black,
+        fontSize: 14,
+        textAlign: "center",
+        cursor: "pointer",
+        fontFamily: sans,
+        transition: "all 150ms",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BtnRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        marginTop: 32,
+        paddingTop: 20,
+        borderTop: `1px solid ${C.creamBorder}`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BtnPrimary({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        flex: 1,
+        padding: "14px 22px",
+        fontSize: 14,
+        fontWeight: 600,
+        borderRadius: 8,
+        cursor: disabled ? "not-allowed" : "pointer",
+        background: disabled ? "#bbb" : C.black,
+        color: C.white,
+        border: "none",
+        fontFamily: sans,
+        transition: "background 150ms",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BtnSecondary({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: "14px 22px",
+        fontSize: 14,
+        fontWeight: 600,
+        borderRadius: 8,
+        background: "transparent",
+        color: C.gray,
+        border: `1px solid ${C.creamBorder}`,
+        cursor: "pointer",
+        fontFamily: sans,
+        transition: "all 150ms",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════
+export function CostGuide() {
+  const navigate = useNavigate();
+  const [screen, setScreen] = useState<ScreenId>(0);
+
+  // Journey screener
+  const [journey, setJourney] = useState<Journey | null>(null);
+
+  // Property
+  const [property, setProperty] = useState<Property | null>(null);
+  const [newResale, setNewResale] = useState<NewResale | null>(null);
+  const [ocs, setOcs] = useState<OCS | null>(null);
+  const [ocsFlooring, setOcsFlooring] = useState(false);
+  const [ocsDoors, setOcsDoors] = useState(false);
+  const [unitType, setUnitType] = useState<string | null>(null);
+
+  // Intent / Landed
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [landedWorkType, setLandedWorkType] = useState<LandedWork | null>(null);
+  const [landedScopePct, setLandedScopePct] = useState<LandedScope | null>(null);
+
+  // Confidence boosters
+  const [layout, setLayout] = useState<Layout | null>(null);
+  const [carpentry, setCarpentry] = useState<Carpentry | null>(null);
+  const [finish, setFinish] = useState<Finish | null>(null);
+
+  // Sourcing
+  const [sourcing, setSourcing] = useState<Sourcing | null>(null);
+
+  // Lead
+  const [leadName, setLeadName] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+
+  // Math toggle on results
+  const [mathOpen, setMathOpen] = useState(false);
+
+  // Scroll to top on screen change
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [screen]);
+
+  // ─── Derived: anchor key and computed costs ────────────────
+  const anchorKey = useMemo((): string | null => {
+    if (!property || !newResale || !unitType) return null;
+    if (property === "HDB" && newResale === "new") {
+      if (ocs === "yes" && (ocsFlooring || ocsDoors)) return `HDB_BTO_OCS_${unitType}`;
+      return `HDB_BTO_NOOCS_${unitType}`;
+    }
+    if (property === "HDB") return `HDB_Resale_${unitType}`;
+    if (property === "Condo") return `Condo_${newResale}_${unitType}`;
+    if (property === "EC") return `EC_${newResale}_${unitType}`;
+    return null;
+  }, [property, newResale, unitType, ocs, ocsFlooring, ocsDoors]);
+
+  const computed = useMemo((): ComputedState => {
+    // Landed branch
+    if (property === "Landed") {
+      return computeLanded();
+    }
+    const anchorObj = anchorKey ? ANCHORS[anchorKey] : null;
+    if (!anchorObj || !intent) {
+      return { anchor: 0, adjustedAnchor: 0, min: 0, max: 0, confidence: "low", bandPct: 18, firmType: null, breakdown: [] };
+    }
+
+    const base = anchorObj[intent];
+    const breakdown: BreakdownItem[] = [];
+    breakdown.push({
+      section: "Starting point",
+      label: anchorLabel(property!, newResale!, unitType!, ocs, ocsFlooring, ocsDoors),
+      sub: intentLabelFor(intent),
+      value: base,
+      kind: "base",
+    });
+
+    let adjusted = base;
+
+    // OCS partial adjustments
+    if (property === "HDB" && newResale === "new" && ocs === "yes") {
+      if (ocsFlooring && !ocsDoors) {
+        const adj = base * 0.03;
+        adjusted += adj;
+        breakdown.push({ section: "Adjustments", label: "OCS: Flooring only", sub: "Doors + sanitary still need private work (+3%)", value: adj, kind: "add" });
+      } else if (!ocsFlooring && ocsDoors) {
+        const adj = base * 0.05;
+        adjusted += adj;
+        breakdown.push({ section: "Adjustments", label: "OCS: Doors + sanitary only", sub: "Flooring still needs private work (+5%)", value: adj, kind: "add" });
+      } else if (ocsFlooring && ocsDoors) {
+        breakdown.push({ section: "Adjustments", label: "OCS: Full (flooring + doors + sanitary)", sub: "Anchor already accounts for this — no adjustment", value: 0, kind: "neutral" });
+      }
+    }
+
+    if (layout) {
+      const pct = LAYOUT_ADJ[layout];
+      const adj = (base * pct) / 100;
+      adjusted += adj;
+      if (pct !== 0) {
+        breakdown.push({ section: "Adjustments", label: `Layout: ${layout} changes`, sub: `${pct > 0 ? "+" : ""}${pct}% of anchor`, value: adj, kind: pct > 0 ? "add" : "sub" });
+      }
+    }
+    if (carpentry) {
+      const pct = CARPENTRY_ADJ[carpentry];
+      const adj = (base * pct) / 100;
+      adjusted += adj;
+      if (pct !== 0) {
+        const carpLabel = carpentry === "Low" ? "Mostly ready-made" : carpentry === "High" ? "Mostly custom" : "Mix";
+        breakdown.push({ section: "Adjustments", label: `Carpentry: ${carpLabel}`, sub: `${pct > 0 ? "+" : ""}${pct}% of anchor`, value: adj, kind: pct > 0 ? "add" : "sub" });
+      }
+    }
+    if (finish) {
+      const pct = FINISH_ADJ[finish];
+      const adj = (base * pct) / 100;
+      adjusted += adj;
+      if (pct !== 0) {
+        const finLabel = finish === "Budget" ? "Keeping costs down" : finish === "Premium" ? "Premium throughout" : "Quality";
+        breakdown.push({ section: "Adjustments", label: `Finish: ${finLabel}`, sub: `${pct > 0 ? "+" : ""}${pct}% of anchor`, value: adj, kind: pct > 0 ? "add" : "sub" });
+      }
+    }
+
+    const answered = [layout, carpentry, finish].filter(Boolean).length;
+    let bandPct: number, confidence: ComputedState["confidence"];
+    if (answered === 3) { bandPct = 8; confidence = "high"; }
+    else if (answered === 2) { bandPct = 12; confidence = "medium"; }
+    else if (answered === 1) { bandPct = 15; confidence = "medium-low"; }
+    else { bandPct = 18; confidence = "low"; }
+
+    const min = Math.round((adjusted * (1 - bandPct / 100)) / 100) * 100;
+    const max = Math.round((adjusted * (1 + bandPct / 100)) / 100) * 100;
+
+    return { anchor: base, adjustedAnchor: adjusted, min, max, confidence, bandPct, firmType: routeFirmType({ intent, property, layout, carpentry, finish }), breakdown };
+
+    function computeLanded(): ComputedState {
+      if (!landedWorkType || !unitType) return { anchor: 0, adjustedAnchor: 0, min: 0, max: 0, confidence: "low", bandPct: 0, firmType: null, breakdown: [], isLanded: true };
+      const workType = landedWorkType === "unsure" ? "aa" : landedWorkType;
+      const scopePct = landedWorkType === "unsure" ? "30-50" : landedScopePct;
+      if (workType === "aa" && !scopePct) return { anchor: 0, adjustedAnchor: 0, min: 0, max: 0, confidence: "low", bandPct: 0, firmType: null, breakdown: [], isLanded: true };
+      const bua = LANDED_BUA[unitType];
+      const psf = LANDED_PSF[workType];
+      if (!bua || !psf) return { anchor: 0, adjustedAnchor: 0, min: 0, max: 0, confidence: "low", bandPct: 0, firmType: null, breakdown: [], isLanded: true };
+
+      let effectiveArea: number;
+      let effectiveAreaLabel: string;
+      if (workType === "aa") {
+        const pctFactor = LANDED_AA_PCT[scopePct as string] || 0.40;
+        effectiveArea = Math.round(bua * pctFactor);
+        const pctDisplay = scopePct === "under30" ? "25%" : "40%";
+        effectiveAreaLabel = `~${effectiveArea.toLocaleString()} sqft (${pctDisplay} of ${bua.toLocaleString()} sqft BUA)`;
+      } else {
+        effectiveArea = bua;
+        effectiveAreaLabel = `${bua.toLocaleString()} sqft full BUA`;
+      }
+
+      const cMin = effectiveArea * psf.low;
+      const cMax = effectiveArea * psf.high;
+      const totalMin = Math.round((cMin + LANDED_SOFT.min) / 1000) * 1000;
+      const totalMax = Math.round((cMax + LANDED_SOFT.max) / 1000) * 1000;
+      const adj = (totalMin + totalMax) / 2;
+
+      const breakdown: BreakdownItem[] = [
+        { section: "Starting point", label: landedWorkLabel(workType), sub: effectiveAreaLabel, value: effectiveArea, kind: "base", isLanded: true, displayOverride: `${effectiveArea.toLocaleString()} sqft` },
+        { section: "Construction cost", label: `PSF rate: $${psf.low} – $${psf.high}`, sub: `Industry range for ${landedWorkLabel(workType).toLowerCase()} works in 2025–2026`, value: cMin, valueMax: cMax, kind: "range", isLanded: true },
+        { section: "Soft costs", label: "QP / PE fees, URA & BCA submissions, drainage, contingency", sub: "Typical flat addition across all landed projects", value: LANDED_SOFT.min, valueMax: LANDED_SOFT.max, kind: "range", isLanded: true },
+      ];
+
+      const conf: ComputedState["confidence"] = (workType === "aa" && scopePct) || workType !== "aa" ? "medium" : "low";
+      return { anchor: cMin + LANDED_SOFT.min, adjustedAnchor: adj, min: totalMin, max: totalMax, confidence: conf, bandPct: 0, firmType: routeLandedFirmType(workType, scopePct as LandedScope | null), breakdown, isLanded: true, workType };
+    }
+  }, [property, anchorKey, intent, newResale, unitType, ocs, ocsFlooring, ocsDoors, layout, carpentry, finish, landedWorkType, landedScopePct]);
+
+  // ─── Step-2 intent anchor previews ─────────────────────────
+  const intentAnchors = useMemo(() => {
+    if (!anchorKey) return null;
+    const a = ANCHORS[anchorKey];
+    if (!a) return null;
+    const fmt = (v: number, open?: boolean) => {
+      const min = Math.round((v * 0.9) / 100) * 100;
+      if (open) return `Starts at $${min.toLocaleString()}+`;
+      const max = Math.round((v * 1.1) / 100) * 100;
+      return `Range: $${min.toLocaleString()} – $${max.toLocaleString()}`;
+    };
+    return { basics: fmt(a.basics), proper: fmt(a.proper), special: fmt(a.special, true) };
+  }, [anchorKey]);
+
+  // ─── Screen navigation ─────────────────────────────────────
+  const progressIndex = (() => {
+    if (screen === 0 || screen === "route") return 0;
+    if (typeof screen === "number") return Math.min(screen, 5);
+    return 0;
+  })();
+
+  const goFromJourney = () => {
+    if (journey === "exploring" || journey === "already-chose") setScreen("route");
+    else setScreen(1);
+  };
+
+  const goFromStep1 = () => setScreen(2);
+
+  const goFromStep2 = () => {
+    if (property === "Landed") setScreen(4); // landed skips confidence boosters
+    else setScreen(3);
+  };
+
+  const step1Valid = (() => {
+    if (!property || !newResale || !unitType) return false;
+    if (property === "HDB" && newResale === "new" && !ocs) return false;
+    return true;
+  })();
+
+  const step2Valid = (() => {
+    if (property === "Landed") {
+      if (!landedWorkType) return false;
+      if (landedWorkType === "aa" && !landedScopePct) return false;
+      return true;
+    }
+    return !!intent;
+  })();
+
+  // ═══════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════
+  return (
+    <div style={shell}>
+      <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
+      <div style={app}>
+        {/* Progress dots */}
+        <Progress activeIndex={progressIndex} />
+
+        {screen === 0 && (
+          <Screen0
+            journey={journey}
+            onJourney={setJourney}
+            onContinue={goFromJourney}
+          />
+        )}
+
+        {screen === "route" && (
+          <ScreenRoute
+            journey={journey}
+            onBack={() => setScreen(0)}
+            onContinueAnyway={() => setScreen(1)}
+          />
+        )}
+
+        {screen === 1 && (
+          <Screen1
+            property={property}
+            setProperty={(p) => {
+              setProperty(p);
+              setNewResale(null);
+              setOcs(null);
+              setOcsFlooring(false);
+              setOcsDoors(false);
+              setUnitType(null);
+            }}
+            newResale={newResale}
+            setNewResale={(n) => {
+              setNewResale(n);
+              setOcs(null);
+              setOcsFlooring(false);
+              setOcsDoors(false);
+            }}
+            ocs={ocs}
+            setOcs={(v) => {
+              setOcs(v);
+              if (v === "no") { setOcsFlooring(false); setOcsDoors(false); }
+            }}
+            ocsFlooring={ocsFlooring}
+            setOcsFlooring={setOcsFlooring}
+            ocsDoors={ocsDoors}
+            setOcsDoors={setOcsDoors}
+            unitType={unitType}
+            setUnitType={setUnitType}
+            onBack={() => setScreen(0)}
+            onContinue={goFromStep1}
+            canContinue={step1Valid}
+          />
+        )}
+
+        {screen === 2 && (
+          <Screen2
+            property={property!}
+            intent={intent}
+            setIntent={setIntent}
+            intentAnchors={intentAnchors}
+            landedWorkType={landedWorkType}
+            setLandedWorkType={(w) => {
+              setLandedWorkType(w);
+              if (w !== "aa") setLandedScopePct(null);
+            }}
+            landedScopePct={landedScopePct}
+            setLandedScopePct={(s) => {
+              if (s === "over50") {
+                // auto-reroute to reconstruction
+                setLandedWorkType("reconstruction");
+                setLandedScopePct(null);
+              } else {
+                setLandedScopePct(s);
+              }
+            }}
+            onBack={() => setScreen(1)}
+            onContinue={goFromStep2}
+            canContinue={step2Valid}
+          />
+        )}
+
+        {screen === 3 && (
+          <Screen3
+            layout={layout}
+            setLayout={setLayout}
+            carpentry={carpentry}
+            setCarpentry={setCarpentry}
+            finish={finish}
+            setFinish={setFinish}
+            computed={computed}
+            intent={intent}
+            onBack={() => setScreen(2)}
+            onContinue={() => setScreen(4)}
+          />
+        )}
+
+        {screen === 4 && (
+          <Screen4
+            sourcing={sourcing}
+            setSourcing={setSourcing}
+            onBack={() => setScreen(property === "Landed" ? 2 : 3)}
+            onContinue={() => setScreen(5)}
+          />
+        )}
+
+        {screen === 5 && (
+          <Screen5
+            computed={computed}
+            intent={intent}
+            mathOpen={mathOpen}
+            setMathOpen={setMathOpen}
+            leadName={leadName}
+            setLeadName={setLeadName}
+            leadPhone={leadPhone}
+            setLeadPhone={setLeadPhone}
+            leadEmail={leadEmail}
+            setLeadEmail={setLeadEmail}
+            onBack={() => setScreen(4)}
+            onSubmit={() => setScreen(6)}
+          />
+        )}
+
+        {screen === 6 && <Screen6 />}
       </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 4b — Full Home Scope (when all rooms selected)
-// ═══════════════════════════════════════════════════════════
-function StepFullHomeScope({ data, onChange }: { data: FullHomeScope; onChange: (u: Partial<FullHomeScope>) => void }) {
-  const scopes: { level: ScopeLevel; sub: string }[] = [
-    { level: "Light", sub: "Cosmetic refresh — paint, fixtures, minor touch-ups" },
-    { level: "Moderate", sub: "New flooring, carpentry, updated finishes throughout" },
-    { level: "Extensive", sub: "Full overhaul — everything new, custom throughout" },
-  ];
-  const carpentry: { level: CarpentryLevel; sub: string }[] = [
-    { level: "Low", sub: "Minimal built-in cabinetry" },
-    { level: "Medium", sub: "Standard wardrobes & kitchen cabinetry" },
-    { level: "High", sub: "Custom full-height carpentry, feature walls" },
-  ];
-  const layout: { level: LayoutLevel; sub: string }[] = [
-    { level: "No", sub: "Keep the existing layout as-is" },
-    { level: "Some", sub: "Minor wall changes, open up one area" },
-    { level: "Major", sub: "Significant hacking, new room configurations" },
-  ];
+export default CostGuide;
 
-  function renderSection<T extends string>(title: string, subtitle: string, options: { level: T; sub: string }[], current: T, onSelect: (v: T) => void) {
-    return (
-      <div className="mb-10">
-        <h3 className="font-['DM_Sans',sans-serif] font-semibold text-[18px] text-[#0f0f0d] tracking-[-0.4px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>{title}</h3>
-        <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">{subtitle}</p>
-        <div className="flex flex-col gap-3">
-          {options.map((opt) => (
-            <button key={opt.level} onClick={() => onSelect(opt.level)} className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${current === opt.level ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
-              <div>
-                <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] block">{opt.level}</span>
-                <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] block mt-0.5">{opt.sub}</span>
-              </div>
-              {current === opt.level && (
-                <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                </div>
-              )}
-            </button>
+// ═══════════════════════════════════════════════════════════
+// SCREEN 0 — JOURNEY SCREENER
+// ═══════════════════════════════════════════════════════════
+function Screen0({
+  journey,
+  onJourney,
+  onContinue,
+}: {
+  journey: Journey | null;
+  onJourney: (j: Journey) => void;
+  onContinue: () => void;
+}) {
+  const opts: { value: Journey; title: string; desc: string }[] = [
+    { value: "exploring", title: "Still exploring ideas", desc: "12+ months away, browsing inspiration, no firms yet." },
+    { value: "getting-ready", title: "Getting ready to start", desc: "6–12 months away, starting to think about budget." },
+    { value: "actively-planning", title: "Actively planning", desc: "3–6 months away, starting to look at firms." },
+    { value: "deep-in-quotes", title: "Deep in quotes", desc: "Met 2+ firms, comparing proposals, need a sense check." },
+    { value: "already-chose", title: "Already chose a firm", desc: "Signed or close to signing, just researching." },
+  ];
+  return (
+    <div>
+      <Badge>Step 1 of 5 · 30 seconds</Badge>
+      <Hero>
+        See what your renovation <Em>should actually cost</Em> — before anyone quotes you.
+      </Hero>
+      <p style={subHeroStyle}>
+        Get a cost range based on homes like yours. Plus the firm type built for your scope. Takes under 2 minutes. The real numbers come when you talk to us.
+      </p>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={qLabelStyle}>Where are you in your renovation journey?</div>
+        <div style={qHelpStyle}>This helps us give you the right level of detail.</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {opts.map((o) => (
+            <OptionCard
+              key={o.value}
+              selected={journey === o.value}
+              onClick={() => onJourney(o.value)}
+              title={o.title}
+              desc={o.desc}
+            />
           ))}
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Full home renovation scope</h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-10">Since you're renovating every room, tell us about the overall scope.</p>
-      {renderSection("How big is the upgrade?", "Overall renovation intensity", scopes, data.scope, (v) => onChange({ scope: v }))}
-      {renderSection("How much custom carpentry?", "Built-in furniture and cabinetry", carpentry, data.carpentry, (v) => onChange({ carpentry: v }))}
-      {renderSection("Any major layout changes?", "Wall hacking, room reconfigurations", layout, data.layout, (v) => onChange({ layout: v }))}
+      <BtnRow>
+        <BtnPrimary onClick={onContinue} disabled={!journey}>Continue</BtnPrimary>
+      </BtnRow>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 4 — Scope per room
+// SCREEN ROUTE — for exploring / already-chose
 // ═══════════════════════════════════════════════════════════
-function StepScope({
-  rooms,
-  scopes,
-  onUpdate,
+function ScreenRoute({
+  journey,
+  onBack,
+  onContinueAnyway,
 }: {
-  rooms: RoomKey[];
-  scopes: Partial<Record<RoomKey, RoomScope>>;
-  onUpdate: (room: RoomKey, updates: Partial<RoomScope>) => void;
+  journey: Journey | null;
+  onBack: () => void;
+  onContinueAnyway: () => void;
 }) {
-  const levels: ScopeLevel[] = ["Light", "Moderate", "Extensive"];
-
+  const isExploring = journey === "exploring";
   return (
-    <div className="w-full max-w-[580px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        How extensive is each room?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-10">
-        Pick a scope level for each room. Your designer will refine the details later.
+    <div>
+      <Hero>
+        This tool is built for <Em>homeowners closer to the decision.</Em>
+      </Hero>
+      <p style={subHeroStyle}>
+        Our Cost Guide gives the sharpest range when you have some scope in mind and a real timeline. Based on what you said, there's a better tool for where you are right now.
       </p>
 
-      <div className="space-y-8">
-        {rooms.map((room, roomIdx) => {
-          const scope = scopes[room];
-          if (!scope) return null;
-          const hasCount = room === "Bedrooms" || room === "Bathrooms";
-
-          return (
-            <div key={room}>
-              {/* Room header */}
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-['DM_Sans',sans-serif] font-semibold text-[18px] text-[#0f0f0d] tracking-[-0.4px]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                  {room === "Others" ? "Others (Study, Balcony, etc.)" : room}
-                </h3>
-                {hasCount && (
-                  <div className="flex items-center gap-1.5">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => onUpdate(room, { count: n })}
-                        className={`w-[36px] h-[36px] rounded-[8px] font-['DM_Sans',sans-serif] font-medium text-[13px] transition-all duration-150 ${
-                          scope.count === n
-                            ? "bg-[#0f0f0d] text-white"
-                            : "bg-[#e8e4db] text-[#6b6860] hover:bg-[#d8d3c8]"
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Scope pills — horizontal row */}
-              <div className="grid grid-cols-3 gap-3">
-                {levels.map((level) => {
-                  const active = scope.level === level;
-                  const items = SCOPE_DATA[room][level];
-                  return (
-                    <button
-                      key={level}
-                      onClick={() => onUpdate(room, { level })}
-                      className={`text-left p-5 rounded-[12px] border transition-all duration-200 ${
-                        active
-                          ? "border-[#0f0f0d] bg-[#0f0f0d]"
-                          : "border-[#d8d3c8] bg-[#fafaf8] hover:border-[#9a9790]"
-                      }`}
-                    >
-                      <p
-                        className={`font-['DM_Sans',sans-serif] font-semibold text-[15px] tracking-[-0.3px] mb-2.5 ${
-                          active ? "text-white" : "text-[#0f0f0d]"
-                        }`}
-                      >
-                        {level}
-                      </p>
-                      <ul className="space-y-1">
-                        {items.map((item, i) => (
-                          <li
-                            key={i}
-                            className={`font-['DM_Sans',sans-serif] text-[13px] leading-[1.5] ${
-                              active ? "text-white/60" : "text-[#9a9790]"
-                            }`}
-                          >
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {roomIdx < rooms.length - 1 && (
-                <div className="h-px bg-[#e8e4db] mt-10" />
-              )}
+      <div
+        style={{
+          background: C.white,
+          padding: "28px 26px",
+          border: `1px solid ${C.creamBorder}`,
+          borderRadius: 8,
+          marginTop: 16,
+        }}
+      >
+        {isExploring ? (
+          <>
+            <H2 style={{ marginBottom: 12 }}>You're in the inspiration phase.</H2>
+            <p style={{ color: C.gray, lineHeight: 1.6, fontSize: 14 }}>
+              12+ months out, gathering ideas. The Cost Guide works best when you have a scope in mind and a real timeline. You can still run it now as a rough benchmark — just know the range will feel more real closer to your keys.
+            </p>
+            <div
+              style={{
+                background: "#f5f2eb",
+                borderLeft: `3px solid ${C.black}`,
+                padding: "14px 16px",
+                margin: "16px 0 0",
+                fontFamily: serif,
+                fontSize: 16,
+                fontStyle: "italic",
+                color: C.black,
+                lineHeight: 1.5,
+              }}
+            >
+              "Homeowners who run the Cost Guide more than 12 months out often revisit it closer to their keys. The numbers feel more actionable then."
             </div>
-          );
-        })}
+          </>
+        ) : (
+          <>
+            <H2 style={{ marginBottom: 12 }}>You're past where Network usually helps.</H2>
+            <p style={{ color: C.gray, lineHeight: 1.6, fontSize: 14 }}>
+              If you've already chosen a firm, our matching service isn't for you right now. But if you want to sense-check your quote against market rates, the Cost Guide is still useful.
+            </p>
+          </>
+        )}
       </div>
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Go back</BtnSecondary>
+        <BtnPrimary onClick={onContinueAnyway}>Continue anyway</BtnPrimary>
+      </BtnRow>
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════
-// STEP 5 — Timeline
 // ═══════════════════════════════════════════════════════════
-interface LifestyleState {
-  pets: boolean | null;
-  children: boolean | null;
-  handicap: boolean | null;
-  ecoFriendly: boolean | null;
-  boldDesign: boolean | null;
+// SCREEN 1 — PROPERTY
+// ═══════════════════════════════════════════════════════════
+function Screen1({
+  property, setProperty,
+  newResale, setNewResale,
+  ocs, setOcs,
+  ocsFlooring, setOcsFlooring,
+  ocsDoors, setOcsDoors,
+  unitType, setUnitType,
+  onBack, onContinue, canContinue,
+}: any) {
+  const showNewResale = !!property;
+  const showOcs = property === "HDB" && newResale === "new";
+  const showOcsComponents = showOcs && ocs === "yes";
+  const showUnitType = !!property && !!newResale && (!showOcs || !!ocs);
+
+  const newResaleChoices: { value: NewResale; label: string }[] = property === "HDB"
+    ? [{ value: "new", label: "BTO (new)" }, { value: "resale", label: "Resale" }]
+    : property === "Condo" || property === "EC"
+      ? [{ value: "new", label: "New launch" }, { value: "resale", label: "Resale" }]
+      : [{ value: "new", label: "New build" }, { value: "resale", label: "Existing" }];
+
+  const floorPrice = unitType && OCS_PRICING.flooring[unitType];
+  const doorPrice = unitType && OCS_PRICING.doors[unitType];
+
+  return (
+    <div>
+      <H2>Tell us about your home</H2>
+      <p style={sub2Style}>Pricing depends heavily on property type and condition. Resale flats need hacking and rewiring. BTO flats with OCS have less private work.</p>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={qLabelStyle}>Property type</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+          {(["HDB", "Condo", "EC", "Landed"] as Property[]).map((p) => (
+            <OptionPill key={p} label={p === "Condo" ? "Condominium" : p === "EC" ? "Executive Condo" : p} selected={property === p} onClick={() => setProperty(p)} />
+          ))}
+        </div>
+      </div>
+
+      {showNewResale && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={qLabelStyle}>
+            {property === "HDB" ? "New (BTO) or resale?" : property === "Landed" ? "New build or existing?" : "New launch or resale?"}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+            {newResaleChoices.map((c) => (
+              <OptionPill key={c.value} label={c.label} selected={newResale === c.value} onClick={() => setNewResale(c.value)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showOcs && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={qLabelStyle}>Did you take HDB's Optional Component Scheme (OCS)?</div>
+          <div style={qHelpStyle}>OCS is HDB's package — you pay them directly for flooring, doors, and sanitary fittings. Decided at flat booking. If you don't remember choosing it, you probably didn't.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <OptionCard selected={ocs === "yes"} onClick={() => setOcs("yes")} title="Yes, I took OCS" desc="HDB will hand over with some components already installed." />
+            <OptionCard selected={ocs === "no"} onClick={() => setOcs("no")} title="No, I opted out" desc="Everything will be done privately after key collection." />
+          </div>
+        </div>
+      )}
+
+      {showOcsComponents && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={qLabelStyle}>Which OCS packages did you take?</div>
+          <div style={qHelpStyle}>HDB offers two packages. You can take one or both.</div>
+          <OcsCheck
+            checked={ocsFlooring}
+            onToggle={() => setOcsFlooring(!ocsFlooring)}
+            title="Flooring package"
+            desc="Vinyl strips in bedrooms, porcelain tiles in living/dining."
+            price={floorPrice ? `HDB charges: $${floorPrice.toLocaleString()} for ${unitType}` : "HDB charges: $4,970 for 4-room"}
+          />
+          <OcsCheck
+            checked={ocsDoors}
+            onToggle={() => setOcsDoors(!ocsDoors)}
+            title="Internal doors + sanitary fittings package"
+            desc="Bedroom and bathroom doors, basin, taps, shower mixers."
+            price={doorPrice ? `HDB charges: $${doorPrice.toLocaleString()} for ${unitType}` : "HDB charges: $3,180 for 4-room and above"}
+          />
+        </div>
+      )}
+
+      {showUnitType && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={qLabelStyle}>Unit type</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+            {UNIT_TYPES[property as Property].map((u) => (
+              <OptionPill key={u.value} label={u.label} selected={unitType === u.value} onClick={() => setUnitType(u.value)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+        <BtnPrimary onClick={onContinue} disabled={!canContinue}>Continue</BtnPrimary>
+      </BtnRow>
+    </div>
+  );
 }
 
-function StepTimeline({
-  selected,
-  onSelect,
-}: {
-  selected: string;
-  onSelect: (v: string) => void;
-}) {
+function OcsCheck({ checked, onToggle, title, desc, price }: { checked: boolean; onToggle: () => void; title: string; desc: string; price: string }) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        When do you plan to start?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        This helps us connect you with available designers.
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        width: "100%",
+        padding: "14px 16px",
+        background: "#faf8f2",
+        border: `1px solid ${C.creamBorder}`,
+        borderRadius: 8,
+        marginBottom: 8,
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: sans,
+      }}
+    >
+      <span
+        style={{
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+          marginTop: 2,
+          borderRadius: 3,
+          background: checked ? C.black : C.white,
+          border: `1.5px solid ${checked ? C.black : C.creamBorder}`,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {checked && <Check size={11} strokeWidth={3} style={{ color: C.white }} />}
+      </span>
+      <span style={{ flex: 1 }}>
+        <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: C.black, marginBottom: 2 }}>{title}</span>
+        <span style={{ display: "block", fontSize: 12, color: C.grayLight, lineHeight: 1.5 }}>{desc}</span>
+        <span style={{ display: "block", fontSize: 11, color: "#5a9460", fontWeight: 600, marginTop: 4, letterSpacing: "0.04em" }}>{price}</span>
+      </span>
+    </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCREEN 2 — INTENT / LANDED WORK TYPE
+// ═══════════════════════════════════════════════════════════
+function Screen2({
+  property, intent, setIntent, intentAnchors,
+  landedWorkType, setLandedWorkType,
+  landedScopePct, setLandedScopePct,
+  onBack, onContinue, canContinue,
+}: any) {
+  const isLanded = property === "Landed";
+  const intentOpts: { value: Intent; title: string; desc: string }[] = [
+    { value: "basics", title: "Move-in ready basics", desc: "Wet areas done, basic finishes, painting, ready-made furniture. Priority: get in and start living. Custom carpentry only where essential." },
+    { value: "proper", title: "A proper home renovation", desc: "Everything done, custom where it matters, unified design. Priority: a home that works and looks good. Built-in carpentry in main rooms." },
+    { value: "special", title: "Something special", desc: "Fully designed, premium materials, custom throughout. Priority: a home that reflects who you are. Design-led from concept to completion." },
+  ];
+  const landedOpts: { value: LandedWork; title: string; desc: string; anchor: string }[] = [
+    { value: "aa", title: "A&A (Additions & Alterations)", desc: "Keeping the existing structure. Modifying or extending less than 50% of the building. No additional storey, no change in housing form. The fastest approval pathway.", anchor: "$180 – $400 PSF on affected area" },
+    { value: "reconstruction", title: "Reconstruction", desc: "Substantial rebuild while retaining some existing structure. Works exceeding 50% of the existing building, adding a storey, or changing housing form. Must comply with current URA Envelope Control.", anchor: "$250 – $450 PSF on full built-up area" },
+    { value: "rebuild", title: "Rebuild (New Erection)", desc: "Full demolition and build from scratch. Complete design flexibility. Requires fresh URA planning permission and full BCA submission.", anchor: "$400 – $700 PSF and above" },
+    { value: "unsure", title: "Not sure yet, still exploring", desc: "We'll walk through the best pathway during the concierge call based on your goals, site conditions, and BCA/URA constraints.", anchor: "Range calculated as A&A baseline" },
+  ];
+
+  return (
+    <div>
+      <H2>{isLanded ? "What kind of landed works are you planning?" : "What kind of renovation are you thinking about?"}</H2>
+      <p style={sub2Style}>
+        {isLanded
+          ? "Landed renovations fall into three categories under BCA and URA. Each has very different cost, timeline, and submission requirements."
+          : "This is the most important question — it shapes everything else. Don't overthink it. Pick the one closest to what you're imagining."}
       </p>
 
-      <div className="flex flex-col gap-3">
-        {TIMELINE_OPTIONS.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => onSelect(opt)}
-            className={`w-full flex items-center justify-between px-5 py-[18px] rounded-[12px] border transition-all duration-200 bg-[#fafaf8] text-left ${
-              selected === opt
-                ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]"
-                : "border-[#d8d3c8] hover:border-[#9a9790]"
-            }`}
-          >
-            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">
-              {opt}
-            </span>
-            {selected === opt && (
-              <div className="w-[22px] h-[22px] rounded-full bg-[#0f0f0d] flex items-center justify-center shrink-0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+      {isLanded ? (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {landedOpts.map((o) => (
+              <OptionCard
+                key={o.value}
+                selected={landedWorkType === o.value}
+                onClick={() => setLandedWorkType(o.value)}
+                title={o.title}
+                desc={o.desc}
+                anchor={o.anchor}
+              />
+            ))}
+          </div>
+
+          {landedWorkType === "aa" && (
+            <>
+              <div style={{ height: 1, background: C.creamDark, margin: "24px 0 22px" }} />
+              <h3 style={{ fontSize: 17, fontWeight: 600, color: C.black, marginBottom: 6, lineHeight: 1.35 }}>
+                Roughly how much of the total floor area is being renovated?
+              </h3>
+              <p style={{ fontSize: 13, color: C.gray, lineHeight: 1.5, marginBottom: 14 }}>
+                A&amp;A is defined by the portion of the building being altered. This tightens the estimate.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <OptionCard selected={landedScopePct === "under30"} onClick={() => setLandedScopePct("under30")} title="Less than 30%" desc="Minor additions or alterations. Specific rooms or a single extension." />
+                <OptionCard selected={landedScopePct === "30-50"} onClick={() => setLandedScopePct("30-50")} title="30 – 50%" desc="Substantial A&A. Multiple rooms, significant structural work, but within A&A limits." />
+                <OptionCard selected={landedScopePct === "over50"} onClick={() => setLandedScopePct("over50")} title="More than 50%" desc="Past A&A territory. We'll switch your estimate to Reconstruction pricing." />
               </div>
-            )}
-          </button>
+            </>
+          )}
+        </>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {intentOpts.map((o) => (
+            <OptionCard
+              key={o.value}
+              selected={intent === o.value}
+              onClick={() => setIntent(o.value)}
+              title={o.title}
+              desc={o.desc}
+              anchor={intentAnchors ? (intentAnchors as any)[o.value] : "Range: calculating…"}
+            />
+          ))}
+        </div>
+      )}
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+        <BtnPrimary onClick={onContinue} disabled={!canContinue}>Continue</BtnPrimary>
+      </BtnRow>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCREEN 3 — CONFIDENCE BOOSTERS
+// ═══════════════════════════════════════════════════════════
+function Screen3({
+  layout, setLayout,
+  carpentry, setCarpentry,
+  finish, setFinish,
+  computed, intent,
+  onBack, onContinue,
+}: any) {
+  const answered = [layout, carpentry, finish].filter(Boolean).length;
+  const rangeText = intent === "special"
+    ? `$${computed.min.toLocaleString()}+`
+    : `$${computed.min.toLocaleString()} – $${computed.max.toLocaleString()}`;
+  const labels: Record<string, string> = { high: "High confidence", medium: "Medium confidence", "medium-low": "Medium-low confidence", low: "Range only" };
+  return (
+    <div>
+      <H2>Want a more specific number?</H2>
+      <p style={sub2Style}>Answer any of these to tighten your range. Skip any you don't know yet — your concierge will walk through them on the call.</p>
+
+      <div style={{ background: C.creamDark, borderRadius: 8, padding: "14px 16px", marginBottom: 20, fontSize: 13, color: C.gray, lineHeight: 1.6 }}>
+        <strong style={{ color: C.black }}>The more you answer, the narrower your range.</strong> Watch the estimate update in real time.
+      </div>
+
+      <BoosterGroup
+        label="Any layout changes?"
+        help="Moving walls, opening up spaces, major reconfiguration."
+        value={layout}
+        onSelect={setLayout}
+        options={[
+          { value: "No", title: "No changes", desc: "Keeping the current walls and layout." },
+          { value: "Some", title: "Some changes", desc: "Maybe a wall or two opened." },
+          { value: "Major", title: "Major reconfiguration", desc: "Open plan, multiple walls, significant rework." },
+        ]}
+      />
+      <BoosterGroup
+        label="How much custom carpentry?"
+        help="Built-in wardrobes, TV consoles, kitchen cabinetry, custom storage."
+        value={carpentry}
+        onSelect={setCarpentry}
+        options={[
+          { value: "Low", title: "Mostly ready-made", desc: "Free-standing furniture, IKEA-style storage." },
+          { value: "Medium", title: "Mix of ready-made and custom", desc: "Custom where it matters, ready-made elsewhere." },
+          { value: "High", title: "Mostly custom built-ins", desc: "Full custom carpentry throughout." },
+        ]}
+      />
+      <BoosterGroup
+        label="Finish level?"
+        help="Material quality across tiles, countertops, fixtures, fittings."
+        value={finish}
+        onSelect={setFinish}
+        options={[
+          { value: "Budget", title: "Keeping costs down", desc: "Stock materials, entry-level brands, function over finish." },
+          { value: "Quality", title: "Quality that lasts", desc: "Mid-range materials, reliable brands, balanced choices." },
+          { value: "Premium", title: "Premium throughout", desc: "High-end materials, designer brands, premium finishes." },
+        ]}
+      />
+
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          background: C.black,
+          color: C.white,
+          padding: "16px 20px",
+          borderRadius: 8,
+          marginTop: 20,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+        }}
+      >
+        <div style={{ fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: "#888", marginBottom: 6 }}>Your estimated range</div>
+        <div style={{ fontFamily: serif, fontSize: 24, fontWeight: 500, letterSpacing: "-0.5px" }}>{rangeText}</div>
+        <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>{answered} of 3 answered · {labels[computed.confidence]}</div>
+      </div>
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+        <BtnPrimary onClick={onContinue}>Continue</BtnPrimary>
+      </BtnRow>
+    </div>
+  );
+}
+
+function BoosterGroup<T extends string>({
+  label, help, value, onSelect, options,
+}: {
+  label: string; help: string;
+  value: T | null;
+  onSelect: (v: T) => void;
+  options: { value: T; title: string; desc: string }[];
+}) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={qLabelStyle}>{label}</div>
+      <div style={qHelpStyle}>{help}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {options.map((o) => (
+          <OptionCard key={o.value} selected={value === o.value} onClick={() => onSelect(o.value)} title={o.title} desc={o.desc} />
         ))}
       </div>
     </div>
@@ -842,778 +1221,496 @@ function StepTimeline({
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 6 — Lifestyle
+// SCREEN 4 — SOURCING
 // ═══════════════════════════════════════════════════════════
-function StepLifestyle({
-  lifestyle,
-  onLifestyleChange,
-}: {
-  lifestyle: LifestyleState;
-  onLifestyleChange: (key: keyof LifestyleState, value: boolean) => void;
-}) {
-  const items: { key: keyof LifestyleState; label: string; description: string }[] = [
-    { key: "pets", label: "Do you have pets?", description: "We'll recommend durable, scratch-resistant materials" },
-    { key: "children", label: "Children in the home?", description: "We'll prioritise child-safe designs and rounded edges" },
-    { key: "handicap", label: "Need accessible features?", description: "Wider doorways, grab bars, and barrier-free layouts" },
-    { key: "ecoFriendly", label: "Eco-friendly materials?", description: "Sustainable, low-VOC, and energy-efficient options" },
-    { key: "boldDesign", label: "Love bold designs?", description: "Adventurous colours, patterns, and statement pieces" },
-  ];
-
+function Screen4({ sourcing, setSourcing, onBack, onContinue }: any) {
   return (
-    <div className="w-full max-w-[480px] mx-auto">
-      <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        Tell us about your lifestyle
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        This helps us match you with the right designers. All optional.
-      </p>
+    <div>
+      <H2>One last question</H2>
+      <p style={sub2Style}>This helps us route you to the right firms — and makes sure we don't match you too early.</p>
 
-      <div className="flex flex-col gap-4">
-        {items.map(({ key, label, description }) => {
-          const value = lifestyle[key];
-          return (
-            <div
-              key={key}
-              className="bg-[#fafaf8] border border-[#e8e4db] rounded-[14px] px-5 py-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] leading-[1.3] mb-1">
-                    {label}
-                  </p>
-                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.4]">
-                    {description}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0 pt-0.5">
-                  <button
-                    onClick={() => onLifestyleChange(key, true)}
-                    className={`px-4 py-[6px] rounded-full text-[13px] font-medium font-['DM_Sans',sans-serif] transition-all duration-200 cursor-pointer ${
-                      value === true
-                        ? "bg-[#0f0f0d] text-white"
-                        : "bg-[#f0ede6] text-[#9a9790] hover:text-[#0f0f0d] hover:bg-[#e8e4db]"
-                    }`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    onClick={() => onLifestyleChange(key, false)}
-                    className={`px-4 py-[6px] rounded-full text-[13px] font-medium font-['DM_Sans',sans-serif] transition-all duration-200 cursor-pointer ${
-                      value === false
-                        ? "bg-[#0f0f0d] text-white"
-                        : "bg-[#f0ede6] text-[#9a9790] hover:text-[#0f0f0d] hover:bg-[#e8e4db]"
-                    }`}
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ marginBottom: 24 }}>
+        <div style={qLabelStyle}>Have you started meeting firms yet?</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <OptionCard selected={sourcing === "none"} onClick={() => setSourcing("none")} title="Not yet" desc="Still gathering ideas before reaching out to anyone." />
+          <OptionCard selected={sourcing === "1-2"} onClick={() => setSourcing("1-2")} title="Met 1–2 firms" desc="Starting to get a sense of what's out there." />
+          <OptionCard selected={sourcing === "3+"} onClick={() => setSourcing("3+")} title="Met 3+ firms" desc="Deep in it — quotes don't match, hard to decide." />
+        </div>
       </div>
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+        <BtnPrimary onClick={onContinue} disabled={!sourcing}>See my cost range</BtnPrimary>
+      </BtnRow>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 6 — Contact Details
+// SCREEN 5 — RESULT + LEAD CAPTURE
 // ═══════════════════════════════════════════════════════════
-function StepContact({
-  data,
-  onChange,
-}: {
-  data: { name: string; whatsapp: string; email: string };
-  onChange: (field: string, value: string) => void;
-}) {
-  const [touched, setTouched] = useState<{ whatsapp: boolean; email: boolean }>({
-    whatsapp: false,
-    email: false,
-  });
+function Screen5({
+  computed, intent,
+  mathOpen, setMathOpen,
+  leadName, setLeadName,
+  leadPhone, setLeadPhone,
+  leadEmail, setLeadEmail,
+  onBack, onSubmit,
+}: any) {
+  const isRebuild = computed.isLanded && computed.workType === "rebuild";
+  const useOpenEnded = intent === "special" || isRebuild;
+  const rangeText = useOpenEnded ? `$${computed.min.toLocaleString()}+` : `$${computed.min.toLocaleString()} – $${computed.max.toLocaleString()}`;
 
-  const whatsappErr = touched.whatsapp && data.whatsapp.length > 0 && data.whatsapp.length < 8;
-  const emailErr =
-    touched.email &&
-    data.email.length > 0 &&
-    !/^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(data.email);
+  const pillLabels: Record<string, { text: string; bg: string; color: string }> = {
+    high: { text: "High confidence", bg: "rgba(90, 148, 96, 0.2)", color: "#8eb895" },
+    medium: { text: "Medium confidence", bg: "rgba(210, 165, 60, 0.18)", color: "#d2a53c" },
+    "medium-low": { text: "Medium-low confidence", bg: "rgba(210, 165, 60, 0.18)", color: "#d2a53c" },
+    low: { text: "Range only", bg: "rgba(180, 120, 100, 0.18)", color: "#c8907a" },
+  };
+  const pill = pillLabels[computed.confidence];
+
+  const landedConfCopy: Record<string, string> = {
+    aa: "Range based on BCA/URA industry PSF data for A&A works in 2025–2026. The concierge call extracts site conditions, QP requirements, and scope specifics that tighten this further.",
+    reconstruction: "Range based on BCA/URA industry PSF data for reconstruction works in 2025–2026, applied to your full built-up area. Soft costs cover QP, PE, URA, and BCA submissions.",
+    rebuild: "Range based on BCA/URA industry PSF data for new erection in 2025–2026. No hard ceiling — premium rebuilds with luxury finishes can exceed $1,000 PSF. Soft costs cover QP, PE, URA, BCA submissions, and contingency.",
+  };
+  const confDesc: Record<string, string> = {
+    high: "Based on all three scope indicators you answered. This is a narrow, defensible range.",
+    medium: "Based on two of three scope indicators. The band reflects what we don't yet know.",
+    "medium-low": "Only one scope indicator answered. The band accounts for remaining variables.",
+    low: "Intent-level estimate only. Your concierge call will tighten this significantly.",
+  };
+  const confidenceText = computed.isLanded
+    ? (landedConfCopy[computed.workType || "aa"] || "Landed renovations have high variability.")
+    : `${confDesc[computed.confidence]} Your actual cost depends on specific material choices and site conditions, which we'll walk through on the call.${intent === "special" ? " No hard ceiling at this tier — scope at this level depends on design direction and material choices." : ""}`;
 
   return (
-    <div className="w-full max-w-[420px] mx-auto">
-      <h1 className="font-['DM_Sans',sans-serif] font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-        Where should we send your cost guide?
-      </h1>
-      <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-        We'll also connect you with renovation specialists who match your
-        project.
-      </p>
-
-      <div className="flex flex-col gap-4">
-        {/* Name */}
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
-            Full name
-          </label>
-          <input
-            type="text"
-            required
-            placeholder="Your name"
-            value={data.name}
-            onChange={(e) => onChange("name", e.target.value)}
-            className="w-full border border-[#d8d3c8] rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none focus:border-[#0f0f0d] transition-colors bg-[#fafaf8]"
-          />
+    <div>
+      {/* Cost range hero */}
+      <div
+        style={{
+          padding: "36px 28px",
+          background: C.black,
+          color: C.white,
+          borderRadius: 10,
+          textAlign: "center",
+          marginBottom: 20,
+        }}
+      >
+        <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#888", marginBottom: 14 }}>Your estimated range</div>
+        <div style={{ fontFamily: serif, fontSize: "clamp(32px, 6vw, 48px)", fontWeight: 500, lineHeight: 1, letterSpacing: "-1.5px", marginBottom: 14 }}>{rangeText}</div>
+        <div
+          style={{
+            display: "inline-block",
+            padding: "3px 10px",
+            background: pill.bg,
+            color: pill.color,
+            borderRadius: 12,
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            marginBottom: 10,
+          }}
+        >
+          {pill.text}
         </div>
+        <div style={{ fontSize: 13, color: "#aaa", lineHeight: 1.6, maxWidth: 460, margin: "0 auto" }}>{confidenceText}</div>
+      </div>
 
-        {/* WhatsApp */}
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
-            WhatsApp number
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={8}
-            required
-            placeholder="8-digit number"
-            value={data.whatsapp}
-            onChange={(e) => {
-              const val = e.target.value.replace(/\D/g, "").slice(0, 8);
-              onChange("whatsapp", val);
+      {/* Math toggle */}
+      <button
+        type="button"
+        onClick={() => setMathOpen(!mathOpen)}
+        style={{
+          background: C.white,
+          border: `1px solid ${C.creamBorder}`,
+          borderRadius: 8,
+          padding: "14px 18px",
+          marginBottom: mathOpen ? 0 : 20,
+          width: "100%",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 13,
+          color: C.black,
+          fontFamily: sans,
+          fontWeight: 600,
+        }}
+      >
+        <span>Show me how we got this number</span>
+        <ChevronDown
+          size={18}
+          style={{
+            color: C.grayLight,
+            transform: mathOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 150ms",
+          }}
+        />
+      </button>
+      {mathOpen && (
+        <div
+          style={{
+            background: C.white,
+            border: `1px solid ${C.creamBorder}`,
+            borderTop: "none",
+            borderRadius: "0 0 8px 8px",
+            padding: "20px 24px",
+            marginBottom: 20,
+            fontSize: 13,
+          }}
+        >
+          <MathBreakdown computed={computed} intent={intent} />
+        </div>
+      )}
+
+      {/* Firm type */}
+      {computed.firmType && (
+        <div
+          style={{
+            background: "#faf8f2",
+            border: `1px solid ${C.creamBorder}`,
+            borderRadius: 8,
+            padding: "22px 24px",
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: C.grayLight, marginBottom: 8 }}>Recommended renovator type for your scope</div>
+          <div style={{ fontFamily: serif, fontSize: 22, fontWeight: 500, color: C.black, marginBottom: 8, lineHeight: 1.25 }}>{computed.firmType.type}</div>
+          <div style={{ fontSize: 13, color: C.gray, lineHeight: 1.7 }}>{computed.firmType.desc}</div>
+        </div>
+      )}
+
+      {/* Why Network */}
+      <div style={{ background: "#faf8f2", border: `1px solid ${C.creamBorder}`, borderRadius: 8, padding: "20px 22px", marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: C.grayLight, marginBottom: 14 }}>Why homeowners use Network</div>
+        {["Brief once. Not six times.", "Three firms, not thirty to sort through.", "Aligned to your scope before first consultation.", "48 hours from brief to match."].map((line, i, arr) => (
+          <div
+            key={i}
+            style={{
+              fontFamily: serif,
+              fontSize: 16,
+              color: C.black,
+              lineHeight: 1.5,
+              padding: "6px 0",
+              borderBottom: i < arr.length - 1 ? "1px solid #f0ede6" : "none",
             }}
-            onFocus={() => setTouched((t) => ({ ...t, whatsapp: false }))}
-            onBlur={() => setTouched((t) => ({ ...t, whatsapp: true }))}
-            className={`w-full border rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
-              whatsappErr ? "border-red-400" : "border-[#d8d3c8] focus:border-[#0f0f0d]"
-            }`}
-          />
-          {whatsappErr && (
-            <p className="mt-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
-              Please enter a valid 8-digit number
-            </p>
-          )}
-        </div>
+          >
+            {line}
+          </div>
+        ))}
+      </div>
 
-        {/* Email */}
-        <div>
-          <label className="font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] mb-1.5 block">
-            Email address
-          </label>
-          <input
-            type="email"
-            required
-            placeholder="you@example.com"
-            value={data.email}
-            onChange={(e) => onChange("email", e.target.value)}
-            onFocus={() => setTouched((t) => ({ ...t, email: false }))}
-            onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-            className={`w-full border rounded-[10px] h-[46px] px-4 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none transition-colors bg-[#fafaf8] ${
-              emailErr ? "border-red-400" : "border-[#d8d3c8] focus:border-[#0f0f0d]"
-            }`}
-          />
-          {emailErr && (
-            <p className="mt-1 font-['DM_Sans',sans-serif] text-[12px] text-red-500">
-              Please enter a valid email address
-            </p>
-          )}
+      {/* Next steps */}
+      <div style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: 8, padding: "22px 24px", marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: C.grayLight, marginBottom: 14 }}>Here's what happens next</div>
+        {[
+          "Your PDF cost breakdown lands in your inbox within the hour.",
+          "A Network concierge WhatsApps you within 24 hours to walk through your scope.",
+          "Three firms built for your scope, briefed and introduced within 48 hours.",
+        ].map((t) => (
+          <div key={t} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "9px 0", fontSize: 13, lineHeight: 1.55 }}>
+            <span
+              style={{
+                flexShrink: 0,
+                width: 20,
+                height: 20,
+                background: "#5a9460",
+                color: C.white,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 700,
+                marginTop: 1,
+              }}
+            >
+              <Check size={11} strokeWidth={3} />
+            </span>
+            <span style={{ color: "#333" }}>{t}</span>
+          </div>
+        ))}
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #f0ede6", fontSize: 12, color: C.grayLight, fontStyle: "italic", textAlign: "center" }}>
+          No spam. One concierge message. Three matched firms.
         </div>
       </div>
 
-      <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] leading-[1.6] mt-6">
-        By submitting, you agree to be contacted by our renovation partners.
+      <h2 style={{ fontFamily: serif, fontSize: 24, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
+        The real conversation starts with <Em>three firms built for your scope.</Em>
+      </h2>
+      <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 22 }}>
+        The range above is the starting point. The concierge call is where we extract specific scope, match you with aligned firms, and give you clarity on what your actual budget should be.
       </p>
+
+      <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
+      <LeadInput label="WhatsApp number" type="tel" value={leadPhone} onChange={setLeadPhone} placeholder="+65 xxxx xxxx" />
+      <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
+
+      <BtnRow>
+        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+        <BtnPrimary onClick={onSubmit}>Submit and get matched</BtnPrimary>
+      </BtnRow>
+
+      {/* Trust bar */}
+      <div style={{ marginTop: 18, padding: "16px 18px", background: "#faf8f2", border: `1px solid ${C.creamBorder}`, borderRadius: 8, textAlign: "center" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", marginBottom: 10 }}>
+          <TrustBadge icon={<Lock size={14} style={{ color: "#5a9460" }} />} text="MAS-regulated escrow" />
+          <TrustBadge icon={<ShieldCheck size={14} style={{ color: "#5a9460" }} />} text="Insured renovators only" />
+          <TrustBadge icon={<Star size={14} style={{ color: "#5a9460" }} />} text="180+ verified" />
+        </div>
+        <div style={{ fontSize: 11, color: C.grayLight, lineHeight: 1.5, fontStyle: "italic" }}>
+          We're partnered with Handshake, a MAS-regulated escrow, to protect your renovation funds.
+        </div>
+      </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// STEP 7 — Results
-// ═══════════════════════════════════════════════════════════
-// CraftMyPDF template ID
-const CRAFTMYPDF_TEMPLATE_ID = "79b77b23586a939e";
-
-function StepResults({ estimate, propertyType, unitType, propertyStatus, selectedRooms, isFullHomePath, roomScopes, fullHomeScope, timeline, quoteRequestId, postalCode, verifiedAddress, lifestyle, preferredThemes, meetingPreference, additionalNotes, uploadedPhotos, contact }: { estimate: CostEstimate; propertyType: string; unitType: string; propertyStatus: string; selectedRooms: RoomKey[]; isFullHomePath: boolean; roomScopes: Partial<Record<RoomKey, RoomScope>>; fullHomeScope: FullHomeScope | null; timeline: string; quoteRequestId: string | null; postalCode: string; verifiedAddress: string; lifestyle: Record<string, boolean | null>; preferredThemes: string[]; meetingPreference: string; additionalNotes: string; uploadedPhotos: string[]; contact: { name: string; whatsapp: string } }) {
-  const navigate = useNavigate();
-  const displayRange = estimate.isFloor ? "$30K – $35K" : `${formatCurrency(estimate.estMin)} – ${formatCurrency(estimate.estMax)}`;
-
+function TrustBadge({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
-    <div className="w-full max-w-[520px] mx-auto py-10 md:py-16">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }}>
-        {/* Check icon */}
-        <div className="w-14 h-14 rounded-full bg-[#0f0f0d] flex items-center justify-center mx-auto mb-7">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-        </div>
-
-        <h1 className="text-center leading-[1.15] mb-3" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-          <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(28px, 3.5vw, 44px)", letterSpacing: "-0.025em" }}>
-            Thank You for Using Our Cost Guide.
-          </span>
-          <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(22px, 2.5vw, 32px)" }}>
-            Our team will reach out to you shortly.
-          </span>
-        </h1>
-
-        <p className="font-['DM_Sans',sans-serif] text-[15px] text-[#6b6860] leading-[1.75] mb-10 text-center max-w-[420px] mx-auto">
-          We've received your renovation details. A member of our team will contact you via WhatsApp to share your personalized cost breakdown and help you plan your next steps.
-        </p>
-
-        {/* What's next card */}
-        <div className="bg-[#fafaf8] rounded-[12px] border border-[#d8d3c8] p-7 mb-10">
-          <p className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d] mb-4">What happens next</p>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Our team will reach out within the day</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">You'll receive your personalized cost breakdown via WhatsApp</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <svg className="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f0f0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17L4 12" /></svg>
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#6b6860] leading-[1.6]">Get matched to verified designers who fit your budget</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <button onClick={() => navigate("/")}
-            className="h-[52px] px-8 text-[14px] font-medium hover:opacity-85 active:scale-[0.98] cursor-pointer"
-            style={{ background: "#0f0f0d", color: "#fafaf8", borderRadius: "12px", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}>
-            Back to home
-          </button>
-        </div>
-      </motion.div>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "#333", letterSpacing: "0.02em" }}>
+      {icon}
+      <span>{text}</span>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// Progress Bar
-// ═══════════════════════════════════════════════════════════
-function ProgressBar({ step, total }: { step: number; total: number }) {
-  const pct = (step / total) * 100;
+function LeadInput({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; type?: string }) {
   return (
-    <div className="w-full h-[3px] bg-[#d8d3c8] rounded-full overflow-hidden">
-      <motion.div
-        className="h-full bg-[#0f0f0d] rounded-full"
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.35, ease: "easeInOut" }}
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, color: C.black, marginBottom: 6, display: "block" }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={inputFieldStyle}
       />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// Main Export
+// SCREEN 6 — CONFIRMATION
 // ═══════════════════════════════════════════════════════════
-export function CostGuide() {
-  const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
+function Screen6() {
+  return (
+    <div style={{ textAlign: "center", padding: "40px 24px" }}>
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          background: "#5a9460",
+          borderRadius: "50%",
+          margin: "0 auto 20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: C.white,
+        }}
+      >
+        <Check size={24} strokeWidth={3} />
+      </div>
+      <Hero>
+        Thanks. <Em>We'll be in touch.</Em>
+      </Hero>
+      <p style={{ ...subHeroStyle, margin: "0 auto 20px" }}>
+        Check your email for the full PDF breakdown. A Network concierge will WhatsApp you within 24 hours to walk through your scope and match you with the right firms.
+      </p>
+    </div>
+  );
+}
 
-  // Form state
-  const [propertyType, setPropertyType] = useState<PropertyType | "">("");
-  const [unitType, setUnitType] = useState("");
-  const [propertyStatus, setPropertyStatus] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [verifiedAddress, setVerifiedAddress] = useState("");
-  const [selectedRooms, setSelectedRooms] = useState<RoomKey[]>([]);
-  const [roomScopes, setRoomScopes] = useState<Partial<Record<RoomKey, RoomScope>>>({});
-  const [fullHomeScope, setFullHomeScope] = useState<FullHomeScope>({ scope: "Moderate", carpentry: "Medium", layout: "No" });
-  const [timeline, setTimeline] = useState("");
-  const [meetingPreference, setMeetingPreference] = useState("");
-  const [lifestyle, setLifestyle] = useState<{ pets: boolean | null; children: boolean | null; handicap: boolean | null; ecoFriendly: boolean | null; boldDesign: boolean | null }>({ pets: null, children: null, handicap: null, ecoFriendly: null, boldDesign: null });
-  const [preferredThemes, setPreferredThemes] = useState<string[]>([]);
-  const [uploadedPhotos, setUploadedPhotos] = useState<{ name: string; url: string }[]>([]);
-  const [additionalNotes, setAdditionalNotes] = useState("");
-  const [contact, setContact] = useState({ name: "", whatsapp: "", email: "" });
-  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
-  const [quoteRequestId, setQuoteRequestId] = useState<string | null>(null);
-
-  // Determine if all rooms selected → Full Home path
-  const isFullHomePath = selectedRooms.length === ALL_ROOMS.length && ALL_ROOMS.every((r) => selectedRooms.includes(r));
-
-  const toggleRoom = (room: RoomKey) => {
-    if (selectedRooms.includes(room)) {
-      setSelectedRooms((p) => p.filter((r) => r !== room));
-      setRoomScopes((p) => {
-        const n = { ...p };
-        delete n[room];
-        return n;
-      });
-    } else {
-      setSelectedRooms((p) => [...p, room]);
-      setRoomScopes((p) => ({
-        ...p,
-        [room]: {
-          level: "Moderate" as ScopeLevel,
-          count: room === "Bedrooms" || room === "Bathrooms" ? 1 : undefined,
-        },
-      }));
-    }
-  };
-
-  const updateScope = (room: RoomKey, updates: Partial<RoomScope>) => {
-    setRoomScopes((p) => ({ ...p, [room]: { ...p[room]!, ...updates } }));
-  };
-
-  const canNext = () => {
-    switch (step) {
-      case 1:
-        return propertyType !== "";
-      case 2:
-        return unitType !== "";
-      case 3:
-        return propertyStatus !== "";
-      case 4:
-        return true; // postal code is optional
-      case 5:
-        return selectedRooms.length > 0;
-      case 6:
-        if (isFullHomePath) return true;
-        return selectedRooms.every((r) => roomScopes[r]?.level);
-      case 7:
-        return timeline !== "";
-      case 8:
-        return true; // lifestyle is all optional
-      case 9:
-        return true; // themes are optional
-      case 10:
-        return true; // photos & notes are optional
-      case 11:
-        return meetingPreference !== "";
-      case 12:
-        return (
-          contact.name.trim() !== "" &&
-          contact.whatsapp.length === 8 &&
-          /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(contact.email)
-        );
-      default:
-        return true;
-    }
-  };
-
-  const handleNext = () => {
-    if (step < TOTAL_STEPS) setStep(step + 1);
-  };
-
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1);
-    else if (step === 1) setStep(0);
-    else navigate("/");
-  };
-
-  const handleSubmit = async () => {
-    if (submitting || !propertyType) return;
-    setSubmitting(true);
-    // Compute estimate client-side
-    const est = computeEstimate(propertyType as PropertyType, propertyStatus, unitType, selectedRooms, roomScopes, isFullHomePath ? fullHomeScope : null);
-    setEstimate(est);
-    try {
-      const res = await fetch(`${API_BASE}/cost-guide`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({ propertyType, propertyStatus, postalCode, unitType, selectedRooms, timeline, lifestyle, preferredThemes, uploadedPhotos: uploadedPhotos.map((p) => p.url), additionalNotes, roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null, contact: { name: sanitizeInput(contact.name, 100), whatsapp: sanitizeInput(contact.whatsapp, 20), email: sanitizeEmail(contact.email) }, estimate: est }),
-      });
-      const data = await res.json();
-      if (!res.ok) console.error("Cost guide submission failed:", data);
-      else {
-        console.log("Cost guide submitted:", data);
-        if (data.qrId) setQuoteRequestId(data.qrId);
-      }
-      setStep(13);
-
-      // Generate PDF in background, then send to Zapier with PDF link
-      const fmtK = (n: number) => n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${n}`;
-      const budgetRange = est.isFloor ? "$30K - $35K" : `${fmtK(est.estMin)} - ${fmtK(est.estMax)}`;
-      (async () => {
-        try {
-          const pdfRes = await fetch(`${API_BASE}/cost-guide-pdf`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-            body: JSON.stringify({
-              propertyType, propertyStatus, unitType, selectedRooms, timeline,
-              roomScopes, fullHomeScope: isFullHomePath ? fullHomeScope : null,
-              estimate: est, templateId: CRAFTMYPDF_TEMPLATE_ID,
-              quoteRequestId: data.qrId || null,
-              postalCode, verifiedAddress, lifestyle, preferredThemes,
-              meetingPreference, additionalNotes,
-              uploadedPhotos: uploadedPhotos.map((p) => p.url),
-              contact: { name: contact.name, whatsapp: contact.whatsapp },
-            }),
-          });
-          const pdfData = await pdfRes.json();
-          const pdfUrl = pdfData.pdfUrl || null;
-          // directPdfUrl is the unauthenticated storage URL Zapier/Slack can actually fetch;
-          // pdfUrl is our short /i/:id redirect which requires an Authorization header.
-          const directPdfUrl = pdfData.directPdfUrl || pdfUrl;
-          console.log("PDF generated:", pdfUrl);
-          // Send to Zapier only after PDF is ready
-          sendToZapier("cost-guide-lead", {
-            "Email Address": contact.email,
-            "Property Type": propertyType,
-            "Renovation Budget": budgetRange,
-            "Craftpdf Link": directPdfUrl || "",
-            "First Name": contact.name,
-            "Hook Id": data.qrId || "",
-            "Meeting Preference": meetingPreference,
-            "Lead Form": "Cost Guide Lead Form",
-            "Key Date": timeline,
-            "Contact Phone": contact.whatsapp,
-            "Postal Code": postalCode,
-            "Property Status": propertyStatus,
-            "Lifestyle Preferences": JSON.stringify(lifestyle),
-            "Preferred Themes": preferredThemes.join(", "),
-            "Additional Notes": additionalNotes,
-            "Reference Photos": uploadedPhotos.map((p) => p.url).join(", "),
-          });
-        } catch (bgErr) {
-          console.error("Background PDF/Zapier error:", bgErr);
-        }
-      })();
-    } catch (err) {
-      console.error("Error submitting cost guide:", err);
-      setStep(13);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Landing page (step 0)
-  if (step === 0) {
+// ═══════════════════════════════════════════════════════════
+// MATH BREAKDOWN
+// ═══════════════════════════════════════════════════════════
+function MathBreakdown({ computed, intent }: { computed: ComputedState; intent: Intent | null }) {
+  if (computed.isLanded) {
+    const start = computed.breakdown.find((b) => b.section === "Starting point");
+    const cost = computed.breakdown.find((b) => b.section === "Construction cost");
+    const soft = computed.breakdown.find((b) => b.section === "Soft costs");
+    const isRebuild = computed.workType === "rebuild";
     return (
-      <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
-        <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
-
-        {/* Hero */}
-        <main className="flex-1 flex items-center px-6 md:px-12">
-          <div className="max-w-[1293px] mx-auto w-full py-12 md:py-20">
-            <div className="flex flex-col lg:flex-row items-center justify-center gap-12 lg:gap-20">
-              {/* Left — text content */}
-              <div className="flex-1 max-w-[540px]">
-                
-
-                <h1 className="leading-[1.1] mb-4" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                  <span className="block font-normal text-[#0f0f0d]" style={{ fontSize: "clamp(32px, 3.8vw, 52px)", letterSpacing: "-0.025em" }}>
-                    Know Your Renovation Cost Before You Commit.
-                  </span>
-                  <span className="font-normal italic text-[#9a9790]" style={{ fontSize: "clamp(24px, 2.8vw, 38px)" }}>
-                    Personalized estimates in under 2 minutes.
-                  </span>
-                </h1>
-
-                <p className="font-['DM_Sans',sans-serif] text-[16px] md:text-[18px] text-[#6b6860] leading-[1.6] mb-8 max-w-[440px]">
-                  Get a personalized renovation cost estimate based on your
-                  property type, rooms, and scope of work. Takes under 2 minutes.
-                </p>
-
-                {/* Value props */}
-                <div className="flex flex-col gap-4 mb-10">
-                  {[
-                    "Tailored to your exact property & rooms",
-                    "Based on real Singapore renovation data",
-                    "Instantly delivered to your email & WhatsApp",
-                  ].map((item) => (
-                    <div key={item} className="flex items-start gap-3">
-                      <div className="w-[22px] h-[22px] rounded-full bg-[#FFCB2B] flex items-center justify-center shrink-0 mt-0.5">
-                        <svg
-                          width="11"
-                          height="11"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="black"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </div>
-                      <span className="font-['DM_Sans',sans-serif] text-[15px] text-[#0f0f0d] leading-[1.5]">
-                        {item}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* CTA */}
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="inline-flex items-center gap-2 bg-[#e8e4db] border border-white rounded-[100px] p-[5px] pl-[5px]"
-                  >
-                    <span className="inline-flex items-center gap-2 bg-[#0f0f0d] text-white rounded-[100px] px-7 py-3.5 font-['DM_Sans',sans-serif] font-medium text-[15px] tracking-[-0.7px] shadow-[0_4px_4px_rgba(0,0,0,0.25)]">
-                      Get your estimate
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                        <polyline points="12 5 19 12 12 19" />
-                      </svg>
-                    </span>
-                  </button>
-                  <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790]">
-                    Takes ~2 min
-                  </span>
-                </div>
-              </div>
-
-              {/* Right — image */}
-              <div className="flex-1 max-w-[560px] w-full">
-                <div className="relative rounded-[12px] overflow-hidden shadow-[0_25px_35.9px_rgba(0,0,0,0.07)]">
-                  <ImageWithFallback
-                    src={HERO_IMAGE}
-                    alt="Modern renovated interior"
-                    className="w-full h-[340px] md:h-[460px] object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-                </div>
-              </div>
-            </div>
-
-            {/* Trust strip */}
-            
-          </div>
-        </main>
+      <div>
+        {start && (
+          <>
+            <SectionLabel>Starting point</SectionLabel>
+            <MathRow label={start.label} sub={start.sub} value={start.displayOverride || start.value.toLocaleString()} />
+          </>
+        )}
+        {cost && (
+          <>
+            <SectionLabel>Construction cost</SectionLabel>
+            <MathRow
+              label={cost.label}
+              sub={cost.sub}
+              value={`$${Math.round(cost.value).toLocaleString()} – $${Math.round(cost.valueMax!).toLocaleString()}`}
+            />
+          </>
+        )}
+        {soft && (
+          <>
+            <SectionLabel>Soft costs</SectionLabel>
+            <MathRow
+              label={soft.label}
+              sub={soft.sub}
+              value={`$${soft.value.toLocaleString()} – $${soft.valueMax!.toLocaleString()}`}
+            />
+          </>
+        )}
+        <MathRow
+          total
+          label="Total estimated range"
+          sub="Construction + soft costs combined"
+          value={isRebuild ? `$${computed.min.toLocaleString()}+` : `$${computed.min.toLocaleString()} – $${computed.max.toLocaleString()}`}
+        />
+        <div style={{ fontSize: 12, color: C.grayLight, lineHeight: 1.6, paddingTop: 14, marginTop: 14, borderTop: "1px solid #f0ede6", fontStyle: "italic" }}>
+          PSF ranges based on 2025–2026 Singapore industry data for landed works. Soft costs include QP fees, PE endorsement, URA planning submissions, BCA building plan submissions, drainage compliance, and contingency buffer. Your concierge call extracts site-specific conditions that tighten this range.
+        </div>
       </div>
     );
   }
 
+  const start = computed.breakdown.filter((b) => b.section === "Starting point");
+  const adjs = computed.breakdown.filter((b) => b.section === "Adjustments");
   return (
-    <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] flex flex-col overflow-x-hidden">
-      <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
-
-      {/* ── Content ── */}
-      <main className="flex-1 flex items-start px-6 md:px-12 overflow-y-auto py-10 md:py-16">
-        <div className="max-w-[1293px] mx-auto w-full">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
-            >
-              {step === 1 && (
-                <StepProperty
-                  selected={propertyType}
-                  onSelect={(v) => {
-                    setPropertyType(v as PropertyType);
-                    setUnitType("");
-                  }}
-                />
-              )}
-              {step === 2 && propertyType && (
-                <StepUnit
-                  propertyType={propertyType as PropertyType}
-                  unitType={unitType}
-                  onUnitChange={setUnitType}
-                />
-              )}
-              {step === 3 && (
-                <StepPropertyStatus
-                  propertyStatus={propertyStatus}
-                  onStatusChange={setPropertyStatus}
-                />
-              )}
-              {step === 4 && (
-                <StepPostalCode
-                  postalCode={postalCode}
-                  onPostalChange={setPostalCode}
-                  onAddressVerified={setVerifiedAddress}
-                />
-              )}
-              {step === 5 && (
-                <StepRooms selected={selectedRooms} onToggle={toggleRoom} />
-              )}
-              {step === 6 && isFullHomePath && (
-                <StepFullHomeScope data={fullHomeScope} onChange={(u) => setFullHomeScope((p) => ({ ...p, ...u }))} />
-              )}
-              {step === 6 && !isFullHomePath && (
-                <StepScope rooms={selectedRooms} scopes={roomScopes} onUpdate={updateScope} />
-              )}
-              {step === 7 && (
-                <StepTimeline selected={timeline} onSelect={setTimeline} />
-              )}
-              {step === 8 && (
-                <StepLifestyle
-                  lifestyle={lifestyle}
-                  onLifestyleChange={(key, value) => setLifestyle((p) => ({ ...p, [key]: value }))}
-                />
-              )}
-              {step === 9 && (
-                <div className="w-full max-w-[520px] mx-auto">
-                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                    What styles do you love?
-                  </h1>
-                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-                    Pick up to 2 themes that match your taste (optional)
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {["Modern", "Minimalist", "Scandinavian", "Industrial", "Contemporary", "Japanese", "Japandi", "Luxury", "Wabi Sabi", "Vintage", "Eclectic", "Boutique", "Classical", "Country", "Peranakan"].map((theme) => {
-                      const isSelected = preferredThemes.includes(theme);
-                      return (
-                        <button key={theme}
-                          onClick={() => {
-                            if (isSelected) setPreferredThemes((p) => p.filter((t) => t !== theme));
-                            else if (preferredThemes.length < 2) setPreferredThemes((p) => [...p, theme]);
-                          }}
-                          className={`px-4 py-2 rounded-[10px] font-['DM_Sans',sans-serif] text-[13px] font-medium border transition-all duration-200 ${
-                            isSelected
-                              ? "bg-[#0f0f0d] text-white border-[#0f0f0d]"
-                              : "bg-[#fafaf8] text-[#0f0f0d] border-[#d8d3c8] hover:border-[#9a9790]"
-                          }`}>
-                          {theme}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {step === 10 && (
-                <div className="w-full max-w-[520px] mx-auto">
-                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                    Share your inspiration
-                  </h1>
-                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-                    Upload reference photos or add notes for your designer (optional)
-                  </p>
-
-                  {/* Photo upload */}
-                  <h3 className="font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.3px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Reference photos</h3>
-                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">Upload site photos or inspiration images (max 5)</p>
-                  <div className="mb-8">
-                    {uploadedPhotos.length < 5 && (
-                      <label className="flex flex-col items-center justify-center w-full h-[120px] rounded-[12px] border-2 border-dashed border-[#d8d3c8] bg-[#fafaf8] hover:border-[#9a9790] transition-colors cursor-pointer mb-3">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9a9790" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                        <span className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] mt-2">Click to upload (max 3MB each)</span>
-                        <input type="file" accept="image/*" multiple className="hidden"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files || []);
-                            const remaining = 5 - uploadedPhotos.length;
-                            const valid = files.filter((f) => f.size <= 3 * 1024 * 1024).slice(0, remaining);
-                            const newPhotos = valid.map((f) => ({ name: f.name, url: URL.createObjectURL(f), file: f }));
-                            setUploadedPhotos((p) => [...p, ...newPhotos.map(({ name, url }) => ({ name, url }))]);
-                            e.target.value = "";
-                          }} />
-                      </label>
-                    )}
-                    {uploadedPhotos.length > 0 && (
-                      <div className="grid grid-cols-5 gap-2">
-                        {uploadedPhotos.map((photo, i) => (
-                          <div key={i} className="relative group">
-                            <img src={photo.url} alt={photo.name} className="w-full h-[64px] object-cover rounded-[8px] border border-[#d8d3c8]" />
-                            <button onClick={() => setUploadedPhotos((p) => p.filter((_, idx) => idx !== i))}
-                              className="absolute -top-1.5 -right-1.5 w-[20px] h-[20px] rounded-full bg-[#0f0f0d] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[11px]">
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Additional notes */}
-                  <h3 className="font-semibold text-[16px] text-[#0f0f0d] tracking-[-0.3px] mb-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>Additional notes</h3>
-                  <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] leading-[1.5] mb-4">Anything else you'd like us to know</p>
-                  <textarea
-                    value={additionalNotes}
-                    onChange={(e) => setAdditionalNotes(e.target.value)}
-                    placeholder="e.g. specific requirements, design references, links..."
-                    rows={3}
-                    className="w-full border border-[#d8d3c8] rounded-[10px] px-4 py-3 font-['DM_Sans',sans-serif] text-[14px] text-[#0f0f0d] placeholder-[#9a9790] outline-none focus:border-[#0f0f0d] transition-colors bg-[#fafaf8] resize-none"
-                  />
-                </div>
-              )}
-              {step === 11 && (
-                <div className="w-full max-w-[480px] mx-auto">
-                  <h1 className="font-semibold text-[26px] md:text-[32px] text-[#0f0f0d] tracking-[-1.2px] leading-[1.15] mb-2" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
-                    How would you like to meet?
-                  </h1>
-                  <p className="font-['DM_Sans',sans-serif] text-[14px] text-[#6b6860] leading-[1.6] mb-8">
-                    Choose how you'd prefer to meet your designer.
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {["Virtual", "Physical"].map((opt) => (
-                      <button key={opt} onClick={() => setMeetingPreference(opt)}
-                        className={`flex items-center justify-center px-6 py-4 rounded-[12px] border transition-all duration-200 bg-[#fafaf8] ${meetingPreference === opt ? "border-[#0f0f0d] shadow-[0_0_0_1px_#0f0f0d]" : "border-[#d8d3c8] hover:border-[#9a9790]"}`}>
-                        <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#0f0f0d]">{opt}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {step === 12 && (
-                <StepContact
-                  data={contact}
-                  onChange={(field, value) =>
-                    setContact((p) => ({ ...p, [field]: value }))
-                  }
-                />
-              )}
-              {step === 13 && (
-                <StepResults estimate={estimate} propertyType={propertyType} unitType={unitType} propertyStatus={propertyStatus} selectedRooms={selectedRooms} isFullHomePath={isFullHomePath} roomScopes={roomScopes} fullHomeScope={isFullHomePath ? fullHomeScope : null} timeline={timeline} quoteRequestId={quoteRequestId} postalCode={postalCode} verifiedAddress={verifiedAddress} lifestyle={lifestyle} preferredThemes={preferredThemes} meetingPreference={meetingPreference} additionalNotes={additionalNotes} uploadedPhotos={uploadedPhotos.map(p => p.url)} contact={{ name: contact.name, whatsapp: contact.whatsapp }} />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </main>
-
-      {/* ── Footer nav ── */}
-      {step >= 1 && step <= 12 && (
-        <footer className="px-6 md:px-12 pb-8 md:pb-10">
-          <div className="max-w-[1293px] mx-auto">
-            <div className="mb-6">
-              <ProgressBar step={step} total={12} />
-            </div>
-
-            <div className="flex items-center justify-between mt-4">
-              {step > 1 ? (
-                <button
-                  onClick={handleBack}
-                  className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-8 py-3 hover:bg-[#e8e4db] transition-colors"
-                >
-                  Back
-                </button>
-              ) : (
-                <button
-                  onClick={() => setStep(0)}
-                  className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#0f0f0d] bg-[#fafaf8] border border-[#d8d3c8] rounded-[10px] px-8 py-3 hover:bg-[#e8e4db] transition-colors"
-                >
-                  Back
-                </button>
-              )}
-
-              <p className="font-['DM_Sans',sans-serif] text-[13px] text-[#9a9790] tracking-[0.5px] uppercase">
-                {step === 12 ? "Last step" : `Step ${step} of 12`}
-              </p>
-
-              <button
-                onClick={step === 12 ? handleSubmit : handleNext}
-                disabled={!canNext() || (step === 12 && submitting)}
-                className={`font-['DM_Sans',sans-serif] font-medium text-[14px] text-white rounded-[10px] px-8 py-3 transition-all duration-200 ${
-                  canNext() && !(step === 12 && submitting)
-                    ? "bg-[#0f0f0d] hover:bg-[#0f0f0d]"
-                    : "bg-[#d8d3c8] cursor-not-allowed"
-                }`}
-              >
-                {step === 12
-                  ? submitting
-                    ? "Calculating..."
-                    : "Get my cost guide"
-                  : "Continue"}
-              </button>
-            </div>
-          </div>
-        </footer>
-      )}
+    <div>
+      {start.length > 0 && <SectionLabel>Starting point</SectionLabel>}
+      {start.map((item, i) => (
+        <MathRow key={i} label={item.label} sub={item.sub} value={`$${Math.round(item.value).toLocaleString()}`} />
+      ))}
+      {adjs.length > 0 && <SectionLabel>Adjustments</SectionLabel>}
+      {adjs.map((item, i) => {
+        const sign = item.kind === "add" ? "+" : item.kind === "sub" ? "−" : "";
+        const val = Math.abs(Math.round(item.value));
+        const color = item.kind === "add" ? "#5a9460" : item.kind === "sub" ? "#c26a5a" : C.black;
+        return <MathRow key={i} label={item.label} sub={item.sub} value={`${sign}$${val.toLocaleString()}`} valueColor={color} />;
+      })}
+      <MathRow total label="Mid-point of your range" value={`$${Math.round(computed.adjustedAnchor).toLocaleString()}`} />
+      <MathRow
+        label={intent === "special" ? "Starting floor" : `Confidence band (±${computed.bandPct}%)`}
+        sub={intent === "special" ? "No hard ceiling — scope at this tier depends on design direction and material choices" : "Accounts for specific material choices and site conditions"}
+        value={intent === "special" ? `$${computed.min.toLocaleString()}+` : `$${computed.min.toLocaleString()} – $${computed.max.toLocaleString()}`}
+      />
+      <div style={{ fontSize: 12, color: C.grayLight, lineHeight: 1.6, paddingTop: 14, marginTop: 14, borderTop: "1px solid #f0ede6", fontStyle: "italic" }}>
+        Anchor values are based on 2025–2026 market data from transparency-positioned Singapore ID firms. Your actual quote will vary based on firm, material specifications, and project conditions extracted during the concierge call.
+      </div>
     </div>
   );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        color: C.grayLight,
+        margin: "18px 0 8px",
+        paddingTop: 12,
+        borderTop: "1px solid #f0ede6",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MathRow({ label, sub, value, total, valueColor }: { label: string; sub?: string; value: string; total?: boolean; valueColor?: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 16,
+        padding: total ? "14px 0 0" : "10px 0",
+        borderBottom: total ? "none" : "1px solid #f0ede6",
+        borderTop: total ? `2px solid ${C.black}` : "none",
+        marginTop: total ? 8 : 0,
+        fontWeight: total ? 700 : 400,
+      }}
+    >
+      <div style={{ color: C.gray, flex: 1 }}>
+        {label}
+        {sub && <span style={{ fontSize: 11, color: C.grayLight, display: "block", marginTop: 2 }}>{sub}</span>}
+      </div>
+      <div style={{ fontWeight: 600, color: valueColor || C.black, textAlign: "right" }}>{value}</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// LABELS + ROUTING HELPERS
+// ═══════════════════════════════════════════════════════════
+function anchorLabel(property: Property, newResale: NewResale, unitType: string, ocs: OCS | null, ocsFlooring: boolean, ocsDoors: boolean) {
+  if (property === "HDB") {
+    if (newResale === "new") {
+      if (ocs === "yes" && (ocsFlooring || ocsDoors)) return `${unitType} HDB BTO with OCS`;
+      return `${unitType} HDB BTO (no OCS)`;
+    }
+    return `${unitType} HDB Resale`;
+  }
+  if (property === "Condo") return `${unitType} Condo ${newResale === "new" ? "New Launch" : "Resale"}`;
+  if (property === "EC") return `${unitType} EC ${newResale === "new" ? "New" : "Resale"}`;
+  return `Landed, ${unitType} sqft BUA`;
+}
+
+function intentLabelFor(intent: Intent) {
+  return {
+    basics: "Move-in ready basics — market median",
+    proper: "Proper home renovation — market median",
+    special: "Something special — market median",
+  }[intent];
+}
+
+function landedWorkLabel(wt: string) {
+  return ({ aa: "A&A (Additions & Alterations)", reconstruction: "Reconstruction", rebuild: "Rebuild (New Erection)" } as Record<string, string>)[wt] || wt;
+}
+
+function routeFirmType({ intent, property, layout, carpentry, finish }: { intent: Intent | null; property: Property | null; layout: Layout | null; carpentry: Carpentry | null; finish: Finish | null }) {
+  if (!intent) return null;
+  const hasHighCarp = carpentry === "High";
+  const hasMajorLayout = layout === "Major";
+  const hasPremiumFinish = finish === "Premium";
+  const hasLowCarp = carpentry === "Low";
+  const noLayout = layout === "No";
+
+  if (intent === "special" && (hasHighCarp || hasMajorLayout || hasPremiumFinish)) {
+    return {
+      type: "Design Consultant",
+      desc: "Design-centric firm. Fewer projects, personally involved from concept to completion. Right fit when design expertise justifies the investment, especially when custom carpentry, layout changes, or premium materials are in play.",
+    };
+  }
+  if (intent === "basics" && (hasLowCarp || carpentry === null) && (noLayout || layout === null) && !hasPremiumFinish) {
+    return {
+      type: "Direct Contractor",
+      desc: "Execution-focused firm. Reliable delivery without paying for a design journey you don't need. Best when you have a clear scope and just need the works done well.",
+    };
+  }
+  let dnbDesc = "Process, design input, and execution under one roof. One point of contact, clear pricing, balanced value. The default fit for most Network homeowners.";
+  if (intent === "basics") {
+    dnbDesc = "Design & build firm, leaning toward the execution end. You want some design input and custom carpentry, but the priority is efficient delivery. Right fit for practical homeowners who want structure without a full design journey.";
+  } else if (intent === "special" && !hasHighCarp && !hasMajorLayout && !hasPremiumFinish) {
+    dnbDesc = "Design & build firm with strong portfolio work. You want something special without going full design consultant territory — a firm that brings design thinking while keeping the process streamlined.";
+  } else if (intent === "proper") {
+    dnbDesc = "Process, design input, and execution under one roof. One point of contact, clear pricing, balanced value. The default fit for homeowners doing a proper renovation without needing a dedicated design consultant.";
+  }
+  return { type: "Design & Build Firm", desc: dnbDesc };
+}
+
+function routeLandedFirmType(workType: string, scopePct: LandedScope | null) {
+  if (workType === "aa" && scopePct === "under30") {
+    return { type: "Design & Build Firm", desc: "Landed A&A at this scope is workable with a strong design & build firm. One point of contact, clear pricing, managed execution. Right fit when the works are focused and well-scoped." };
+  }
+  if (workType === "aa") {
+    return { type: "Design Consultant", desc: "Substantial A&A at this scope typically needs design-led firms. Fewer projects, deep involvement from concept through BCA submission, and coordination with QP and PE for structural works." };
+  }
+  if (workType === "reconstruction") {
+    return { type: "Design Consultant", desc: "Reconstruction requires design-led coordination — URA Envelope Control compliance, new Household Shelter, and full structural PE endorsement. A design consultant with landed experience manages this end to end." };
+  }
+  return { type: "Design Consultant", desc: "Full rebuild means fresh URA planning permission, complete architectural and structural submissions, and design freedom at the highest level. A design consultant or specialised landed builder leads this from concept to completion." };
 }

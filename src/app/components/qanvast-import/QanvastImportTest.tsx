@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { C, sans, serif } from "../homepage/v8/primitives";
 import { OnboardingShell } from "../firm-onboarding/OnboardingShell";
+import { FirmCombobox } from "../firm-onboarding/FirmCombobox";
+import { lookupAirtableFirm, listAirtableFirms, submitOnboarding } from "../firm-onboarding/onboardingApi";
 import {
   Hammer,
   Layers,
@@ -11,6 +13,8 @@ import {
   Droplet,
   Paintbrush,
   Lightbulb,
+  Loader2,
+  Check,
 } from "lucide-react";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -249,10 +253,30 @@ export function QanvastImportTest() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResult | null>(null);
 
+  // Firm verification (mirrors firm-onboarding StudioInfoStep)
+  const [recordId, setRecordId] = useState("");
+  const [firmName, setFirmName] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "matched" | "mismatch">("idle");
+  const [lookupMessage, setLookupMessage] = useState("");
+  const [verifiedEmail, setVerifiedEmail] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedSlug, setSavedSlug] = useState("");
+
   const run = async () => {
     if (!url.trim()) return;
     setLoading(true);
     setResult(null);
+    setRecordId("");
+    setFirmName("");
+    setIdentifier("");
+    setLookupStatus("idle");
+    setLookupMessage("");
+    setVerifiedEmail("");
+    setSaveError("");
+    setSavedSlug("");
     try {
       const res = await fetch(`${API}/qanvast-scrape`, {
         method: "POST",
@@ -266,13 +290,53 @@ export function QanvastImportTest() {
         .json()
         .catch(() => ({ ok: false, message: `Bad JSON (${res.status})` }));
       setResult(json);
+      if (json?.ok && json.firm?.name) {
+        setFirmName(json.firm.name);
+        // Auto-match the Qanvast firm name against our Airtable list.
+        try {
+          const firms = await listAirtableFirms();
+          const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+          const target = norm(json.firm.name);
+          const hit = firms.find((f) => norm(f.firmName) === target)
+            || firms.find((f) => norm(f.firmName).includes(target) || target.includes(norm(f.firmName)));
+          if (hit) {
+            setRecordId(hit.id);
+            setFirmName(hit.firmName);
+          }
+        } catch {}
+      }
     } catch (err: any) {
       setResult({ ok: false, message: err?.message || "Network error" });
     }
     setLoading(false);
   };
 
-  const p = result?.ok ? result.imported?.[0] : undefined;
+  useEffect(() => {
+    const raw = identifier.trim();
+    if (!recordId) { setLookupStatus("idle"); setLookupMessage(""); return; }
+    const isEmail = raw.includes("@");
+    const digits = raw.replace(/\D+/g, "");
+    const ready = isEmail ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) : digits.length >= 8;
+    if (!ready) { setLookupStatus("idle"); setLookupMessage(""); return; }
+    setLookupStatus("checking");
+    const rid = recordId;
+    const t = setTimeout(async () => {
+      const res = await lookupAirtableFirm(rid, raw);
+      if (res.ok) {
+        setLookupStatus("matched");
+        setLookupMessage("Verified against ID Profiles");
+        const prefillEmail = typeof res.prefill?.contactEmail === "string" ? res.prefill.contactEmail : "";
+        setVerifiedEmail(prefillEmail || (isEmail ? raw : ""));
+      } else {
+        setLookupStatus("mismatch");
+        setLookupMessage(res.message);
+        setVerifiedEmail("");
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [identifier, recordId]);
+
+  const p = result?.ok && lookupStatus === "matched" ? result.imported?.[0] : undefined;
 
   return (
     <OnboardingShell eyebrow="Dev Tool — Qanvast Import">
@@ -365,6 +429,141 @@ export function QanvastImportTest() {
           >
             Error: {result.message || "unknown"}
           </div>
+        )}
+
+        {result?.ok && (
+          <div
+            style={{
+              background: C.cream,
+              border: `1px solid ${C.creamBorder}`,
+              borderRadius: 14,
+              padding: 24,
+              display: "grid",
+              gap: 18,
+              marginBottom: 24,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  fontFamily: serif,
+                  color: C.black,
+                  fontSize: "clamp(20px, 2.2vw, 26px)",
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.2,
+                  marginBottom: 6,
+                }}
+              >
+                Verify firm ownership
+              </h2>
+              <p style={{ color: C.gray, fontSize: 13, lineHeight: 1.6 }}>
+                Fetched from Qanvast:{" "}
+                <strong style={{ color: C.black }}>
+                  {result.firm?.name || "(firm name not found)"}
+                </strong>
+                . Confirm your firm and enter your registered email or phone to continue.
+              </p>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Firm on ID Profiles <span style={{ color: "#c14" }}>*</span>
+              </label>
+              <FirmCombobox
+                value={firmName}
+                recordId={recordId}
+                onSelect={(id, name) => {
+                  setRecordId(id);
+                  setFirmName(name);
+                  setIdentifier("");
+                  setLookupStatus("idle");
+                  setLookupMessage("");
+                }}
+              />
+              <p style={{ marginTop: 6, fontSize: 11, color: C.grayLight, fontFamily: sans }}>
+                {recordId
+                  ? "Auto-matched from Qanvast. Change it if wrong."
+                  : "Pick your firm from the list."}
+              </p>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Registered Email or Phone <span style={{ color: "#c14" }}>*</span>
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={identifier}
+                  placeholder="Email or phone registered on ID Profiles"
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  disabled={!recordId}
+                  style={{
+                    width: "100%",
+                    height: 44,
+                    padding: "0 40px 0 14px",
+                    background: C.white,
+                    border: `1px solid ${lookupStatus === "matched" ? "#1f7a3a" : lookupStatus === "mismatch" ? "#c14" : C.creamBorder}`,
+                    borderRadius: 10,
+                    color: C.black,
+                    fontFamily: sans,
+                    fontSize: 14,
+                    outline: "none",
+                    opacity: recordId ? 1 : 0.55,
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    alignItems: "center",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {lookupStatus === "checking" && (
+                    <Loader2 size={16} className="animate-spin" style={{ color: C.grayLight }} />
+                  )}
+                  {lookupStatus === "matched" && (
+                    <Check size={16} strokeWidth={3} style={{ color: "#1f7a3a" }} />
+                  )}
+                  {lookupStatus === "mismatch" && (
+                    <span style={{ color: "#c14", fontSize: 18, lineHeight: 1, fontWeight: 600 }}>
+                      ×
+                    </span>
+                  )}
+                </span>
+              </div>
+              {lookupStatus === "idle" && (
+                <p style={{ marginTop: 6, fontSize: 11, color: C.grayLight, fontFamily: sans }}>
+                  Confirms you're authorised to manage this firm's profile.
+                </p>
+              )}
+              {lookupStatus === "checking" && (
+                <p style={{ marginTop: 6, fontSize: 11, color: C.grayLight, fontFamily: sans }}>
+                  Checking ID Profiles…
+                </p>
+              )}
+              {lookupStatus === "matched" && (
+                <p style={{ marginTop: 6, fontSize: 11, color: "#1f7a3a", fontFamily: sans, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Check size={11} strokeWidth={3} /> {lookupMessage}
+                </p>
+              )}
+              {lookupStatus === "mismatch" && (
+                <p style={{ marginTop: 6, fontSize: 11, color: "#c14", fontFamily: sans }}>
+                  {lookupMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {result?.ok && lookupStatus !== "matched" && result.imported?.[0] && (
+          <p style={{ fontSize: 12, color: C.grayLight, fontFamily: sans, marginBottom: 8 }}>
+            Project details unlock after email/phone verification.
+          </p>
         )}
 
         {p && (
@@ -520,6 +719,98 @@ export function QanvastImportTest() {
               </div>
             );
             })()}
+
+            {/* Submit to own-website designer projects */}
+            <div style={{ marginTop: 28 }}>
+              {savedSlug ? (
+                <div
+                  style={{
+                    background: "#e8f5ec",
+                    border: "1px solid #1f7a3a",
+                    borderRadius: 10,
+                    padding: 14,
+                    color: "#1f7a3a",
+                    fontFamily: sans,
+                    fontSize: 13,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Check size={16} strokeWidth={3} />
+                  <span>
+                    Saved to <strong>/designer/{savedSlug}</strong>.
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {saveError && (
+                    <p style={{ color: "#c14", fontSize: 13, fontFamily: sans, marginBottom: 10 }}>
+                      {saveError}
+                    </p>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                      onClick={async () => {
+                        if (!p || !verifiedEmail) return;
+                        setSaving(true);
+                        setSaveError("");
+                        try {
+                          // Prefer the Qanvast 720-width variants; fall back to full list.
+                          const imgs720 = (p.images || []).filter((src) => /\/720-width(?:$|\?)/.test(src));
+                          const imagesToMirror = imgs720.length ? imgs720 : (p.images || []).slice(0, 30);
+                          await submitOnboarding({
+                            variant: "project-only",
+                            contactEmail: verifiedEmail,
+                            project: {
+                              title: p.title,
+                              location: p.location,
+                              cost: p.cost,
+                              size: p.size,
+                              sizeUnit: p.sizeUnit,
+                              year: p.year,
+                              propertyType: p.propertyType,
+                              propertySubType: p.propertySubType,
+                              style: p.style,
+                              worksIncluded: p.worksIncluded || [],
+                              driveUrl: p.sourceUrl || url.trim(),
+                              images: imagesToMirror,
+                              sourceUrl: p.sourceUrl || url.trim(),
+                            } as any,
+                          });
+                          const matchSlug = (result?.firm?.name || "")
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")
+                            .replace(/^-|-$/g, "");
+                          setSavedSlug(matchSlug || "profile");
+                        } catch (err: any) {
+                          setSaveError(err?.message || "Save failed");
+                        }
+                        setSaving(false);
+                      }}
+                      disabled={saving || !verifiedEmail}
+                      style={{
+                        height: 44,
+                        padding: "0 22px",
+                        background: C.black,
+                        color: C.white,
+                        border: "none",
+                        borderRadius: 10,
+                        fontFamily: sans,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                        cursor: saving || !verifiedEmail ? "not-allowed" : "pointer",
+                        opacity: saving || !verifiedEmail ? 0.5 : 1,
+                      }}
+                    >
+                      {saving ? "Saving…" : "Save to designer projects"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </>
         )}
       </div>

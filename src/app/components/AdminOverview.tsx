@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./supabaseClient";
 import {
@@ -25,6 +26,8 @@ import {
   Image as ImageIcon,
   Building2,
   ChevronRight,
+  X,
+  Inbox,
 } from "lucide-react";
 import {
   AreaChart,
@@ -275,6 +278,85 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
   });
   const [dateRange] = useState("Last 30 days");
 
+  // Onboarding submissions modal
+  const [subsOpen, setSubsOpen] = useState(false);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subsError, setSubsError] = useState("");
+  const [subs, setSubs] = useState<any[]>([]);
+  const [subsFilter, setSubsFilter] = useState<"all" | "full" | "project-only" | "backfill">("all");
+
+  // Submitted firms modal (firm-onboarding variant=full)
+  const [firmsOpen, setFirmsOpen] = useState(false);
+  const [firmsLoading, setFirmsLoading] = useState(false);
+  const [firmsError, setFirmsError] = useState("");
+  const [firms, setFirms] = useState<any[]>([]);
+  const [firmsFilter, setFirmsFilter] = useState<"all" | "active" | "pending">("all");
+
+  const openFirms = useCallback(async () => {
+    setFirmsOpen(true);
+    setFirmsLoading(true);
+    setFirmsError("");
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`${API}/admin/submitted-firms`, { headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || `Failed (${res.status})`);
+      const rows = Array.isArray(json.firms) ? json.firms : [];
+      setFirms(rows);
+    } catch (err: any) {
+      setFirmsError(err?.message || "Failed to load firms");
+    }
+    setFirmsLoading(false);
+  }, []);
+
+  // Lock body scroll while either modal is open so the page doesn't scroll
+  // behind the overlay and the modal stays fully within the viewport.
+  useEffect(() => {
+    if (!subsOpen && !firmsOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [subsOpen, firmsOpen]);
+
+  const openSubmissions = useCallback(async () => {
+    setSubsOpen(true);
+    setSubsLoading(true);
+    setSubsError("");
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`${API}/admin/designer-projects`, { headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || `Failed (${res.status})`);
+      // Normalize designer_projects rows into the shape the modal renders.
+      const projects = Array.isArray(json.projects) ? json.projects : [];
+      const normalized = projects.map((r: any) => ({
+        id: r.id,
+        variant: r.variant === "project-only" ? "project-only" : r.variant === "backfill" ? "backfill" : "full",
+        slug: r.designer_slug,
+        contactEmail: r.contact_email,
+        ts: r.submitted_at || r.created_at,
+        project: {
+          title: r.title,
+          location: r.location,
+          cost: r.cost,
+          size: r.size,
+          sizeUnit: r.size_unit,
+          year: r.year,
+          propertyType: r.property_type,
+          propertySubType: r.property_sub_type,
+          style: r.style,
+          driveUrl: r.drive_url,
+          sourceUrl: r.source_url,
+          images: Array.isArray(r.images) ? r.images : [],
+        },
+      }));
+      setSubs(normalized);
+    } catch (err: any) {
+      setSubsError(err?.message || "Failed to load submissions");
+    }
+    setSubsLoading(false);
+  }, []);
+
   // Live visitor tracking — Vercel realtime + heartbeat detail
   const [vercelRealtime, setVercelRealtime] = useState<{ total: number; devices: number; bounceRate?: number }>({ total: 0, devices: 0 });
   const [liveVisitors, setLiveVisitors] = useState<{ count: number; visitors: { visitorId: string; page: string; lastSeen: number }[] }>({ count: 0, visitors: [] });
@@ -381,6 +463,12 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={openSubmissions} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e5e7eb] rounded-lg text-[13px] font-medium text-[#364153] hover:bg-[#f9fafb] transition-colors cursor-pointer">
+            <Inbox className="size-3.5" /> Submitted Projects
+          </button>
+          <button onClick={openFirms} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e5e7eb] rounded-lg text-[13px] font-medium text-[#364153] hover:bg-[#f9fafb] transition-colors cursor-pointer">
+            <Building2 className="size-3.5" /> Submitted Firms
+          </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e5e7eb] rounded-lg text-[13px] font-medium text-[#364153] hover:bg-[#f9fafb] transition-colors cursor-pointer">
             Alerts and Emails <ChevronDown className="size-3.5" />
           </button>
@@ -389,6 +477,208 @@ export function AdminOverview({ onNavigate }: { onNavigate?: (section: string) =
           </button>
         </div>
       </div>
+
+      {/* ═══ Submitted Projects Modal ═══ */}
+      {subsOpen && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setSubsOpen(false)}>
+          <div className="bg-white w-full max-w-[960px] max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8eaed]">
+              <div>
+                <h3 className="font-bold text-[16px] text-[#101828]">Submitted Projects</h3>
+                <p className="text-[12px] text-[#6a7282] mt-0.5">From firm-onboarding and project-import flows.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-[#f6f6f6] rounded-lg p-1">
+                  {(["all", "full", "project-only", "backfill"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setSubsFilter(v)}
+                      className={`px-3 py-1 rounded text-[12px] font-medium transition-colors cursor-pointer ${subsFilter === v ? "bg-white text-[#101828] shadow-sm" : "text-[#6a7282] hover:text-[#101828]"}`}
+                    >
+                      {v === "all" ? "All" : v === "full" ? "Firm onboarding" : v === "project-only" ? "Project import" : "Backfill"}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setSubsOpen(false)} className="size-[34px] rounded-full hover:bg-[#f6f6f6] flex items-center justify-center cursor-pointer">
+                  <X className="size-4 text-[#6a7282]" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto px-6 py-4">
+              {subsLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="size-6 text-[#9ca3af] animate-spin" />
+                </div>
+              ) : subsError ? (
+                <p className="text-[13px] text-[#c14] py-8 text-center">{subsError}</p>
+              ) : (() => {
+                const filtered = subs.filter((s) => subsFilter === "all" ? true : s?.variant === subsFilter);
+                if (!filtered.length) {
+                  return <p className="text-[13px] text-[#6a7282] py-12 text-center">No submissions yet.</p>;
+                }
+                return (
+                  <div className="flex flex-col gap-2">
+                    {filtered.map((s) => {
+                      const firmLabel = s?.slug || s?.studio?.firmName || "(no firm)";
+                      const projTitle = s?.project?.title || "(no project title)";
+                      const ts = s?.ts ? new Date(s.ts).toLocaleString() : "";
+                      const variantLabel = s?.variant === "project-only" ? "Project import" : s?.variant === "backfill" ? "Backfill" : "Firm onboarding";
+                      const projectHref = s?.slug && projTitle !== "(no project title)"
+                        ? `/designer/${s.slug}/project/${encodeURIComponent(projTitle)}?preview=1`
+                        : null;
+                      const CardInner = (
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#f6f6f6] text-[#6a7282]">{variantLabel}</span>
+                              <span className="text-[12px] text-[#9ca3af]">{ts}</span>
+                            </div>
+                            <div className="font-semibold text-[14px] text-[#101828] truncate">{projTitle}</div>
+                            <div className="text-[12px] text-[#6a7282] mt-0.5 truncate">
+                              {firmLabel} · {s?.contactEmail || "(no email)"}
+                            </div>
+                            <div className="flex items-center gap-3 mt-2 text-[11px] text-[#9ca3af] flex-wrap">
+                              {s?.project?.propertyType && <span>{s.project.propertyType}</span>}
+                              {s?.project?.location && <span>· {s.project.location}</span>}
+                              {s?.project?.cost && <span>· {s.project.cost}</span>}
+                              {s?.project?.size && <span>· {s.project.size}{s?.project?.sizeUnit || ""}</span>}
+                              {s?.project?.year && <span>· {s.project.year}</span>}
+                            </div>
+                          </div>
+                          {s?.project?.sourceUrl && (
+                            <a
+                              href={s.project.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[12px] text-[#3b82f6] hover:underline inline-flex items-center gap-1 shrink-0"
+                            >
+                              Source <ExternalLink className="size-3" />
+                            </a>
+                          )}
+                        </div>
+                      );
+                      return projectHref ? (
+                        <a
+                          key={s.id}
+                          href={projectHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block border border-[#e8eaed] rounded-xl p-4 hover:bg-[#fafafa] transition-colors no-underline"
+                        >
+                          {CardInner}
+                        </a>
+                      ) : (
+                        <div key={s.id} className="border border-[#e8eaed] rounded-xl p-4 hover:bg-[#fafafa] transition-colors">
+                          {CardInner}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="px-6 py-3 border-t border-[#e8eaed] text-[12px] text-[#6a7282] flex items-center justify-between">
+              <span>{subs.length} total submission{subs.length === 1 ? "" : "s"}</span>
+              <button onClick={openSubmissions} className="text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* ═══ Submitted Firms Modal ═══ */}
+      {firmsOpen && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => setFirmsOpen(false)}>
+          <div className="bg-white w-full max-w-[960px] max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8eaed]">
+              <div>
+                <h3 className="font-bold text-[16px] text-[#101828]">Submitted Firms</h3>
+                <p className="text-[12px] text-[#6a7282] mt-0.5">Firms submitted via /firm-onboarding, newest first.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-[#f6f6f6] rounded-lg p-1">
+                  {(["all", "active", "pending"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setFirmsFilter(v)}
+                      className={`px-3 py-1 rounded text-[12px] font-medium transition-colors cursor-pointer ${firmsFilter === v ? "bg-white text-[#101828] shadow-sm" : "text-[#6a7282] hover:text-[#101828]"}`}
+                    >
+                      {v === "all" ? "All" : v === "active" ? "Active" : "Pending activation"}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setFirmsOpen(false)} className="size-[34px] rounded-full hover:bg-[#f6f6f6] flex items-center justify-center cursor-pointer">
+                  <X className="size-4 text-[#6a7282]" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto px-6 py-4">
+              {firmsLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="size-6 text-[#9ca3af] animate-spin" />
+                </div>
+              ) : firmsError ? (
+                <p className="text-[13px] text-[#c14] py-8 text-center">{firmsError}</p>
+              ) : (() => {
+                const filtered = firms.filter((f) =>
+                  firmsFilter === "all" ? true :
+                  firmsFilter === "active" ? f.active === true :
+                  f.active !== true
+                );
+                if (!filtered.length) {
+                  return <p className="text-[13px] text-[#6a7282] py-12 text-center">No firms match this filter.</p>;
+                }
+                return (
+                  <div className="flex flex-col gap-2">
+                    {filtered.map((f) => {
+                      const ts = f.submittedAt ? new Date(f.submittedAt).toLocaleString() : "";
+                      const status = f.active === true ? "Active" : "Pending";
+                      const statusCls = f.active === true ? "bg-[#dcfce7] text-[#166534]" : "bg-[#fef3c7] text-[#92400e]";
+                      const verified = f.verified === true;
+                      return (
+                        <a
+                          key={f.slug}
+                          href={`/designer/${f.slug}?preview=1`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block border border-[#e8eaed] rounded-xl p-4 hover:bg-[#fafafa] transition-colors no-underline"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className={`text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded ${statusCls}`}>{status}</span>
+                                {verified && <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-[#dbeafe] text-[#1e40af]">Verified</span>}
+                                <span className="text-[12px] text-[#9ca3af]">{ts}</span>
+                              </div>
+                              <div className="font-semibold text-[14px] text-[#101828] truncate">{f.name || f.slug}</div>
+                              <div className="text-[12px] text-[#6a7282] mt-0.5 truncate">
+                                {f.slug} · {f.contactEmail || "(no email)"}
+                              </div>
+                              <div className="flex items-center gap-3 mt-2 text-[11px] text-[#9ca3af] flex-wrap">
+                                {f.acraUen && <span>{f.acraUen}</span>}
+                                {f.yearsExperience && <span>· {f.yearsExperience}y exp</span>}
+                                {Array.isArray(f.serviceArea) && f.serviceArea.length > 0 && <span>· {f.serviceArea.join(", ")}</span>}
+                                {f.completeness && <span>· {f.completeness.filled}/{f.completeness.total} complete</span>}
+                              </div>
+                            </div>
+                            <ChevronRight className="size-4 text-[#9ca3af] shrink-0 mt-1" />
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="px-6 py-3 border-t border-[#e8eaed] text-[12px] text-[#6a7282] flex items-center justify-between">
+              <span>{firms.length} total firm{firms.length === 1 ? "" : "s"}</span>
+              <button onClick={openFirms} className="text-[#3b82f6] hover:underline cursor-pointer">Refresh</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* ═══ Live Activity ═══ */}
       <div className="bg-white border border-[#e8eaed] rounded-xl p-5 flex items-center gap-5">
