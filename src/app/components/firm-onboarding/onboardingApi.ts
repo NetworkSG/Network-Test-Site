@@ -100,7 +100,7 @@ export interface OnboardingPayload {
   contactEmail?: string;
 }
 
-export async function listAirtableFirms(): Promise<{ id: string; firmName: string }[]> {
+export async function listAirtableFirms(): Promise<{ id: string; firmName: string; contactEmail?: string }[]> {
   const res = await fetch(`${API}/firm-onboarding/airtable-firms`, {
     headers: { Authorization: `Bearer ${publicAnonKey}` },
   });

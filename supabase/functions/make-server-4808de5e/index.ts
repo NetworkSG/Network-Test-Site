@@ -2117,9 +2117,13 @@ app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
     if (now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
       return c.json({ firms: AIRTABLE_FIRMS_CACHE.data, cached: true });
     }
-    const records = await fetchAirtableIdProfiles(["Client"]);
+    const records = await fetchAirtableIdProfiles(["Client", "Email"]);
     const firms = records
-      .map((r) => ({ id: r.id as string, firmName: String(r.fields?.Client || "").trim() }))
+      .map((r) => ({
+        id: r.id as string,
+        firmName: String(r.fields?.Client || "").trim(),
+        contactEmail: String(r.fields?.Email || "").trim(),
+      }))
       .filter((f) => f.id && f.firmName)
       .sort((a, b) => a.firmName.localeCompare(b.firmName));
     AIRTABLE_FIRMS_CACHE.at = now;

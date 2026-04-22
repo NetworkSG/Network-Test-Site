@@ -746,7 +746,27 @@ export function CostGuide() {
             leadEmail={leadEmail}
             setLeadEmail={setLeadEmail}
             onBack={() => setScreen(4)}
-            onSubmit={() => setScreen(6)}
+            onSubmit={() => {
+              openCostGuidePdf({
+                lead: { name: leadName, phone: leadPhone, email: leadEmail },
+                property,
+                newResale,
+                ocs,
+                ocsFlooring,
+                ocsDoors,
+                unitType,
+                intent,
+                journey,
+                sourcing,
+                layout,
+                carpentry,
+                finish,
+                landedWorkType,
+                landedScopePct,
+                computed,
+              });
+              setScreen(6);
+            }}
           />
         )}
 
@@ -1713,4 +1733,650 @@ function routeLandedFirmType(workType: string, scopePct: LandedScope | null) {
     return { type: "Design Consultant", desc: "Reconstruction requires design-led coordination — URA Envelope Control compliance, new Household Shelter, and full structural PE endorsement. A design consultant with landed experience manages this end to end." };
   }
   return { type: "Design Consultant", desc: "Full rebuild means fresh URA planning permission, complete architectural and structural submissions, and design freedom at the highest level. A design consultant or specialised landed builder leads this from concept to completion." };
+}
+
+// ═══════════════════════════════════════════════════════════
+// PDF GENERATION
+// Opens the filled-in Cost Guide report in a new window and
+// triggers the print dialog so the homeowner can save as PDF.
+// ═══════════════════════════════════════════════════════════
+interface PdfData {
+  lead: { name: string; phone: string; email: string };
+  property: Property | null;
+  newResale: NewResale | null;
+  ocs: OCS | null;
+  ocsFlooring: boolean;
+  ocsDoors: boolean;
+  unitType: string | null;
+  intent: Intent | null;
+  journey: Journey | null;
+  sourcing: Sourcing | null;
+  layout: Layout | null;
+  carpentry: Carpentry | null;
+  finish: Finish | null;
+  landedWorkType: LandedWork | null;
+  landedScopePct: LandedScope | null;
+  computed: ComputedState;
+}
+
+// Compose the Cost Guide PDF programmatically with jsPDF — reliable
+// text-based output, no HTML→canvas step (which chokes on the site's
+// Tailwind oklch colour functions).
+// Load the Network wordmark and re-render every non-transparent pixel as solid
+// black so the logo prints black in the PDF regardless of the source PNG's
+// colours (the site uses CSS mask-image to tint it; we can't rely on that here).
+async function loadImageAsBlackDataUrl(src: string): Promise<string | null> {
+  try {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    const sourceUrl = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("decode failed"));
+        el.src = sourceUrl;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = pixels.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          data[i] = 15;     // R
+          data[i + 1] = 15; // G
+          data[i + 2] = 13; // B  (matches --black token)
+        }
+      }
+      ctx.putImageData(pixels, 0, 0);
+      return canvas.toDataURL("image/png");
+    } finally {
+      URL.revokeObjectURL(sourceUrl);
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function openCostGuidePdf(d: PdfData) {
+  try {
+    const { jsPDF } = await import("jspdf");
+    const logoDataUrl = await loadImageAsBlackDataUrl(imgRectangle1 as unknown as string);
+    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    const W = 210;
+    const H = 297;
+    const MX = 18;
+    const MY = 14;
+    const CW = W - MX * 2;
+
+    // RGB palette
+    const col = {
+      bg: [240, 237, 230] as [number, number, number],
+      card: [250, 248, 242] as [number, number, number],
+      border: [216, 211, 200] as [number, number, number],
+      black: [15, 15, 13] as [number, number, number],
+      ink: [26, 26, 23] as [number, number, number],
+      gray: [107, 104, 96] as [number, number, number],
+      grayLight: [154, 151, 144] as [number, number, number],
+      accent: [165, 133, 80] as [number, number, number],
+      green: [90, 148, 96] as [number, number, number],
+    };
+
+    // Full-page cream background
+    doc.setFillColor(...col.bg);
+    doc.rect(0, 0, W, H, "F");
+
+    const setText = (rgb: [number, number, number]) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    const setDraw = (rgb: [number, number, number]) => doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+    const setFill = (rgb: [number, number, number]) => doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+
+    // ── Header: Network logo + date ──
+    const logoH = 7;                 // mm
+    const logoW = logoH * (110 / 23); // preserve ratio from SiteNav (110×23)
+    if (logoDataUrl) {
+      try { doc.addImage(logoDataUrl, "PNG", MX, MY, logoW, logoH); } catch {}
+    } else {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      setText(col.black);
+      doc.text("NETWORK", MX, MY + 5);
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    setText(col.ink);
+    const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    doc.text(dateStr, W - MX, MY + logoH - 1, { align: "right" });
+
+    // ── Name / Contact / Email row ──
+    let y = MY + logoH + 10;
+    const col3W = CW / 3;
+    const leadFields = [
+      { lbl: "NAME", val: d.lead.name || "—" },
+      { lbl: "CONTACT", val: d.lead.phone || "—" },
+      { lbl: "EMAIL", val: d.lead.email || "—" },
+    ];
+    leadFields.forEach((f, i) => {
+      const x = MX + col3W * i;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setCharSpace(0.5);
+      setText(col.accent);
+      doc.text(f.lbl, x, y);
+      doc.setCharSpace(0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setText(col.black);
+      doc.text(f.val, x, y + 5);
+    });
+
+    // ── Section heading: Renovation Details ──
+    y += 14;
+    doc.setFont("times", "normal");
+    doc.setFontSize(16);
+    setText(col.black);
+    doc.text("Renovation Details", MX, y);
+    y += 2.5;
+    setDraw(col.border);
+    doc.setLineWidth(0.2);
+    doc.line(MX, y, MX + CW, y);
+
+    // ── Property / Unit / Journey / Firms grid ──
+    y += 5.5;
+    const propFields: { lbl: string; val: string }[] = [
+      { lbl: "PROPERTY", val: propertyLine(d) },
+      { lbl: "UNIT TYPE", val: d.unitType || "—" },
+      { lbl: "JOURNEY STAGE", val: d.journey ? JOURNEY_LABEL[d.journey] : "—" },
+      { lbl: "FIRMS MET", val: d.sourcing ? SOURCING_LABEL[d.sourcing] : "—" },
+    ];
+    const colW = CW / 2;
+    propFields.forEach((f, i) => {
+      const x = MX + (i % 2) * colW;
+      const ry = y + Math.floor(i / 2) * 12;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setCharSpace(0.5);
+      setText(col.accent);
+      doc.text(f.lbl, x, ry);
+      doc.setCharSpace(0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setText(col.black);
+      doc.text(f.val, x, ry + 4.5);
+    });
+    y += 24;
+
+    // ── Wide row: Renovation Intent ──
+    setDraw(col.border);
+    doc.line(MX, y, MX + CW, y);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setCharSpace(0.5);
+    setText(col.accent);
+    doc.text("RENOVATION INTENT", MX, y);
+    doc.setCharSpace(0);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    setText(col.black);
+    const intentLine = d.intent
+      ? INTENT_DESC[d.intent]
+      : d.landedWorkType
+        ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType)
+        : "—";
+    const intentLines = doc.splitTextToSize(intentLine, CW);
+    doc.text(intentLines, MX, y);
+    y += intentLines.length * 5 + 3;
+    doc.line(MX, y, MX + CW, y);
+
+    // ── Section: Scope Indicators ──
+    y += 6;
+    doc.setFont("times", "normal");
+    doc.setFontSize(16);
+    setText(col.black);
+    doc.text("Scope Indicators", MX, y);
+    y += 2.5;
+    doc.line(MX, y, MX + CW, y);
+    y += 5.5;
+    const indW = CW / 4;
+    const answered = [d.layout, d.carpentry, d.finish].filter(Boolean).length;
+    const confLabel = d.property === "Landed"
+      ? (d.computed.confidence === "medium" ? "Medium" : "Range only")
+      : `${d.computed.confidence === "high" ? "High" : d.computed.confidence === "medium" ? "Medium" : d.computed.confidence === "medium-low" ? "Medium-low" : "Range only"} (${answered} / 3)`;
+    const indFields = [
+      { lbl: "LAYOUT", val: d.layout ? LAYOUT_LABEL[d.layout] : "—" },
+      { lbl: "CARPENTRY", val: d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "—" },
+      { lbl: "FINISH", val: d.finish ? FINISH_LABEL[d.finish] : "—" },
+      { lbl: "CONFIDENCE", val: confLabel },
+    ];
+    indFields.forEach((f, i) => {
+      const x = MX + indW * i;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setCharSpace(0.5);
+      setText(col.accent);
+      doc.text(f.lbl, x, y);
+      doc.setCharSpace(0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setText(col.black);
+      const lines = doc.splitTextToSize(f.val, indW - 3);
+      doc.text(lines, x, y + 4.5);
+    });
+    y += 16;
+
+    // ── Cost Breakdown card ──
+    const cardX = MX;
+    const cardW = CW;
+    // Build rows
+    const costRows: { label: string; badge?: string; desc: string; scope: string; value: string; valColor: [number, number, number] }[] = [];
+    const starting = d.computed.breakdown.find((b) => b.section === "Starting point");
+    if (starting) {
+      costRows.push({
+        label: "Starting point",
+        desc: starting.label,
+        scope: "Market median",
+        value: fmtCurrency(starting.value),
+        valColor: col.black,
+      });
+    }
+    for (const a of d.computed.breakdown.filter((b) => b.section === "Adjustments")) {
+      const pct = a.sub.match(/([+\-]?\d+)%/)?.[0] || "0%";
+      const sign = a.kind === "add" ? "+" : a.kind === "sub" ? "−" : "";
+      const valColor = a.kind === "add" ? col.green : a.kind === "sub" ? col.accent : col.grayLight;
+      const [head, ...rest] = a.label.split(":");
+      costRows.push({
+        label: head.trim(),
+        badge: pct,
+        desc: rest.join(":").trim() || a.label,
+        scope: a.kind === "add" ? "Moderate" : a.kind === "sub" ? "Reduction" : "Neutral",
+        value: `${sign}${fmtCurrency(Math.abs(a.value))}`,
+        valColor,
+      });
+    }
+    if (!d.computed.isLanded) {
+      const isOpen = d.intent === "special";
+      const rangeText = isOpen
+        ? `${fmtCurrency(d.computed.min)}+`
+        : `${fmtCurrency(d.computed.min)} – ${fmtCurrency(d.computed.max)}`;
+      costRows.push({
+        label: "Confidence band",
+        desc: `±${d.computed.bandPct}% — ${answered} of 3 scope indicators answered`,
+        scope: d.computed.confidence === "high" ? "Narrow" : d.computed.confidence === "medium" ? "Moderate" : "Wide",
+        value: rangeText,
+        valColor: col.black,
+      });
+    }
+
+    // Card dimensions
+    const rowH = 13;
+    const cardPadTop = 9;
+    const cardPadBottom = 12;
+    const cardHeaderH = 11;
+    const cardContentH = costRows.length * rowH + 16;
+    const cardH = cardHeaderH + cardContentH + cardPadTop + cardPadBottom;
+
+    // Card background
+    setFill(col.card);
+    setDraw(col.border);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(cardX, y, cardW, cardH, 3, 3, "FD");
+
+    // Card title
+    let cy = y + cardPadTop;
+    doc.setFont("times", "normal");
+    doc.setFontSize(16);
+    setText(col.black);
+    doc.text("Cost Breakdown", cardX + 8, cy);
+    cy += 2;
+    setDraw(col.border);
+    doc.setLineWidth(0.2);
+    doc.line(cardX + 8, cy + 2, cardX + cardW - 8, cy + 2);
+    cy += 6;
+
+    // Rows
+    const rowPadX = 8;
+    const leftColEnd = cardX + rowPadX + 92;
+    const scopeX = cardX + cardW - 72;
+    const valX = cardX + cardW - rowPadX;
+    for (let i = 0; i < costRows.length; i++) {
+      const r = costRows[i];
+      // Label eyebrow + optional badge
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setCharSpace(0.4);
+      setText(col.accent);
+      doc.text(r.label.toUpperCase(), cardX + rowPadX, cy);
+      const labelW = doc.getTextWidth(r.label.toUpperCase());
+      doc.setCharSpace(0);
+      if (r.badge) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.5);
+        const padX = 1.8;
+        const badgeTextW = doc.getTextWidth(r.badge);
+        const bw = badgeTextW + padX * 2;
+        const bh = 3.4;
+        const bx = cardX + rowPadX + labelW + 2;
+        const by = cy - 2.5;
+        setFill(col.accent);
+        doc.roundedRect(bx, by, bw, bh, bh / 2, bh / 2, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.text(r.badge, bx + bw / 2, by + bh - 1.05, { align: "center" });
+      }
+
+      // Description
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setText(col.black);
+      const descLines = doc.splitTextToSize(r.desc, leftColEnd - (cardX + rowPadX));
+      doc.text(descLines[0], cardX + rowPadX, cy + 5);
+
+      // Scope column (middle)
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      setText(col.gray);
+      doc.text(r.scope, scopeX, cy + 5);
+
+      // Value column (right)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      setText(r.valColor);
+      doc.text(r.value, valX, cy + 5, { align: "right" });
+
+      // Divider between rows (not after the final row — total line draws its own).
+      cy += rowH;
+      if (i < costRows.length - 1) {
+        setDraw(col.border);
+        doc.setLineWidth(0.15);
+        doc.line(cardX + rowPadX, cy - 1, cardX + cardW - rowPadX, cy - 1);
+      }
+    }
+
+    // Thick divider before total
+    setDraw(col.black);
+    doc.setLineWidth(0.5);
+    doc.line(cardX + rowPadX, cy + 1, cardX + cardW - rowPadX, cy + 1);
+    cy += 3;
+
+    // Total row
+    cy += 3;
+    doc.setFont("times", "normal");
+    doc.setFontSize(16);
+    setText(col.black);
+    doc.text("Total Estimate", cardX + rowPadX, cy + 2);
+
+    const isOpen = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
+    const totalText = isOpen
+      ? `${fmtK(d.computed.min)}+`
+      : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
+    doc.setFont("times", "bold");
+    doc.setFontSize(20);
+    setText(col.black);
+    doc.text(totalText, cardX + cardW - rowPadX, cy + 3, { align: "right" });
+
+    // Sub-line
+    cy += 7;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8.5);
+    setText(col.grayLight);
+    const firmType = d.computed.firmType?.type || "Design & Build Firm";
+    doc.text(`Mid-point ${fmtCurrency(d.computed.adjustedAnchor)} · Recommended firm type: ${firmType}`, cardX + rowPadX, cy);
+
+    // Trigger download via blob URL (more reliable than jspdf's built-in saveAs).
+    const safeName = (d.lead.name || "Estimate").replace(/[^a-zA-Z0-9]+/g, "-");
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Network-Cost-Guide-${safeName}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  } catch (err) {
+    console.error("Cost guide PDF generation failed:", err);
+  }
+}
+
+function propertyLine(d: PdfData): string {
+  if (!d.property) return "—";
+  if (d.property === "HDB" && d.newResale === "new") {
+    const ocsLabel = d.ocs === "yes" && (d.ocsFlooring || d.ocsDoors) ? "With OCS" : "No OCS";
+    return `HDB · BTO (new) · ${ocsLabel}`;
+  }
+  if (d.property === "HDB") return "HDB · Resale";
+  return `${PROPERTY_LABEL[d.property]} · ${d.newResale === "new" ? "New" : "Resale"}`;
+}
+
+const PROPERTY_LABEL: Record<Property, string> = {
+  HDB: "HDB",
+  Condo: "Condominium",
+  EC: "Executive Condo",
+  Landed: "Landed",
+};
+const INTENT_DESC: Record<Intent, string> = {
+  basics: "Move-in ready basics — wet areas, basic finishes, custom carpentry only where essential",
+  proper: "A proper home renovation — everything done, custom where it matters, unified design",
+  special: "Something special — fully designed, premium materials, custom throughout",
+};
+const JOURNEY_LABEL: Record<Journey, string> = {
+  exploring: "Still exploring ideas",
+  "getting-ready": "Getting ready to start",
+  "actively-planning": "Actively planning",
+  "deep-in-quotes": "Deep in quotes",
+  "already-chose": "Already chose a firm",
+};
+const SOURCING_LABEL: Record<Sourcing, string> = {
+  none: "Not yet",
+  "1-2": "Met 1–2 firms",
+  "3+": "Met 3+ firms",
+};
+const LAYOUT_LABEL: Record<Layout, string> = { No: "No changes", Some: "Some changes", Major: "Major reconfiguration" };
+const CARPENTRY_LABEL: Record<Carpentry, string> = { Low: "Mostly ready-made", Medium: "Mix of ready-made and custom", High: "Mostly custom built-ins" };
+const FINISH_LABEL: Record<Finish, string> = { Budget: "Keeping costs down", Quality: "Quality that lasts", Premium: "Premium throughout" };
+
+function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
+function fmtCurrency(n: number): string {
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function fmtK(n: number): string {
+  if (n >= 1000) return `$${(Math.round(n / 100) / 10).toFixed(1).replace(/\.0$/, "")}K`;
+  return `$${n}`;
+}
+
+function buildCostGuideHtml(d: PdfData, logoUrl: string): string {
+  const { computed } = d;
+  const propertyLine = d.property
+    ? (d.property === "HDB" && d.newResale === "new"
+        ? `HDB · BTO (new) · ${d.ocs === "yes" && (d.ocsFlooring || d.ocsDoors) ? "With OCS" : "No OCS"}`
+        : d.property === "HDB"
+          ? "HDB · Resale"
+          : `${PROPERTY_LABEL[d.property]} · ${d.newResale === "new" ? "New" : "Resale"}`)
+    : "—";
+  const unitLine = d.unitType || "—";
+  const intentLine = d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : "—");
+  const journeyLine = d.journey ? JOURNEY_LABEL[d.journey] : "—";
+  const sourcingLine = d.sourcing ? SOURCING_LABEL[d.sourcing] : "—";
+  const layoutLine = d.layout ? LAYOUT_LABEL[d.layout] : "—";
+  const carpentryLine = d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "—";
+  const finishLine = d.finish ? FINISH_LABEL[d.finish] : "—";
+  const answered = [d.layout, d.carpentry, d.finish].filter(Boolean).length;
+  const confidenceLine = d.property === "Landed"
+    ? (computed.confidence === "medium" ? "Medium — scope known" : "Range only")
+    : `${computed.confidence === "high" ? "High" : computed.confidence === "medium" ? "Medium" : computed.confidence === "medium-low" ? "Medium-low" : "Range only"} (${answered} / 3 answered)`;
+
+  const isOpenEnded = d.intent === "special" || (computed.isLanded && computed.workType === "rebuild");
+  const rangeText = isOpenEnded
+    ? `${fmtCurrency(computed.min)}+`
+    : `${fmtCurrency(computed.min)} – ${fmtCurrency(computed.max)}`;
+  const totalKText = isOpenEnded
+    ? `${fmtK(computed.min)}+`
+    : `${fmtK(computed.min)} – ${fmtK(computed.max)}`;
+
+  const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+  // Build adjustment rows from computed.breakdown (standard, non-landed flow).
+  const rows: string[] = [];
+  const starting = computed.breakdown.find((b) => b.section === "Starting point");
+  if (starting) {
+    rows.push(`
+      <div class="cost-row">
+        <div class="cost-left">
+          <div class="cost-section">Starting point</div>
+          <div class="cost-desc">${escapeHtml(starting.label)}</div>
+        </div>
+        <div class="cost-scope">Market median</div>
+        <div class="cost-val">${fmtCurrency(starting.value)}</div>
+      </div>
+    `);
+  }
+  const adjs = computed.breakdown.filter((b) => b.section === "Adjustments");
+  for (const a of adjs) {
+    const sign = a.kind === "add" ? "+" : a.kind === "sub" ? "−" : "";
+    const valClass = a.kind === "add" ? "pos" : a.kind === "sub" ? "neg" : "muted";
+    const pct = a.sub.match(/([+\-]?\d+)%/)?.[0] || "0%";
+    const badgeBg = a.kind === "add" ? "var(--accent)" : a.kind === "sub" ? "var(--accent)" : "var(--gray-light)";
+    const [head, ...rest] = a.label.split(":");
+    const headLabel = head.trim();
+    const desc = rest.join(":").trim() || a.label;
+    rows.push(`
+      <div class="cost-row">
+        <div class="cost-left">
+          <div class="cost-section">${escapeHtml(headLabel)} <span class="count-badge" style="background:${badgeBg};">${escapeHtml(pct)}</span></div>
+          <div class="cost-desc">${escapeHtml(desc)}</div>
+        </div>
+        <div class="cost-scope">${a.kind === "add" ? "Moderate" : a.kind === "sub" ? "Reduction" : "Neutral"}</div>
+        <div class="cost-val ${valClass}">${sign}${fmtCurrency(Math.abs(a.value))}</div>
+      </div>
+    `);
+  }
+  // Confidence band row (non-landed only)
+  if (!computed.isLanded) {
+    rows.push(`
+      <div class="cost-row">
+        <div class="cost-left">
+          <div class="cost-section">Confidence band</div>
+          <div class="cost-desc">±${computed.bandPct}% — ${answered} of 3 scope indicators answered</div>
+        </div>
+        <div class="cost-scope">${computed.confidence === "high" ? "Narrow" : computed.confidence === "medium" ? "Moderate" : "Wide"}</div>
+        <div class="cost-val">${escapeHtml(rangeText)}</div>
+      </div>
+    `);
+  }
+
+  const firmType = computed.firmType?.type || "Design & Build Firm";
+  const midpoint = fmtCurrency(computed.adjustedAnchor);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Network — Renovation Cost Report</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #f0ede6;
+    --card: #faf8f2;
+    --border: #d8d3c8;
+    --black: #0f0f0d;
+    --ink: #1a1a17;
+    --gray: #6b6860;
+    --gray-light: #9a9790;
+    --accent: #a58550;
+    --green: #5a9460;
+    --sans: 'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --serif: 'EB Garamond', Georgia, serif;
+  }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 9.5pt; line-height: 1.45; -webkit-print-color-adjust: exact; print-color-adjust: exact; --logo: url("${logoUrl}"); }
+  .sheet { width: 210mm; height: 297mm; padding: 14mm 18mm; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6mm; }
+  .wm-logo { width: 28mm; height: 6mm; background-color: #1a1a17; mask-image: var(--logo); mask-repeat: no-repeat; mask-position: left center; mask-size: contain; -webkit-mask-image: var(--logo); -webkit-mask-repeat: no-repeat; -webkit-mask-position: left center; -webkit-mask-size: contain; }
+  .wm { font-size: 14pt; font-weight: 800; letter-spacing: 0.08em; color: var(--black); }
+  .date { font-size: 10pt; color: var(--ink); }
+  .lbl { font-size: 8pt; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 1.5mm; }
+  .val { font-size: 10.5pt; color: var(--black); font-weight: 500; }
+  .row-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8mm; margin-bottom: 6mm; }
+  h2.section { font-family: var(--serif); font-size: 17pt; font-weight: 500; color: var(--black); letter-spacing: -0.01em; margin-bottom: 2mm; }
+  .divider { height: 0.6pt; background: var(--border); margin-bottom: 4mm; }
+  .prop-grid { display: grid; grid-template-columns: 1fr 1fr; row-gap: 4mm; column-gap: 12mm; margin-bottom: 4mm; }
+  .wide-row { padding: 3mm 0; border-top: 0.6pt solid var(--border); }
+  .wide-row:last-of-type { border-bottom: 0.6pt solid var(--border); margin-bottom: 5mm; }
+  .ind-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8mm; padding-top: 4mm; border-top: 0.6pt solid var(--border); margin-bottom: 6mm; }
+  .card { background: var(--card); border: 0.8pt solid var(--border); border-radius: 3mm; padding: 5mm 8mm; margin-bottom: 3mm; }
+  h3.card-title { font-family: var(--serif); font-size: 16pt; font-weight: 500; color: var(--black); margin-bottom: 2mm; }
+  .card-divider { height: 0.6pt; background: var(--border); margin-bottom: 3mm; }
+  .cost-row { display: grid; grid-template-columns: 1fr 24mm 32mm; column-gap: 5mm; align-items: center; padding: 1.8mm 0; border-bottom: 0.5pt solid var(--border); }
+  .cost-row:last-of-type { border-bottom: 1pt solid var(--black); }
+  .cost-section { font-size: 8pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); display: inline-flex; align-items: center; gap: 3mm; }
+  .count-badge { display: inline-block; background: var(--accent); color: #fff; border-radius: 999px; font-size: 7.5pt; font-weight: 700; padding: 0.6mm 2.2mm; letter-spacing: 0.05em; }
+  .cost-desc { font-size: 10.5pt; color: var(--black); line-height: 1.45; margin-top: 1mm; }
+  .cost-scope { font-size: 10.5pt; color: var(--gray); }
+  .cost-val { font-size: 10.5pt; font-weight: 600; color: var(--black); text-align: right; white-space: nowrap; }
+  .cost-val.muted { color: var(--gray-light); }
+  .cost-val.pos { color: var(--green); }
+  .total-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; padding-top: 3mm; }
+  .total-label { font-family: var(--serif); font-size: 15pt; font-weight: 500; color: var(--black); }
+  .total-value { font-family: var(--serif); font-size: 20pt; font-weight: 600; color: var(--black); letter-spacing: -0.01em; }
+  .total-sub { grid-column: 1 / -1; font-size: 8.5pt; color: var(--gray-light); margin-top: 1mm; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <img src="${escapeHtml(logoUrl)}" alt="" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" />
+  <div class="top">
+    <div class="wm-logo" aria-label="NETWORK"></div>
+    <div class="date">${escapeHtml(dateStr)}</div>
+  </div>
+
+  <div class="row-3col">
+    <div><div class="lbl">Name</div><div class="val">${escapeHtml(d.lead.name || "—")}</div></div>
+    <div><div class="lbl">Contact</div><div class="val">${escapeHtml(d.lead.phone || "—")}</div></div>
+    <div><div class="lbl">Email</div><div class="val">${escapeHtml(d.lead.email || "—")}</div></div>
+  </div>
+
+  <h2 class="section">Renovation Details</h2>
+  <div class="divider"></div>
+  <div class="prop-grid">
+    <div><div class="lbl">Property</div><div class="val">${escapeHtml(propertyLine)}</div></div>
+    <div><div class="lbl">Unit Type</div><div class="val">${escapeHtml(unitLine)}</div></div>
+    <div><div class="lbl">Journey Stage</div><div class="val">${escapeHtml(journeyLine)}</div></div>
+    <div><div class="lbl">Firms Met</div><div class="val">${escapeHtml(sourcingLine)}</div></div>
+  </div>
+  <div class="wide-row">
+    <div class="lbl">Renovation Intent</div>
+    <div class="val">${escapeHtml(intentLine)}</div>
+  </div>
+
+  <h2 class="section">Scope Indicators</h2>
+  <div class="ind-grid">
+    <div><div class="lbl">Layout</div><div class="val">${escapeHtml(layoutLine)}</div></div>
+    <div><div class="lbl">Carpentry</div><div class="val">${escapeHtml(carpentryLine)}</div></div>
+    <div><div class="lbl">Finish</div><div class="val">${escapeHtml(finishLine)}</div></div>
+    <div><div class="lbl">Confidence</div><div class="val">${escapeHtml(confidenceLine)}</div></div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Cost Breakdown</h3>
+    <div class="card-divider"></div>
+    ${rows.join("\n")}
+    <div class="total-row">
+      <div class="total-label">Total Estimate</div>
+      <div class="total-value">${escapeHtml(totalKText)}</div>
+      <div class="total-sub">Mid-point ${escapeHtml(midpoint)} · Recommended firm type: ${escapeHtml(firmType)}</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
 }
