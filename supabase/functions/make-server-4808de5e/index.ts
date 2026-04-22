@@ -1079,9 +1079,54 @@ app.get("/make-server-4808de5e/health", (c) => {
 const ZAPIER_WEBHOOKS: Record<string, string> = {
   "hero-lead": "https://hooks.zapier.com/hooks/catch/20249199/2c5b7ea/",
   "render-lead": "https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/",
-  "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/",
+  "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/ujejbhx/",
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
 };
+
+// Upload a Cost Guide PDF (base64) to public storage, return its URL so the
+// client can forward it to Zapier along with the lead data.
+app.post("/make-server-4808de5e/cost-guide-upload", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "cost-guide");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => null);
+    const pdfBase64 = typeof body?.pdfBase64 === "string" ? body.pdfBase64 : "";
+    const suppliedName = typeof body?.filename === "string" ? body.filename : "cost-guide.pdf";
+    if (!pdfBase64) return c.json({ error: "Missing pdfBase64" }, 400);
+
+    // Strip data URL prefix if present.
+    const clean = pdfBase64.replace(/^data:application\/pdf;base64,/, "");
+    let bytes: Uint8Array;
+    try {
+      bytes = base64Decode(clean);
+    } catch {
+      return c.json({ error: "Invalid base64" }, 400);
+    }
+    // Hard cap: 5 MB — cost guide PDFs are ~60 KB.
+    if (bytes.byteLength < 300 || bytes.byteLength > 5 * 1024 * 1024) {
+      return c.json({ error: "PDF size out of range" }, 400);
+    }
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const safeName = sanitizeString(suppliedName, 100).replace(/[^a-zA-Z0-9._-]/g, "_") || "cost-guide.pdf";
+    const filePath = `cost-guide/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadErr } = await supabase.storage
+      .from(DESIGNER_BUCKET_NAME)
+      .upload(filePath, bytes, { contentType: "application/pdf", upsert: false });
+    if (uploadErr) {
+      console.log("cost-guide-upload error:", uploadErr);
+      return c.json({ error: `Upload failed: ${uploadErr.message}` }, 500);
+    }
+    const publicUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
+    return c.json({ ok: true, pdfUrl: publicUrl, filePath });
+  } catch (err: any) {
+    console.log("cost-guide-upload error:", err);
+    return c.json({ error: "Upload failed: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
 
 app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
   try {

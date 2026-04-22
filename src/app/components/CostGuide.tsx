@@ -4,6 +4,9 @@ import { SiteNav } from "./SiteNav";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { C, serif, sans } from "./homepage/v8/primitives";
 import { ChevronDown, Check, Lock, Star, ShieldCheck } from "lucide-react";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
+
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
@@ -440,6 +443,7 @@ export function CostGuide() {
 
   // Math toggle on results
   const [mathOpen, setMathOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Scroll to top on screen change
   useEffect(() => {
@@ -746,25 +750,34 @@ export function CostGuide() {
             leadEmail={leadEmail}
             setLeadEmail={setLeadEmail}
             onBack={() => setScreen(4)}
-            onSubmit={() => {
-              openCostGuidePdf({
-                lead: { name: leadName, phone: leadPhone, email: leadEmail },
-                property,
-                newResale,
-                ocs,
-                ocsFlooring,
-                ocsDoors,
-                unitType,
-                intent,
-                journey,
-                sourcing,
-                layout,
-                carpentry,
-                finish,
-                landedWorkType,
-                landedScopePct,
-                computed,
-              });
+            submitting={submitting}
+            onSubmit={async () => {
+              if (submitting) return;
+              setSubmitting(true);
+              try {
+                await openCostGuidePdf({
+                  lead: { name: leadName, phone: leadPhone, email: leadEmail },
+                  property,
+                  newResale,
+                  ocs,
+                  ocsFlooring,
+                  ocsDoors,
+                  unitType,
+                  intent,
+                  journey,
+                  sourcing,
+                  layout,
+                  carpentry,
+                  finish,
+                  landedWorkType,
+                  landedScopePct,
+                  computed,
+                });
+              } catch (_) {
+                // Surface as an optimistic "submitted" regardless — PDF is
+                // already generated; fall through so the user isn't stuck.
+              }
+              setSubmitting(false);
               setScreen(6);
             }}
           />
@@ -1275,7 +1288,7 @@ function Screen5({
   leadName, setLeadName,
   leadPhone, setLeadPhone,
   leadEmail, setLeadEmail,
-  onBack, onSubmit,
+  onBack, onSubmit, submitting,
 }: any) {
   const isRebuild = computed.isLanded && computed.workType === "rebuild";
   const useOpenEnded = intent === "special" || isRebuild;
@@ -1465,13 +1478,22 @@ function Screen5({
       </p>
 
       <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
-      <LeadInput label="WhatsApp number" type="tel" value={leadPhone} onChange={setLeadPhone} placeholder="+65 xxxx xxxx" />
+      <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
       <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
-
-      <BtnRow>
-        <BtnSecondary onClick={onBack}>Back</BtnSecondary>
-        <BtnPrimary onClick={onSubmit}>Submit and get matched</BtnPrimary>
-      </BtnRow>
+      {(() => {
+        const nameOk = leadName.trim().length > 0;
+        const phoneOk = /^[0-9]{8}$/.test(leadPhone);
+        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
+        const formValid = nameOk && phoneOk && emailOk;
+        return (
+          <BtnRow>
+            <BtnSecondary onClick={onBack}>Back</BtnSecondary>
+            <BtnPrimary onClick={onSubmit} disabled={!formValid || submitting}>
+              {submitting ? "Submitting…" : "Submit and get matched"}
+            </BtnPrimary>
+          </BtnRow>
+        );
+      })()}
 
       {/* Trust bar */}
       <div style={{ marginTop: 18, padding: "16px 18px", background: "#faf8f2", border: `1px solid ${C.creamBorder}`, borderRadius: 8, textAlign: "center" }}>
@@ -1508,6 +1530,57 @@ function LeadInput({ label, value, onChange, placeholder, type = "text" }: { lab
         placeholder={placeholder}
         style={inputFieldStyle}
       />
+    </div>
+  );
+}
+
+// WhatsApp number: fixed +65 prefix, 8 digits only. Stores just the digits.
+function PhoneInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, color: C.black, marginBottom: 6, display: "block" }}>{label}</label>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          background: "#faf8f2",
+          border: `1px solid ${C.creamBorder}`,
+          borderRadius: 8,
+          overflow: "hidden",
+        }}
+      >
+        <span
+          style={{
+            padding: "12px 12px",
+            background: C.cream,
+            borderRight: `1px solid ${C.creamBorder}`,
+            color: C.gray,
+            fontFamily: sans,
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          +65
+        </span>
+        <input
+          type="tel"
+          inputMode="numeric"
+          maxLength={8}
+          value={value}
+          placeholder="XXXX XXXX"
+          onChange={(e) => onChange(e.target.value.replace(/\D+/g, "").slice(0, 8))}
+          style={{
+            flex: 1,
+            padding: "12px 14px",
+            background: "transparent",
+            border: "none",
+            fontSize: 14,
+            color: C.black,
+            fontFamily: sans,
+            outline: "none",
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -1856,7 +1929,7 @@ async function openCostGuidePdf(d: PdfData) {
     const col3W = CW / 3;
     const leadFields = [
       { lbl: "NAME", val: d.lead.name || "—" },
-      { lbl: "CONTACT", val: d.lead.phone || "—" },
+      { lbl: "CONTACT", val: d.lead.phone ? `+65 ${d.lead.phone.slice(0, 4)} ${d.lead.phone.slice(4)}` : "—" },
       { lbl: "EMAIL", val: d.lead.email || "—" },
     ];
     leadFields.forEach((f, i) => {
@@ -1942,19 +2015,14 @@ async function openCostGuidePdf(d: PdfData) {
     y += 2.5;
     doc.line(MX, y, MX + CW, y);
     y += 5.5;
-    const indW = CW / 4;
-    const answered = [d.layout, d.carpentry, d.finish].filter(Boolean).length;
-    const confLabel = d.property === "Landed"
-      ? (d.computed.confidence === "medium" ? "Medium" : "Range only")
-      : `${d.computed.confidence === "high" ? "High" : d.computed.confidence === "medium" ? "Medium" : d.computed.confidence === "medium-low" ? "Medium-low" : "Range only"} (${answered} / 3)`;
     const indFields = [
       { lbl: "LAYOUT", val: d.layout ? LAYOUT_LABEL[d.layout] : "—" },
       { lbl: "CARPENTRY", val: d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "—" },
       { lbl: "FINISH", val: d.finish ? FINISH_LABEL[d.finish] : "—" },
-      { lbl: "CONFIDENCE", val: confLabel },
     ];
+    const indColW = CW / indFields.length;
     indFields.forEach((f, i) => {
-      const x = MX + indW * i;
+      const x = MX + indColW * i;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setCharSpace(0.5);
@@ -1964,7 +2032,7 @@ async function openCostGuidePdf(d: PdfData) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       setText(col.black);
-      const lines = doc.splitTextToSize(f.val, indW - 3);
+      const lines = doc.splitTextToSize(f.val, indColW - 3);
       doc.text(lines, x, y + 4.5);
     });
     y += 16;
@@ -1985,30 +2053,15 @@ async function openCostGuidePdf(d: PdfData) {
       });
     }
     for (const a of d.computed.breakdown.filter((b) => b.section === "Adjustments")) {
-      const pct = a.sub.match(/([+\-]?\d+)%/)?.[0] || "0%";
       const sign = a.kind === "add" ? "+" : a.kind === "sub" ? "−" : "";
       const valColor = a.kind === "add" ? col.green : a.kind === "sub" ? col.accent : col.grayLight;
       const [head, ...rest] = a.label.split(":");
       costRows.push({
         label: head.trim(),
-        badge: pct,
         desc: rest.join(":").trim() || a.label,
         scope: a.kind === "add" ? "Moderate" : a.kind === "sub" ? "Reduction" : "Neutral",
         value: `${sign}${fmtCurrency(Math.abs(a.value))}`,
         valColor,
-      });
-    }
-    if (!d.computed.isLanded) {
-      const isOpen = d.intent === "special";
-      const rangeText = isOpen
-        ? `${fmtCurrency(d.computed.min)}+`
-        : `${fmtCurrency(d.computed.min)} – ${fmtCurrency(d.computed.max)}`;
-      costRows.push({
-        label: "Confidence band",
-        desc: `±${d.computed.bandPct}% — ${answered} of 3 scope indicators answered`,
-        scope: d.computed.confidence === "high" ? "Narrow" : d.computed.confidence === "medium" ? "Moderate" : "Wide",
-        value: rangeText,
-        valColor: col.black,
       });
     }
 
@@ -2126,21 +2179,63 @@ async function openCostGuidePdf(d: PdfData) {
     const firmType = d.computed.firmType?.type || "Design & Build Firm";
     doc.text(`Mid-point ${fmtCurrency(d.computed.adjustedAnchor)} · Recommended firm type: ${firmType}`, cardX + rowPadX, cy);
 
-    // Trigger download via blob URL (more reliable than jspdf's built-in saveAs).
+    // Upload to Supabase storage → forward URL + lead data to Zapier.
+    // We intentionally skip the download; homeowners receive the PDF via the
+    // email/WhatsApp workflow that Zapier triggers.
     const safeName = (d.lead.name || "Estimate").replace(/[^a-zA-Z0-9]+/g, "-");
     const blob = doc.output("blob");
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Network-Cost-Guide-${safeName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 0);
+    const pdfBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).replace(/^data:application\/pdf;base64,/, ""));
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.readAsDataURL(blob);
+    });
+
+    const uploadRes = await fetch(`${API_BASE}/cost-guide-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ pdfBase64, filename: `Network-Cost-Guide-${safeName}.pdf` }),
+    });
+    const uploadJson = await uploadRes.json().catch(() => ({}));
+    if (!uploadRes.ok || !uploadJson?.pdfUrl) {
+      throw new Error(uploadJson?.error || `Upload failed (${uploadRes.status})`);
+    }
+    const pdfUrl: string = uploadJson.pdfUrl;
+
+    // Forward the lead + PDF URL to the cost-guide Zapier webhook.
+    const isOpenEnded = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
+    const budgetRange = isOpenEnded
+      ? `${fmtK(d.computed.min)}+`
+      : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
+    const phoneFull = d.lead.phone ? `+65${d.lead.phone}` : "";
+    await fetch(`${API_BASE}/zapier-proxy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({
+        hook: "cost-guide-lead",
+        data: {
+          "First Name": d.lead.name || "",
+          "Contact Phone": phoneFull,
+          "Email Address": d.lead.email || "",
+          "Property Type": d.property ? propertyLine(d) : "",
+          "Unit Type": d.unitType || "",
+          "Renovation Intent": d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : ""),
+          "Journey Stage": d.journey ? JOURNEY_LABEL[d.journey] : "",
+          "Firms Met": d.sourcing ? SOURCING_LABEL[d.sourcing] : "",
+          "Layout": d.layout ? LAYOUT_LABEL[d.layout] : "",
+          "Carpentry": d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "",
+          "Finish": d.finish ? FINISH_LABEL[d.finish] : "",
+          "Renovation Budget": budgetRange,
+          "Mid-point": Math.round(d.computed.adjustedAnchor),
+          "Recommended Firm Type": d.computed.firmType?.type || "",
+          "Cost Guide PDF": pdfUrl,
+          "Lead Form": "Cost Guide",
+        },
+      }),
+    });
   } catch (err) {
-    console.error("Cost guide PDF generation failed:", err);
+    console.error("Cost guide submit failed:", err);
+    throw err;
   }
 }
 
