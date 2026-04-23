@@ -5157,8 +5157,9 @@ app.post("/make-server-4808de5e/firm-onboarding/drive-folder-preview", async (c)
       id: f.id,
       name: f.name,
       mimeType: f.mimeType,
-      // thumbnailLink from Drive is ~200px by default; bump to 720 via the =s720 suffix.
-      thumbnailUrl: f.thumbnailLink ? String(f.thumbnailLink).replace(/=s\d+$/, "=s720") : `https://drive.google.com/thumbnail?id=${f.id}&sz=w720`,
+      // Prefer lh3.googleusercontent.com — drive.google.com/thumbnail redirects
+      // to a consent page when hot-linked from another origin (breaks images).
+      thumbnailUrl: `https://lh3.googleusercontent.com/d/${f.id}=w720`,
     }));
     return c.json({ ok: true, count: images.length, images });
   } catch (err: any) {
@@ -5197,7 +5198,10 @@ async function listDriveFolderImageUrls(folderUrl: string): Promise<string[]> {
     }
     const listJson = await listRes.json().catch(() => ({}));
     const files: any[] = Array.isArray(listJson.files) ? listJson.files.slice(0, 25) : [];
-    return files.map((f: any) => `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`);
+    // Use Google's photo CDN rather than drive.google.com/thumbnail — the
+    // latter redirects to a consent page when hot-linked from another origin,
+    // which shows as broken images on the live designer pages.
+    return files.map((f: any) => `https://lh3.googleusercontent.com/d/${f.id}=w1600`);
   } catch (err) {
     console.log("listDriveFolderImageUrls error:", err instanceof Error ? err.message : String(err));
     return [];
