@@ -80,10 +80,11 @@ const UNIT_TYPES: Record<Property, { value: string; label: string }[]> = {
 };
 
 const ANCHORS: Record<string, { basics: number; proper: number; special: number }> = {
-  "HDB_BTO_OCS_2-Room": { basics: 16320, proper: 25600, special: 33160 },
-  "HDB_BTO_OCS_3-Room": { basics: 22440, proper: 39680, special: 48648 },
-  "HDB_BTO_OCS_4-Room": { basics: 30600, proper: 51840, special: 62024 },
-  "HDB_BTO_OCS_5-Room": { basics: 35360, proper: 61440, special: 72584 },
+  // HDB BTO — single base representing full private scope (no OCS).
+  // When the homeowner opts into OCS, a discount is applied in computeCosts:
+  //   Full OCS          → −20%
+  //   Flooring only     → −8%
+  //   Doors + sanitary  → −5%
   "HDB_BTO_NOOCS_2-Room": { basics: 20400, proper: 32000, special: 40200 },
   "HDB_BTO_NOOCS_3-Room": { basics: 28050, proper: 49600, special: 59560 },
   "HDB_BTO_NOOCS_4-Room": { basics: 38250, proper: 64800, special: 76280 },
@@ -453,15 +454,14 @@ export function CostGuide() {
   // ─── Derived: anchor key and computed costs ────────────────
   const anchorKey = useMemo((): string | null => {
     if (!property || !newResale || !unitType) return null;
-    if (property === "HDB" && newResale === "new") {
-      if (ocs === "yes" && (ocsFlooring || ocsDoors)) return `HDB_BTO_OCS_${unitType}`;
-      return `HDB_BTO_NOOCS_${unitType}`;
-    }
+    // BTO always uses the NOOCS (full private scope) base anchor.
+    // OCS is applied as a discount in computeCosts based on components taken.
+    if (property === "HDB" && newResale === "new") return `HDB_BTO_NOOCS_${unitType}`;
     if (property === "HDB") return `HDB_Resale_${unitType}`;
     if (property === "Condo") return `Condo_${newResale}_${unitType}`;
     if (property === "EC") return `EC_${newResale}_${unitType}`;
     return null;
-  }, [property, newResale, unitType, ocs, ocsFlooring, ocsDoors]);
+  }, [property, newResale, unitType]);
 
   const computed = useMemo((): ComputedState => {
     // Landed branch
@@ -485,18 +485,33 @@ export function CostGuide() {
 
     let adjusted = base;
 
-    // OCS partial adjustments
+    // OCS discount (HDB BTO only). Base anchor is NOOCS (full private scope);
+    // when HDB pre-installs components, the private renovator does less work.
+    //   Full OCS (flooring + doors + sanitary)  → -20%
+    //   Flooring only                            → -8%  (flooring is the biggest OCS item)
+    //   Doors + sanitary only                    → -5%  (smaller components)
+    //   No OCS                                   →  0%
     if (property === "HDB" && newResale === "new" && ocs === "yes") {
-      if (ocsFlooring && !ocsDoors) {
-        const adj = base * 0.03;
-        adjusted += adj;
-        breakdown.push({ section: "Adjustments", label: "OCS: Flooring only", sub: "Doors + sanitary still need private work (+3%)", value: adj, kind: "add" });
+      let discountPct = 0;
+      let discountLabel = "";
+      let discountSub = "";
+      if (ocsFlooring && ocsDoors) {
+        discountPct = 20;
+        discountLabel = "OCS discount: Full package (flooring + doors + sanitary)";
+        discountSub = "HDB handles all three components, private renovator does not need to touch them";
+      } else if (ocsFlooring && !ocsDoors) {
+        discountPct = 8;
+        discountLabel = "OCS discount: Flooring only";
+        discountSub = "HDB handles flooring, private renovator still does doors + sanitary";
       } else if (!ocsFlooring && ocsDoors) {
-        const adj = base * 0.05;
-        adjusted += adj;
-        breakdown.push({ section: "Adjustments", label: "OCS: Doors + sanitary only", sub: "Flooring still needs private work (+5%)", value: adj, kind: "add" });
-      } else if (ocsFlooring && ocsDoors) {
-        breakdown.push({ section: "Adjustments", label: "OCS: Full (flooring + doors + sanitary)", sub: "Anchor already accounts for this - no adjustment", value: 0, kind: "neutral" });
+        discountPct = 5;
+        discountLabel = "OCS discount: Doors + sanitary only";
+        discountSub = "HDB handles doors + sanitary, private renovator still does flooring";
+      }
+      if (discountPct > 0) {
+        const adj = (base * discountPct) / 100;
+        adjusted -= adj;
+        breakdown.push({ section: "Adjustments", label: discountLabel, sub: `${discountSub} (-${discountPct}%)`, value: adj, kind: "sub" });
       }
     }
 
@@ -1739,12 +1754,9 @@ function MathRow({ label, sub, value, total, valueColor }: { label: string; sub?
 // ═══════════════════════════════════════════════════════════
 // LABELS + ROUTING HELPERS
 // ═══════════════════════════════════════════════════════════
-function anchorLabel(property: Property, newResale: NewResale, unitType: string, ocs: OCS | null, ocsFlooring: boolean, ocsDoors: boolean) {
+function anchorLabel(property: Property, newResale: NewResale, unitType: string, _ocs: OCS | null, _ocsFlooring: boolean, _ocsDoors: boolean) {
   if (property === "HDB") {
-    if (newResale === "new") {
-      if (ocs === "yes" && (ocsFlooring || ocsDoors)) return `${unitType} HDB BTO with OCS`;
-      return `${unitType} HDB BTO (no OCS)`;
-    }
+    if (newResale === "new") return `${unitType} HDB BTO (full private scope)`;
     return `${unitType} HDB Resale`;
   }
   if (property === "Condo") return `${unitType} Condo ${newResale === "new" ? "New Launch" : "Resale"}`;
@@ -2242,7 +2254,11 @@ async function openCostGuidePdf(d: PdfData) {
 function propertyLine(d: PdfData): string {
   if (!d.property) return "-";
   if (d.property === "HDB" && d.newResale === "new") {
-    const ocsLabel = d.ocs === "yes" && (d.ocsFlooring || d.ocsDoors) ? "With OCS" : "No OCS";
+    const ocsLabel =
+      d.ocs === "yes" && d.ocsFlooring && d.ocsDoors ? "Full OCS"
+      : d.ocs === "yes" && d.ocsFlooring ? "OCS: Flooring"
+      : d.ocs === "yes" && d.ocsDoors ? "OCS: Doors + sanitary"
+      : "No OCS";
     return `HDB · BTO (new) · ${ocsLabel}`;
   }
   if (d.property === "HDB") return "HDB · Resale";
