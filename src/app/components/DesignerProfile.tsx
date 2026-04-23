@@ -1266,7 +1266,7 @@ export function BioText() {
       <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3 mb-4">
         Why Choose {name}?
       </h2>
-      <p className="text-[16px] md:text-[18px] leading-[1.8] max-w-[720px]" style={{ fontFamily: sans, color: C.gray }}>
+      <p className="text-[16px] md:text-[18px] leading-[1.8]" style={{ fontFamily: sans, color: C.gray }}>
         {bioContent}
       </p>
     </FadeIn>
@@ -3200,15 +3200,44 @@ function Breadcrumbs() {
 }
 
 /* ─── KEY METRICS ─── */
+// Extract all dollar amounts from a budget string and collapse them into a
+// single floor-to-ceiling range (e.g. "$30K-$50K - Essential, $50K-$80K - Full"
+// → "$30K - $80K"). Returns the original string if no amounts were found.
+function collapseBudgetRange(raw: string): string {
+  if (!raw) return raw;
+  const matches = raw.match(/\$\s*[\d,]+(?:\.\d+)?\s*[Kk]?/g);
+  if (!matches || matches.length < 2) return raw;
+  const parse = (tok: string): { num: number; hasK: boolean } => {
+    const hasK = /k/i.test(tok);
+    const n = Number(tok.replace(/[^\d.]/g, "")) || 0;
+    return { num: hasK ? n * 1000 : n, hasK };
+  };
+  const parsed = matches.map(parse);
+  const minNum = Math.min(...parsed.map((p) => p.num));
+  const maxNum = Math.max(...parsed.map((p) => p.num));
+  const fmt = (n: number) => {
+    if (n >= 1000 && n % 1000 === 0) return `$${Math.round(n / 1000)}K`;
+    if (n >= 1000) return `$${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
+    return `$${n.toLocaleString()}`;
+  };
+  return `${fmt(minNum)} – ${fmt(maxNum)}`;
+}
+
 export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const s = ctx?.profile?.stats;
   const projectCount = ctx?.projects?.length ?? 0;
   const bInfo = ctx?.businessInfo ?? [];
   const yearsEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("year"));
   const yearsVal = String(s?.years ?? yearsEntry?.value ?? "10+");
   const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
-  const budgetVal = budgetEntry?.value?.trim() || "$30k – $120k";
+  const budgetRaw = budgetEntry?.value?.trim() || "$30k – $120k";
+  // On the public page, collapse multi-segment budget strings (e.g.
+  // "$30K-$50K - Essential Renovation, $50K-$80K - Full Renovation") into a
+  // single floor-to-ceiling range. In edit mode keep the raw string so the
+  // admin still sees and can edit the full breakdown.
+  const budgetVal = editCtx ? budgetRaw : collapseBudgetRange(budgetRaw);
 
   // Prefer Google rating when available
   const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
@@ -3227,14 +3256,35 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
     businessInfoLabel?: string;
   };
 
+  // When we have Google data, show the rating. Otherwise swap the slot for the
+  // firm's Services list so the card isn't a dead placeholder.
+  const servicesEntry = bInfo.find((b: any) => b.label === "Services");
+  const servicesList = servicesEntry?.value
+    ? String(servicesEntry.value)
+        .split(/\s*\u00b7\s*|,\s*(?![^()]*\))/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+    : [];
+
   const metrics: Metric[] = [
-    {
-      value: googleRating ? String(googleRating) : (s?.rating || "4.9"),
-      valuePath: undefined,
-      suffix: "/5.0",
-      label: "Average Rating",
-      icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#FFA929" /></svg>,
-    },
+    hasGoogle
+      ? {
+          value: googleRating ? String(googleRating) : (s?.rating || "4.9"),
+          valuePath: undefined,
+          suffix: "/5.0",
+          label: "Average Rating",
+          icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="#FFA929" /></svg>,
+        }
+      : {
+          value: servicesList.length ? servicesList.join(", ") : "—",
+          valuePath: undefined,
+          suffix: "",
+          label: "Services",
+          // Same compact treatment we use on the Budget Range card so multiple
+          // service names fit without awkward line breaks.
+          valueClassName: "text-[16px] md:text-[18px] font-normal leading-snug tracking-tight",
+          icon: <svg className="size-[20px]" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>,
+        },
     {
       value: projectCount > 0 ? String(projectCount) : "50+",
       valuePath: undefined,
@@ -3997,6 +4047,24 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
         );
       }
     }
+    // Render Portfolio / Website URLs as clickable links with the http(s)://
+    // and "www." prefix stripped from the visible text.
+    if (row.label === "Portfolio" && !editCtx && typeof row.value === "string" && /^https?:\/\//i.test(row.value)) {
+      const display = row.value.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "");
+      return (
+        <p className="text-[15px] md:text-[16px] font-medium leading-[1.4] mt-1" style={{ fontFamily: sans }}>
+          <a
+            href={row.value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+            style={{ color: C.black }}
+          >
+            {display}
+          </a>
+        </p>
+      );
+    }
     return (
       <p
         className="text-[15px] md:text-[16px] font-medium leading-[1.4] mt-1"
@@ -4023,7 +4091,7 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
                 className="text-[11px] font-semibold uppercase tracking-[0.1em]"
                 style={{ fontFamily: sans, color: C.grayLight }}
               >
-                {row.label}
+                {row.label === "Portfolio" ? "Website" : row.label}
               </p>
               {renderValue(row)}
             </div>
@@ -4229,7 +4297,7 @@ export function DesignerProfile() {
             </div>
 
             {/* 5. Bio */}
-            <div className="mt-16 md:mt-24 lg:max-w-[768px]">
+            <div className="mt-16 md:mt-24">
               <BioText />
             </div>
 
