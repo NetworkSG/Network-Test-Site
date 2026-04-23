@@ -45,14 +45,15 @@ export function ProjectSubmissionPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (!firmEmail) {
-      setSubmitError("This firm has no registered email on file. Contact us to update it.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
     setSubmitting(true);
     try {
-      await submitOnboarding({ variant: "project-only", project, contactEmail: firmEmail });
+      await submitOnboarding({
+        variant: "project-only",
+        project,
+        firmName,
+        airtableRecordId: firmRecordId,
+        ...(firmEmail ? { contactEmail: firmEmail } : {}),
+      });
       setDone(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {

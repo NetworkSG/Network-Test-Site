@@ -2095,12 +2095,41 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
         await updateAirtableFirmProfile(studio.airtableRecordId, studio, email);
       }
     } else {
-      if (!email) return c.json({ error: "Contact email is required" }, 400);
-      const existing = await findDesignerByEmail(email);
-      if (!existing) {
-        return c.json({ error: "No firm found for this email." }, 404);
+      // Project-only submissions attach to a firm picked from the Airtable
+      // dropdown. We identify the firm by its name (and record ID if the
+      // client passes one) — no email match required. If no designer row
+      // exists yet for that firm we create an inactive stub so the project
+      // has somewhere to land; it'll be adopted when the firm onboards.
+      const submittedFirmName = String(body.firmName || "").trim().slice(0, 200);
+      const submittedRecordId = String(body.airtableRecordId || "").trim().slice(0, 80);
+      if (!submittedFirmName) return c.json({ error: "Firm name is required" }, 400);
+
+      const sb = getDesignerSupabase();
+      const { data: matchByName } = await sb
+        .from("designers")
+        .select("slug, data")
+        .ilike("name", submittedFirmName)
+        .limit(1)
+        .maybeSingle();
+
+      let slug: string;
+      if (matchByName) {
+        slug = matchByName.slug;
+      } else {
+        slug = await ensureUniqueSlug(submittedFirmName);
+        await saveDesignerProfile(slug, {
+          name: submittedFirmName,
+          slug,
+          ...(email ? { contactEmail: email } : {}),
+          ...(submittedRecordId ? { airtableRecordId: submittedRecordId } : {}),
+          active: false,
+          verified: false,
+          submittedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
       }
-      const slug = existing.slug;
+
       const current = await getDesignerSection(slug, "projects");
       const list = Array.isArray(current) ? current : [];
       list.push(pendingProject);

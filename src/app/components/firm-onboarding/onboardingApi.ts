@@ -98,6 +98,8 @@ export interface OnboardingPayload {
   studio?: StudioInfo;
   project: ProjectSubmission;
   contactEmail?: string;
+  firmName?: string;
+  airtableRecordId?: string;
 }
 
 export type DrivePreview =
