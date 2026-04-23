@@ -5149,36 +5149,17 @@ function extractDriveFolderId(url: string): string | null {
   return null;
 }
 
-// Resize raw image bytes to a max width of 720 px (preserves aspect).
-// Uses imagescript, a pure-WASM decoder/encoder that runs in Deno Deploy.
-// Returns the resized JPEG bytes, or the original bytes if decode fails.
-async function resizeImageTo720(bytes: Uint8Array, contentType: string): Promise<{ bytes: Uint8Array; contentType: string }> {
-  try {
-    // @ts-ignore — imported at runtime from deno.land
-    const { Image } = await import("https://deno.land/x/imagescript@1.2.15/mod.ts");
-    const img = await Image.decode(bytes);
-    const w = img.width;
-    if (w <= 720) return { bytes, contentType };
-    const h = Math.round(img.height * (720 / w));
-    img.resize(720, h);
-    const jpeg = await img.encodeJPEG(85);
-    return { bytes: new Uint8Array(jpeg), contentType: "image/jpeg" };
-  } catch (err) {
-    console.log("resizeImageTo720 skip:", err instanceof Error ? err.message : String(err));
-    return { bytes, contentType };
-  }
-}
-
-// Fetch a public Google Drive folder, download every image inside (cap 25),
-// resize each to 720 px wide, upload to our Supabase storage, return URLs.
+// Fetch a public Google Drive folder, mirror every image inside (cap 25)
+// into our Supabase storage, return the public URLs. Uses Drive's pre-sized
+// thumbnail endpoint (w1600 JPEG) so we don't decode/resize in the function
+// — full-res decoding blew past Deno Deploy's CPU/memory budget.
 async function mirrorDriveFolder(folderUrl: string): Promise<string[]> {
   const apiKey = Deno.env.get("GOOGLE_API_KEY");
   if (!apiKey) { console.log("mirrorDriveFolder: GOOGLE_API_KEY not set"); return []; }
   const folderId = extractDriveFolderId(folderUrl);
   if (!folderId) return [];
   try {
-    // List image files directly under the folder. Drive API v3.
-    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id,name,mimeType,size)")}&pageSize=25&key=${apiKey}`;
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id,name,mimeType)")}&pageSize=25&key=${apiKey}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) {
       console.log("mirrorDriveFolder list error:", listRes.status, (await listRes.text().catch(() => "")).slice(0, 200));
@@ -5191,7 +5172,7 @@ async function mirrorDriveFolder(folderUrl: string): Promise<string[]> {
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const out: string[] = new Array(files.length);
 
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 2;
     let cursor = 0;
     async function worker() {
       while (true) {
@@ -5199,21 +5180,20 @@ async function mirrorDriveFolder(folderUrl: string): Promise<string[]> {
         if (i >= files.length) break;
         const f = files[i];
         try {
-          const dlUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${apiKey}`;
+          // Drive serves a JPEG thumbnail at any requested width — no decode
+          // needed. w1600 is large enough for gallery quality.
+          const thumbUrl = `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`;
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 20000);
-          const res = await fetch(dlUrl, { signal: controller.signal });
+          const timeout = setTimeout(() => controller.abort(), 15000);
+          const res = await fetch(thumbUrl, { signal: controller.signal, redirect: "follow" });
           clearTimeout(timeout);
           if (!res.ok) { out[i] = ""; continue; }
           const raw = new Uint8Array(await res.arrayBuffer());
           if (raw.byteLength < 100 || raw.byteLength > MAX_IMAGE_SIZE_BYTES) { out[i] = ""; continue; }
-          const inputType = f.mimeType || res.headers.get("content-type") || "image/jpeg";
-          const resized = await resizeImageTo720(raw, inputType);
-          const ext = (resized.contentType.split("/")[1] || "jpg").replace(/[^a-z0-9]/gi, "");
-          const filePath = `drive/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+          const filePath = `drive/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
           const { error } = await supabaseAdmin.storage
             .from(DESIGNER_BUCKET_NAME)
-            .upload(filePath, resized.bytes, { contentType: resized.contentType, upsert: false });
+            .upload(filePath, raw, { contentType: "image/jpeg", upsert: false });
           if (error) { console.log("mirrorDriveFolder upload:", error.message); out[i] = ""; continue; }
           out[i] = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
         } catch (err) {
