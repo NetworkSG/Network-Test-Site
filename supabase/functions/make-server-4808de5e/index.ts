@@ -1944,11 +1944,12 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
 
     const now = new Date().toISOString();
     // Image ingestion. Two sources:
-    //   1. Inbound image URLs already passed in by the client (project-import
-    //      via Qanvast → project.images). Mirrored as-is to our storage.
+    //   1. Inbound image URLs from the client (project-import via Qanvast →
+    //      project.images). Mirrored as-is to our storage.
     //   2. A Google Drive folder link in driveUrl (firm-onboarding project
-    //      form). We expand it via Drive API, resize every image to 720 px
-    //      wide, and upload the results to our storage.
+    //      form). We list the folder via Drive API and use Drive's public
+    //      thumbnail URLs directly — mirroring full-res photos inside the
+    //      edge function hits Deno Deploy's WORKER_RESOURCE_LIMIT.
     const inboundImagesPre: string[] = Array.isArray(project.images) ? project.images.slice(0, 40).map(String) : [];
     const inboundDriveUrl = String(project.driveUrl || "");
     const isDriveFolder = /drive\.google\.com/i.test(inboundDriveUrl) && !!extractDriveFolderId(inboundDriveUrl);
@@ -1956,7 +1957,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     if (inboundImagesPre.length) {
       mirroredImagesPre = await mirrorProjectImages(inboundImagesPre);
     } else if (isDriveFolder) {
-      mirroredImagesPre = await mirrorDriveFolder(inboundDriveUrl);
+      mirroredImagesPre = await listDriveFolderImageUrls(inboundDriveUrl);
     }
     const pendingProject = {
       name: String(project.title || "").slice(0, 200),
@@ -5149,63 +5150,27 @@ function extractDriveFolderId(url: string): string | null {
   return null;
 }
 
-// Fetch a public Google Drive folder, mirror every image inside (cap 25)
-// into our Supabase storage, return the public URLs. Uses Drive's pre-sized
-// thumbnail endpoint (w1600 JPEG) so we don't decode/resize in the function
-// — full-res decoding blew past Deno Deploy's CPU/memory budget.
-async function mirrorDriveFolder(folderUrl: string): Promise<string[]> {
+// List the images in a public Google Drive folder and return their direct
+// thumbnail URLs. We don't download/mirror them inside the submit handler
+// — that was hitting Deno Deploy's WORKER_RESOURCE_LIMIT on folders with
+// several full-res photos. Drive serves these URLs publicly at any width.
+async function listDriveFolderImageUrls(folderUrl: string): Promise<string[]> {
   const apiKey = Deno.env.get("GOOGLE_API_KEY");
-  if (!apiKey) { console.log("mirrorDriveFolder: GOOGLE_API_KEY not set"); return []; }
+  if (!apiKey) { console.log("listDriveFolderImageUrls: GOOGLE_API_KEY not set"); return []; }
   const folderId = extractDriveFolderId(folderUrl);
   if (!folderId) return [];
   try {
-    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id,name,mimeType)")}&pageSize=25&key=${apiKey}`;
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id)")}&pageSize=25&key=${apiKey}`;
     const listRes = await fetch(listUrl);
     if (!listRes.ok) {
-      console.log("mirrorDriveFolder list error:", listRes.status, (await listRes.text().catch(() => "")).slice(0, 200));
+      console.log("listDriveFolderImageUrls list error:", listRes.status, (await listRes.text().catch(() => "")).slice(0, 200));
       return [];
     }
     const listJson = await listRes.json().catch(() => ({}));
     const files: any[] = Array.isArray(listJson.files) ? listJson.files.slice(0, 25) : [];
-    if (!files.length) return [];
-
-    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const out: string[] = new Array(files.length);
-
-    const CONCURRENCY = 2;
-    let cursor = 0;
-    async function worker() {
-      while (true) {
-        const i = cursor++;
-        if (i >= files.length) break;
-        const f = files[i];
-        try {
-          // Drive serves a JPEG thumbnail at any requested width — no decode
-          // needed. w1600 is large enough for gallery quality.
-          const thumbUrl = `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`;
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 15000);
-          const res = await fetch(thumbUrl, { signal: controller.signal, redirect: "follow" });
-          clearTimeout(timeout);
-          if (!res.ok) { out[i] = ""; continue; }
-          const raw = new Uint8Array(await res.arrayBuffer());
-          if (raw.byteLength < 100 || raw.byteLength > MAX_IMAGE_SIZE_BYTES) { out[i] = ""; continue; }
-          const filePath = `drive/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
-          const { error } = await supabaseAdmin.storage
-            .from(DESIGNER_BUCKET_NAME)
-            .upload(filePath, raw, { contentType: "image/jpeg", upsert: false });
-          if (error) { console.log("mirrorDriveFolder upload:", error.message); out[i] = ""; continue; }
-          out[i] = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
-        } catch (err) {
-          console.log("mirrorDriveFolder file error:", err instanceof Error ? err.message : String(err));
-          out[i] = "";
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
-    return out.filter(Boolean);
+    return files.map((f: any) => `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`);
   } catch (err) {
-    console.log("mirrorDriveFolder error:", err instanceof Error ? err.message : String(err));
+    console.log("listDriveFolderImageUrls error:", err instanceof Error ? err.message : String(err));
     return [];
   }
 }
