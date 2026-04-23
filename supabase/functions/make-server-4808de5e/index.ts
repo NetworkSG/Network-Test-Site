@@ -5168,6 +5168,73 @@ app.post("/make-server-4808de5e/firm-onboarding/drive-folder-preview", async (c)
   }
 });
 
+// Download one Drive image by file ID, resize/compress, upload to our
+// Supabase storage, return the public URL. The client calls this once per
+// image so each invocation has its own CPU/memory budget — submitting the
+// whole folder in one request was hitting WORKER_RESOURCE_LIMIT.
+app.post("/make-server-4808de5e/firm-onboarding/ingest-drive-image", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ ok: false, message: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ ok: false, message: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => ({}));
+    const fileId = typeof body?.fileId === "string" ? body.fileId.trim() : "";
+    if (!/^[a-zA-Z0-9_-]{8,}$/.test(fileId)) return c.json({ ok: false, message: "Invalid fileId" }, 400);
+
+    const apiKey = Deno.env.get("GOOGLE_API_KEY");
+    if (!apiKey) return c.json({ ok: false, message: "Drive API not configured" }, 500);
+
+    const dlUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const res = await fetch(dlUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return c.json({ ok: false, message: `Drive returned ${res.status}` }, 400);
+    const raw = new Uint8Array(await res.arrayBuffer());
+    if (raw.byteLength < 100 || raw.byteLength > MAX_IMAGE_SIZE_BYTES) {
+      return c.json({ ok: false, message: "File too large or empty" }, 400);
+    }
+    const inputType = res.headers.get("content-type") || "image/jpeg";
+    const compressed = await compressImageForWeb(raw, inputType);
+
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const filePath = `drive/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.jpg`;
+    const { error } = await supabaseAdmin.storage
+      .from(DESIGNER_BUCKET_NAME)
+      .upload(filePath, compressed.bytes, { contentType: compressed.contentType, upsert: false });
+    if (error) { console.log("ingest-drive-image upload:", error.message); return c.json({ ok: false, message: "Upload failed" }, 500); }
+
+    return c.json({
+      ok: true,
+      url: `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`,
+    });
+  } catch (err: any) {
+    console.log("ingest-drive-image error:", err);
+    return c.json({ ok: false, message: "Ingest failed" }, 500);
+  }
+});
+
+// Resize to max 1600px wide + JPEG@82, using imagescript. One image per
+// invocation stays well within Deno Deploy's CPU/memory budget.
+async function compressImageForWeb(bytes: Uint8Array, contentType: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  try {
+    // @ts-ignore — imported at runtime from deno.land
+    const { Image } = await import("https://deno.land/x/imagescript@1.2.17/mod.ts");
+    const img = await Image.decode(bytes);
+    if (img.width > 1600) {
+      const h = Math.round(img.height * (1600 / img.width));
+      img.resize(1600, h);
+    }
+    const jpeg = await img.encodeJPEG(82);
+    return { bytes: new Uint8Array(jpeg), contentType: "image/jpeg" };
+  } catch (err) {
+    console.log("compressImageForWeb skip:", err instanceof Error ? err.message : String(err));
+    return { bytes, contentType };
+  }
+}
+
 // Extract a Google Drive folder ID from any shape of Drive link.
 function extractDriveFolderId(url: string): string | null {
   if (!url) return null;
@@ -5210,7 +5277,10 @@ async function listDriveFolderImageUrls(folderUrl: string): Promise<string[]> {
 
 // Bounded-concurrency mirror of external images; returns final URLs in order.
 // Failed mirrors fall back to the original URL so the project doesn't lose photos.
+// URLs already hosted on our own Supabase storage are passed through as-is —
+// the client ingests Drive images one-by-one, so they're already in our bucket.
 async function mirrorProjectImages(urls: string[]): Promise<string[]> {
+  const ownPrefix = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/`;
   const out: string[] = new Array(urls.length);
   const CONCURRENCY = 3;
   let cursor = 0;
@@ -5218,8 +5288,10 @@ async function mirrorProjectImages(urls: string[]): Promise<string[]> {
     while (true) {
       const idx = cursor++;
       if (idx >= urls.length) break;
-      const mirrored = await fetchAndUploadImage(urls[idx]);
-      out[idx] = mirrored || urls[idx];
+      const url = urls[idx];
+      if (url.startsWith(ownPrefix)) { out[idx] = url; continue; }
+      const mirrored = await fetchAndUploadImage(url);
+      out[idx] = mirrored || url;
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker));

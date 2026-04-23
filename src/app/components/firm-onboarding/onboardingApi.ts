@@ -91,6 +91,7 @@ export interface ProjectSubmission {
   style: string;
   worksIncluded: string[];
   driveUrl: string;
+  images?: string[];
 }
 
 export interface OnboardingPayload {
@@ -105,6 +106,18 @@ export interface OnboardingPayload {
 export type DrivePreview =
   | { ok: true; count: number; images: { id: string; name: string; thumbnailUrl: string }[] }
   | { ok: false; message: string };
+
+// Download one Drive image through the server, which compresses and uploads
+// it to our Supabase storage. Returns the stored public URL or null on error.
+export async function ingestDriveImage(fileId: string): Promise<string | null> {
+  const res = await fetch(`${API}/firm-onboarding/ingest-drive-image`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fileId }),
+  });
+  const json = await res.json().catch(() => ({}));
+  return res.ok && json?.ok && typeof json.url === "string" ? json.url : null;
+}
 
 export async function previewDriveFolder(url: string): Promise<DrivePreview> {
   const res = await fetch(`${API}/firm-onboarding/drive-folder-preview`, {

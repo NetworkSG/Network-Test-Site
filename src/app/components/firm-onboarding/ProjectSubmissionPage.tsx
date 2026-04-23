@@ -3,7 +3,7 @@ import { C, sans, FadeIn } from "../homepage/v8/primitives";
 import { OnboardingShell, OnboardingCard, PrimaryButton } from "./OnboardingShell";
 import { ProjectStep, validateProject } from "./ProjectStep";
 import { SuccessScreen } from "./SuccessScreen";
-import { submitOnboarding, ProjectSubmission } from "./onboardingApi";
+import { submitOnboarding, ProjectSubmission, previewDriveFolder, ingestDriveImage } from "./onboardingApi";
 import { FirmCombobox } from "./FirmCombobox";
 
 const initialProject: ProjectSubmission = {
@@ -28,6 +28,7 @@ export function ProjectSubmissionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
+  const [ingestStatus, setIngestStatus] = useState<{ done: number; total: number } | null>(null);
 
   const firmError = submitAttempted && !firmRecordId ? "Pick your firm from the list" : "";
 
@@ -47,9 +48,45 @@ export function ProjectSubmissionPage() {
     }
     setSubmitting(true);
     try {
+      // Ingest each Drive image through the server one-by-one: fetch → compress
+      // → upload to our storage. Running them per-request keeps each edge
+      // function invocation well under Deno Deploy's WORKER_RESOURCE_LIMIT.
+      let storedImageUrls: string[] = [];
+      const preview = await previewDriveFolder(project.driveUrl.trim());
+      if (!preview.ok) {
+        setSubmitError(preview.message || "Couldn't read the Drive folder.");
+        setSubmitting(false);
+        return;
+      }
+      const fileIds = preview.images.map((im) => im.id);
+      if (fileIds.length) {
+        setIngestStatus({ done: 0, total: fileIds.length });
+        const CONCURRENCY = 3;
+        const results: (string | null)[] = new Array(fileIds.length);
+        let cursor = 0;
+        let completed = 0;
+        const worker = async () => {
+          while (true) {
+            const i = cursor++;
+            if (i >= fileIds.length) break;
+            results[i] = await ingestDriveImage(fileIds[i]);
+            completed++;
+            setIngestStatus({ done: completed, total: fileIds.length });
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, fileIds.length) }, worker));
+        storedImageUrls = results.filter((u): u is string => !!u);
+        if (!storedImageUrls.length) {
+          setSubmitError("Couldn't process any of the Drive images. Check folder sharing is 'Anyone with the link'.");
+          setSubmitting(false);
+          setIngestStatus(null);
+          return;
+        }
+      }
+
       await submitOnboarding({
         variant: "project-only",
-        project,
+        project: { ...project, images: storedImageUrls },
         firmName,
         airtableRecordId: firmRecordId,
         ...(firmEmail ? { contactEmail: firmEmail } : {}),
@@ -59,6 +96,7 @@ export function ProjectSubmissionPage() {
     } catch (err: any) {
       setSubmitError(err?.message || "Submission failed. Please try again.");
     }
+    setIngestStatus(null);
     setSubmitting(false);
   };
 
@@ -115,8 +153,19 @@ export function ProjectSubmissionPage() {
       )}
 
       <div className="mt-6 flex items-center justify-end gap-3">
+        {ingestStatus && (
+          <span style={{ fontSize: 12, color: C.grayLight, fontFamily: sans }}>
+            Uploading photos {ingestStatus.done}/{ingestStatus.total}…
+          </span>
+        )}
         <PrimaryButton
-          label={submitting ? "Submitting…" : "Submit Project"}
+          label={
+            ingestStatus
+              ? `Uploading ${ingestStatus.done}/${ingestStatus.total}…`
+              : submitting
+                ? "Submitting…"
+                : "Submit Project"
+          }
           onClick={handleSubmit}
           disabled={submitting}
         />
