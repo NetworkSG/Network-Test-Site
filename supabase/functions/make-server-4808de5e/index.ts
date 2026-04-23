@@ -214,6 +214,8 @@ const RATE_LIMITS: Record<string, number> = {
   "saved-projects": 15,     // 15 saved project operations per minute
   // --- Callbacks (external services) ---
   "callback": 10,           // 10 callback deliveries per minute
+  // --- Drive folder ingest (per-image, one request each) ---
+  "drive-ingest": 60,       // 60 images per minute — supports a 40-image folder with retries
   default: 20,              // 20 requests per minute for everything else
 };
 
@@ -5176,7 +5178,7 @@ app.post("/make-server-4808de5e/firm-onboarding/ingest-drive-image", async (c) =
   try {
     if (!(await verifyAuth(c))) return c.json({ ok: false, message: "Unauthorized" }, 401);
     const ip = getClientIp(c);
-    const rl = checkRateLimit(ip, "default");
+    const rl = checkRateLimit(ip, "drive-ingest");
     if (!rl.allowed) return c.json({ ok: false, message: "Too many requests" }, 429);
 
     const body = await c.req.json().catch(() => ({}));
