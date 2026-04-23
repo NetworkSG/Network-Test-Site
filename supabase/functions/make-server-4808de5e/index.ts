@@ -1943,11 +1943,21 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     });
 
     const now = new Date().toISOString();
-    // Mirror any external image URLs (e.g. Qanvast CDN from project-import) into our storage.
+    // Image ingestion. Two sources:
+    //   1. Inbound image URLs already passed in by the client (project-import
+    //      via Qanvast → project.images). Mirrored as-is to our storage.
+    //   2. A Google Drive folder link in driveUrl (firm-onboarding project
+    //      form). We expand it via Drive API, resize every image to 720 px
+    //      wide, and upload the results to our storage.
     const inboundImagesPre: string[] = Array.isArray(project.images) ? project.images.slice(0, 40).map(String) : [];
-    const mirroredImagesPre = (typeof project === "object" && inboundImagesPre.length)
-      ? await mirrorProjectImages(inboundImagesPre)
-      : [];
+    const inboundDriveUrl = String(project.driveUrl || "");
+    const isDriveFolder = /drive\.google\.com/i.test(inboundDriveUrl) && !!extractDriveFolderId(inboundDriveUrl);
+    let mirroredImagesPre: string[] = [];
+    if (inboundImagesPre.length) {
+      mirroredImagesPre = await mirrorProjectImages(inboundImagesPre);
+    } else if (isDriveFolder) {
+      mirroredImagesPre = await mirrorDriveFolder(inboundDriveUrl);
+    }
     const pendingProject = {
       name: String(project.title || "").slice(0, 200),
       meta: buildProjectMeta(project),
@@ -5081,6 +5091,142 @@ async function fetchAndUploadImage(sourceUrl: string): Promise<string> {
   } catch (err) {
     console.log("fetchAndUploadImage error:", err instanceof Error ? err.message : String(err));
     return "";
+  }
+}
+
+// Light preview for the firm-onboarding project form — list the images in a
+// Drive folder without downloading/mirroring them. Returns thumbnail URLs so
+// the client can show a grid before the firm submits.
+app.post("/make-server-4808de5e/firm-onboarding/drive-folder-preview", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ ok: false, message: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ ok: false, message: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => ({}));
+    const url = typeof body?.url === "string" ? body.url.trim() : "";
+    const apiKey = Deno.env.get("GOOGLE_API_KEY");
+    if (!apiKey) return c.json({ ok: false, message: "Drive API not configured" }, 500);
+    const folderId = extractDriveFolderId(url);
+    if (!folderId) return c.json({ ok: false, message: "Paste a Google Drive folder link" }, 400);
+
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id,name,mimeType,thumbnailLink,size)")}&pageSize=40&key=${apiKey}`;
+    const res = await fetch(listUrl);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const msg = res.status === 403 || res.status === 404
+        ? "Folder is not publicly shared. Set access to 'Anyone with the link'."
+        : `Drive API error (${res.status})`;
+      console.log("drive-folder-preview:", res.status, text.slice(0, 200));
+      return c.json({ ok: false, message: msg }, 400);
+    }
+    const json = await res.json().catch(() => ({}));
+    const files: any[] = Array.isArray(json.files) ? json.files : [];
+    const images = files.slice(0, 40).map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      // thumbnailLink from Drive is ~200px by default; bump to 720 via the =s720 suffix.
+      thumbnailUrl: f.thumbnailLink ? String(f.thumbnailLink).replace(/=s\d+$/, "=s720") : `https://drive.google.com/thumbnail?id=${f.id}&sz=w720`,
+    }));
+    return c.json({ ok: true, count: images.length, images });
+  } catch (err: any) {
+    console.log("drive-folder-preview error:", err);
+    return c.json({ ok: false, message: "Preview failed" }, 500);
+  }
+});
+
+// Extract a Google Drive folder ID from any shape of Drive link.
+function extractDriveFolderId(url: string): string | null {
+  if (!url) return null;
+  // /drive/folders/<ID>  or  /folders/<ID>
+  const m1 = url.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (m1) return m1[1];
+  // ?id=<ID> or /open?id=<ID>
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (m2) return m2[1];
+  return null;
+}
+
+// Resize raw image bytes to a max width of 720 px (preserves aspect).
+// Uses imagescript, a pure-WASM decoder/encoder that runs in Deno Deploy.
+// Returns the resized JPEG bytes, or the original bytes if decode fails.
+async function resizeImageTo720(bytes: Uint8Array, contentType: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  try {
+    // @ts-ignore — imported at runtime from deno.land
+    const { Image } = await import("https://deno.land/x/imagescript@1.2.15/mod.ts");
+    const img = await Image.decode(bytes);
+    const w = img.width;
+    if (w <= 720) return { bytes, contentType };
+    const h = Math.round(img.height * (720 / w));
+    img.resize(720, h);
+    const jpeg = await img.encodeJPEG(85);
+    return { bytes: new Uint8Array(jpeg), contentType: "image/jpeg" };
+  } catch (err) {
+    console.log("resizeImageTo720 skip:", err instanceof Error ? err.message : String(err));
+    return { bytes, contentType };
+  }
+}
+
+// Fetch a public Google Drive folder, download every image inside (cap 25),
+// resize each to 720 px wide, upload to our Supabase storage, return URLs.
+async function mirrorDriveFolder(folderUrl: string): Promise<string[]> {
+  const apiKey = Deno.env.get("GOOGLE_API_KEY");
+  if (!apiKey) { console.log("mirrorDriveFolder: GOOGLE_API_KEY not set"); return []; }
+  const folderId = extractDriveFolderId(folderUrl);
+  if (!folderId) return [];
+  try {
+    // List image files directly under the folder. Drive API v3.
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and mimeType contains 'image/' and trashed=false`)}&fields=${encodeURIComponent("files(id,name,mimeType,size)")}&pageSize=25&key=${apiKey}`;
+    const listRes = await fetch(listUrl);
+    if (!listRes.ok) {
+      console.log("mirrorDriveFolder list error:", listRes.status, (await listRes.text().catch(() => "")).slice(0, 200));
+      return [];
+    }
+    const listJson = await listRes.json().catch(() => ({}));
+    const files: any[] = Array.isArray(listJson.files) ? listJson.files.slice(0, 25) : [];
+    if (!files.length) return [];
+
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const out: string[] = new Array(files.length);
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    async function worker() {
+      while (true) {
+        const i = cursor++;
+        if (i >= files.length) break;
+        const f = files[i];
+        try {
+          const dlUrl = `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${apiKey}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 20000);
+          const res = await fetch(dlUrl, { signal: controller.signal });
+          clearTimeout(timeout);
+          if (!res.ok) { out[i] = ""; continue; }
+          const raw = new Uint8Array(await res.arrayBuffer());
+          if (raw.byteLength < 100 || raw.byteLength > MAX_IMAGE_SIZE_BYTES) { out[i] = ""; continue; }
+          const inputType = f.mimeType || res.headers.get("content-type") || "image/jpeg";
+          const resized = await resizeImageTo720(raw, inputType);
+          const ext = (resized.contentType.split("/")[1] || "jpg").replace(/[^a-z0-9]/gi, "");
+          const filePath = `drive/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+          const { error } = await supabaseAdmin.storage
+            .from(DESIGNER_BUCKET_NAME)
+            .upload(filePath, resized.bytes, { contentType: resized.contentType, upsert: false });
+          if (error) { console.log("mirrorDriveFolder upload:", error.message); out[i] = ""; continue; }
+          out[i] = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/${DESIGNER_BUCKET_NAME}/${filePath}`;
+        } catch (err) {
+          console.log("mirrorDriveFolder file error:", err instanceof Error ? err.message : String(err));
+          out[i] = "";
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+    return out.filter(Boolean);
+  } catch (err) {
+    console.log("mirrorDriveFolder error:", err instanceof Error ? err.message : String(err));
+    return [];
   }
 }
 

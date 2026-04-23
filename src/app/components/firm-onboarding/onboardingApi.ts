@@ -100,6 +100,21 @@ export interface OnboardingPayload {
   contactEmail?: string;
 }
 
+export type DrivePreview =
+  | { ok: true; count: number; images: { id: string; name: string; thumbnailUrl: string }[] }
+  | { ok: false; message: string };
+
+export async function previewDriveFolder(url: string): Promise<DrivePreview> {
+  const res = await fetch(`${API}/firm-onboarding/drive-folder-preview`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (res.ok && json?.ok) return { ok: true, count: json.count, images: json.images };
+  return { ok: false, message: json?.message || `Preview failed (${res.status})` };
+}
+
 export async function listAirtableFirms(): Promise<{ id: string; firmName: string; contactEmail?: string }[]> {
   const res = await fetch(`${API}/firm-onboarding/airtable-firms`, {
     headers: { Authorization: `Bearer ${publicAnonKey}` },

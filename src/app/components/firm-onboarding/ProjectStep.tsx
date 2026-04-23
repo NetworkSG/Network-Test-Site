@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { C, serif, sans } from "../homepage/v8/primitives";
 import {
   Hammer,
@@ -8,8 +9,9 @@ import {
   Droplet,
   Paintbrush,
   Lightbulb,
+  Loader2,
 } from "lucide-react";
-import { ProjectSubmission } from "./onboardingApi";
+import { ProjectSubmission, previewDriveFolder } from "./onboardingApi";
 
 const PROPERTY_TYPES = ["HDB", "Condominium", "Landed", "Commercial"];
 const SIZE_UNITS = ["sqft", "sqm", "m²"] as const;
@@ -147,6 +149,7 @@ export function ProjectStep({
           Paste a shareable link to the project folder. Make sure link access is set to <strong>Anyone with the link</strong>.
         </p>
         {errors.driveUrl && <p className="text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.driveUrl}</p>}
+        <DriveFolderPreview url={value.driveUrl} />
       </div>
 
       {/* Title */}
@@ -349,6 +352,101 @@ export function ProjectStep({
         </div>
       </div>
 
+    </div>
+  );
+}
+
+// Inline grid that previews the images in a Drive folder as the firm types
+// the URL. Debounced by 600ms; errors render inline. Image bytes aren't
+// downloaded — Drive's public thumbnail endpoint is used.
+function DriveFolderPreview({ url }: { url: string }) {
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const [images, setImages] = useState<{ id: string; name: string; thumbnailUrl: string }[]>([]);
+
+  useEffect(() => {
+    const trimmed = url.trim();
+    // Only preview when it looks like a Drive folder link.
+    const isFolder = /drive\.google\.com/i.test(trimmed) && (/\/folders\//.test(trimmed) || /[?&]id=/.test(trimmed));
+    if (!isFolder) { setStatus("idle"); setMessage(""); setImages([]); return; }
+    setStatus("loading");
+    setMessage("");
+    const t = setTimeout(async () => {
+      const res = await previewDriveFolder(trimmed);
+      if (res.ok) {
+        setStatus("ready");
+        setImages(res.images);
+        setMessage(`${res.count} image${res.count === 1 ? "" : "s"} found`);
+      } else {
+        setStatus("error");
+        setImages([]);
+        setMessage(res.message);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [url]);
+
+  if (status === "idle") return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
+        <span style={{ fontSize: 11, color: C.grayLight, fontFamily: sans, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          {status === "loading" ? "Loading preview…" : status === "error" ? "Preview unavailable" : "Preview"}
+        </span>
+        {status !== "loading" && (
+          <span style={{ fontSize: 11, color: status === "error" ? "#c14" : C.grayLight, fontFamily: sans }}>
+            {message}
+          </span>
+        )}
+      </div>
+
+      {status === "loading" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 0" }}>
+          <Loader2 size={14} className="animate-spin" style={{ color: C.grayLight }} />
+          <span style={{ fontSize: 12, color: C.grayLight, fontFamily: sans }}>Checking Drive folder…</span>
+        </div>
+      )}
+
+      {status === "ready" && images.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+            gap: 8,
+          }}
+        >
+          {images.map((img) => (
+            <div
+              key={img.id}
+              title={img.name}
+              style={{
+                aspectRatio: "1 / 1",
+                background: C.cream,
+                border: `1px solid ${C.creamBorder}`,
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <img
+                src={img.thumbnailUrl}
+                alt={img.name}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.2"; }}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
