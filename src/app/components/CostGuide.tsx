@@ -496,7 +496,7 @@ export function CostGuide() {
         adjusted += adj;
         breakdown.push({ section: "Adjustments", label: "OCS: Doors + sanitary only", sub: "Flooring still needs private work (+5%)", value: adj, kind: "add" });
       } else if (ocsFlooring && ocsDoors) {
-        breakdown.push({ section: "Adjustments", label: "OCS: Full (flooring + doors + sanitary)", sub: "Anchor already accounts for this — no adjustment", value: 0, kind: "neutral" });
+        breakdown.push({ section: "Adjustments", label: "OCS: Full (flooring + doors + sanitary)", sub: "Anchor already accounts for this - no adjustment", value: 0, kind: "neutral" });
       }
     }
 
@@ -774,7 +774,7 @@ export function CostGuide() {
                   computed,
                 });
               } catch (_) {
-                // Surface as an optimistic "submitted" regardless — PDF is
+                // Surface as an optimistic "submitted" regardless - PDF is
                 // already generated; fall through so the user isn't stuck.
               }
               setSubmitting(false);
@@ -792,7 +792,7 @@ export function CostGuide() {
 export default CostGuide;
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 0 — JOURNEY SCREENER
+// SCREEN 0 - JOURNEY SCREENER
 // ═══════════════════════════════════════════════════════════
 function Screen0({
   journey,
@@ -814,7 +814,7 @@ function Screen0({
     <div>
       <Badge>Step 1 of 5 · 30 seconds</Badge>
       <Hero>
-        See what your renovation <Em>should actually cost</Em> — before anyone quotes you.
+        See what your renovation <Em>should actually cost</Em> - before anyone quotes you.
       </Hero>
       <p style={subHeroStyle}>
         Get a cost range based on homes like yours. Plus the firm type built for your scope. Takes under 2 minutes. The real numbers come when you talk to us.
@@ -844,7 +844,7 @@ function Screen0({
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN ROUTE — for exploring / already-chose
+// SCREEN ROUTE - for exploring / already-chose
 // ═══════════════════════════════════════════════════════════
 function ScreenRoute({
   journey,
@@ -878,7 +878,7 @@ function ScreenRoute({
           <>
             <H2 style={{ marginBottom: 12 }}>You're in the inspiration phase.</H2>
             <p style={{ color: C.gray, lineHeight: 1.6, fontSize: 14 }}>
-              12+ months out, gathering ideas. The Cost Guide works best when you have a scope in mind and a real timeline. You can still run it now as a rough benchmark — just know the range will feel more real closer to your keys.
+              12+ months out, gathering ideas. The Cost Guide works best when you have a scope in mind and a real timeline. You can still run it now as a rough benchmark - just know the range will feel more real closer to your keys.
             </p>
             <div
               style={{
@@ -915,7 +915,7 @@ function ScreenRoute({
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 1 — PROPERTY
+// SCREEN 1 - PROPERTY
 // ═══════════════════════════════════════════════════════════
 function Screen1({
   property, setProperty,
@@ -970,7 +970,7 @@ function Screen1({
       {showOcs && (
         <div style={{ marginBottom: 24 }}>
           <div style={qLabelStyle}>Did you take HDB's Optional Component Scheme (OCS)?</div>
-          <div style={qHelpStyle}>OCS is HDB's package — you pay them directly for flooring, doors, and sanitary fittings. Decided at flat booking. If you don't remember choosing it, you probably didn't.</div>
+          <div style={qHelpStyle}>OCS is HDB's package - you pay them directly for flooring, doors, and sanitary fittings. Decided at flat booking. If you don't remember choosing it, you probably didn't.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <OptionCard selected={ocs === "yes"} onClick={() => setOcs("yes")} title="Yes, I took OCS" desc="HDB will hand over with some components already installed." />
             <OptionCard selected={ocs === "no"} onClick={() => setOcs("no")} title="No, I opted out" desc="Everything will be done privately after key collection." />
@@ -1064,7 +1064,7 @@ function OcsCheck({ checked, onToggle, title, desc, price }: { checked: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 2 — INTENT / LANDED WORK TYPE
+// SCREEN 2 - INTENT / LANDED WORK TYPE
 // ═══════════════════════════════════════════════════════════
 function Screen2({
   property, intent, setIntent, intentAnchors,
@@ -1091,7 +1091,7 @@ function Screen2({
       <p style={sub2Style}>
         {isLanded
           ? "Landed renovations fall into three categories under BCA and URA. Each has very different cost, timeline, and submission requirements."
-          : "This is the most important question — it shapes everything else. Don't overthink it. Pick the one closest to what you're imagining."}
+          : "This is the most important question - it shapes everything else. Don't overthink it. Pick the one closest to what you're imagining."}
       </p>
 
       {isLanded ? (
@@ -1150,7 +1150,7 @@ function Screen2({
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 3 — CONFIDENCE BOOSTERS
+// SCREEN 3 - CONFIDENCE BOOSTERS
 // ═══════════════════════════════════════════════════════════
 function Screen3({
   layout, setLayout,
@@ -1167,7 +1167,7 @@ function Screen3({
   return (
     <div>
       <H2>Want a more specific number?</H2>
-      <p style={sub2Style}>Answer any of these to tighten your range. Skip any you don't know yet — your concierge will walk through them on the call.</p>
+      <p style={sub2Style}>Answer any of these to tighten your range. Skip any you don't know yet - your concierge will walk through them on the call.</p>
 
       <div style={{ background: C.creamDark, borderRadius: 8, padding: "14px 16px", marginBottom: 20, fontSize: 13, color: C.gray, lineHeight: 1.6 }}>
         <strong style={{ color: C.black }}>The more you answer, the narrower your range.</strong> Watch the estimate update in real time.
@@ -1254,20 +1254,20 @@ function BoosterGroup<T extends string>({
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 4 — SOURCING
+// SCREEN 4 - SOURCING
 // ═══════════════════════════════════════════════════════════
 function Screen4({ sourcing, setSourcing, onBack, onContinue }: any) {
   return (
     <div>
       <H2>One last question</H2>
-      <p style={sub2Style}>This helps us route you to the right firms — and makes sure we don't match you too early.</p>
+      <p style={sub2Style}>This helps us route you to the right firms - and makes sure we don't match you too early.</p>
 
       <div style={{ marginBottom: 24 }}>
         <div style={qLabelStyle}>Have you started meeting firms yet?</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <OptionCard selected={sourcing === "none"} onClick={() => setSourcing("none")} title="Not yet" desc="Still gathering ideas before reaching out to anyone." />
           <OptionCard selected={sourcing === "1-2"} onClick={() => setSourcing("1-2")} title="Met 1–2 firms" desc="Starting to get a sense of what's out there." />
-          <OptionCard selected={sourcing === "3+"} onClick={() => setSourcing("3+")} title="Met 3+ firms" desc="Deep in it — quotes don't match, hard to decide." />
+          <OptionCard selected={sourcing === "3+"} onClick={() => setSourcing("3+")} title="Met 3+ firms" desc="Deep in it - quotes don't match, hard to decide." />
         </div>
       </div>
 
@@ -1280,7 +1280,7 @@ function Screen4({ sourcing, setSourcing, onBack, onContinue }: any) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 5 — RESULT + LEAD CAPTURE
+// SCREEN 5 - RESULT + LEAD CAPTURE
 // ═══════════════════════════════════════════════════════════
 function Screen5({
   computed, intent,
@@ -1305,7 +1305,7 @@ function Screen5({
   const landedConfCopy: Record<string, string> = {
     aa: "Range based on BCA/URA industry PSF data for A&A works in 2025–2026. The concierge call extracts site conditions, QP requirements, and scope specifics that tighten this further.",
     reconstruction: "Range based on BCA/URA industry PSF data for reconstruction works in 2025–2026, applied to your full built-up area. Soft costs cover QP, PE, URA, and BCA submissions.",
-    rebuild: "Range based on BCA/URA industry PSF data for new erection in 2025–2026. No hard ceiling — premium rebuilds with luxury finishes can exceed $1,000 PSF. Soft costs cover QP, PE, URA, BCA submissions, and contingency.",
+    rebuild: "Range based on BCA/URA industry PSF data for new erection in 2025–2026. No hard ceiling - premium rebuilds with luxury finishes can exceed $1,000 PSF. Soft costs cover QP, PE, URA, BCA submissions, and contingency.",
   };
   const confDesc: Record<string, string> = {
     high: "Based on all three scope indicators you answered. This is a narrow, defensible range.",
@@ -1315,7 +1315,7 @@ function Screen5({
   };
   const confidenceText = computed.isLanded
     ? (landedConfCopy[computed.workType || "aa"] || "Landed renovations have high variability.")
-    : `${confDesc[computed.confidence]} Your actual cost depends on specific material choices and site conditions, which we'll walk through on the call.${intent === "special" ? " No hard ceiling at this tier — scope at this level depends on design direction and material choices." : ""}`;
+    : `${confDesc[computed.confidence]} Your actual cost depends on specific material choices and site conditions, which we'll walk through on the call.${intent === "special" ? " No hard ceiling at this tier - scope at this level depends on design direction and material choices." : ""}`;
 
   return (
     <div>
@@ -1586,7 +1586,7 @@ function PhoneInput({ label, value, onChange }: { label: string; value: string; 
 }
 
 // ═══════════════════════════════════════════════════════════
-// SCREEN 6 — CONFIRMATION
+// SCREEN 6 - CONFIRMATION
 // ═══════════════════════════════════════════════════════════
 function Screen6() {
   return (
@@ -1684,7 +1684,7 @@ function MathBreakdown({ computed, intent }: { computed: ComputedState; intent: 
       <MathRow total label="Mid-point of your range" value={`$${Math.round(computed.adjustedAnchor).toLocaleString()}`} />
       <MathRow
         label={intent === "special" ? "Starting floor" : `Confidence band (±${computed.bandPct}%)`}
-        sub={intent === "special" ? "No hard ceiling — scope at this tier depends on design direction and material choices" : "Accounts for specific material choices and site conditions"}
+        sub={intent === "special" ? "No hard ceiling - scope at this tier depends on design direction and material choices" : "Accounts for specific material choices and site conditions"}
         value={intent === "special" ? `$${computed.min.toLocaleString()}+` : `$${computed.min.toLocaleString()} – $${computed.max.toLocaleString()}`}
       />
       <div style={{ fontSize: 12, color: C.grayLight, lineHeight: 1.6, paddingTop: 14, marginTop: 14, borderTop: "1px solid #f0ede6", fontStyle: "italic" }}>
@@ -1754,9 +1754,9 @@ function anchorLabel(property: Property, newResale: NewResale, unitType: string,
 
 function intentLabelFor(intent: Intent) {
   return {
-    basics: "Move-in ready basics — market median",
-    proper: "Proper home renovation — market median",
-    special: "Something special — market median",
+    basics: "Move-in ready basics - market median",
+    proper: "Proper home renovation - market median",
+    special: "Something special - market median",
   }[intent];
 }
 
@@ -1788,7 +1788,7 @@ function routeFirmType({ intent, property, layout, carpentry, finish }: { intent
   if (intent === "basics") {
     dnbDesc = "Design & build firm, leaning toward the execution end. You want some design input and custom carpentry, but the priority is efficient delivery. Right fit for practical homeowners who want structure without a full design journey.";
   } else if (intent === "special" && !hasHighCarp && !hasMajorLayout && !hasPremiumFinish) {
-    dnbDesc = "Design & build firm with strong portfolio work. You want something special without going full design consultant territory — a firm that brings design thinking while keeping the process streamlined.";
+    dnbDesc = "Design & build firm with strong portfolio work. You want something special without going full design consultant territory - a firm that brings design thinking while keeping the process streamlined.";
   } else if (intent === "proper") {
     dnbDesc = "Process, design input, and execution under one roof. One point of contact, clear pricing, balanced value. The default fit for homeowners doing a proper renovation without needing a dedicated design consultant.";
   }
@@ -1803,7 +1803,7 @@ function routeLandedFirmType(workType: string, scopePct: LandedScope | null) {
     return { type: "Design Consultant", desc: "Substantial A&A at this scope typically needs design-led firms. Fewer projects, deep involvement from concept through BCA submission, and coordination with QP and PE for structural works." };
   }
   if (workType === "reconstruction") {
-    return { type: "Design Consultant", desc: "Reconstruction requires design-led coordination — URA Envelope Control compliance, new Household Shelter, and full structural PE endorsement. A design consultant with landed experience manages this end to end." };
+    return { type: "Design Consultant", desc: "Reconstruction requires design-led coordination - URA Envelope Control compliance, new Household Shelter, and full structural PE endorsement. A design consultant with landed experience manages this end to end." };
   }
   return { type: "Design Consultant", desc: "Full rebuild means fresh URA planning permission, complete architectural and structural submissions, and design freedom at the highest level. A design consultant or specialised landed builder leads this from concept to completion." };
 }
@@ -1832,7 +1832,7 @@ interface PdfData {
   computed: ComputedState;
 }
 
-// Compose the Cost Guide PDF programmatically with jsPDF — reliable
+// Compose the Cost Guide PDF programmatically with jsPDF - reliable
 // text-based output, no HTML→canvas step (which chokes on the site's
 // Tailwind oklch colour functions).
 // Load the Network wordmark and re-render every non-transparent pixel as solid
@@ -1928,9 +1928,9 @@ async function openCostGuidePdf(d: PdfData) {
     let y = MY + logoH + 10;
     const col3W = CW / 3;
     const leadFields = [
-      { lbl: "NAME", val: d.lead.name || "—" },
-      { lbl: "CONTACT", val: d.lead.phone ? `+65 ${d.lead.phone.slice(0, 4)} ${d.lead.phone.slice(4)}` : "—" },
-      { lbl: "EMAIL", val: d.lead.email || "—" },
+      { lbl: "NAME", val: d.lead.name || "-" },
+      { lbl: "CONTACT", val: d.lead.phone ? `+65 ${d.lead.phone.slice(0, 4)} ${d.lead.phone.slice(4)}` : "-" },
+      { lbl: "EMAIL", val: d.lead.email || "-" },
     ];
     leadFields.forEach((f, i) => {
       const x = MX + col3W * i;
@@ -1961,9 +1961,9 @@ async function openCostGuidePdf(d: PdfData) {
     y += 5.5;
     const propFields: { lbl: string; val: string }[] = [
       { lbl: "PROPERTY", val: propertyLine(d) },
-      { lbl: "UNIT TYPE", val: d.unitType || "—" },
-      { lbl: "JOURNEY STAGE", val: d.journey ? JOURNEY_LABEL[d.journey] : "—" },
-      { lbl: "FIRMS MET", val: d.sourcing ? SOURCING_LABEL[d.sourcing] : "—" },
+      { lbl: "UNIT TYPE", val: d.unitType || "-" },
+      { lbl: "JOURNEY STAGE", val: d.journey ? JOURNEY_LABEL[d.journey] : "-" },
+      { lbl: "FIRMS MET", val: d.sourcing ? SOURCING_LABEL[d.sourcing] : "-" },
     ];
     const colW = CW / 2;
     propFields.forEach((f, i) => {
@@ -2000,7 +2000,7 @@ async function openCostGuidePdf(d: PdfData) {
       ? INTENT_DESC[d.intent]
       : d.landedWorkType
         ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType)
-        : "—";
+        : "-";
     const intentLines = doc.splitTextToSize(intentLine, CW);
     doc.text(intentLines, MX, y);
     y += intentLines.length * 5 + 3;
@@ -2016,9 +2016,9 @@ async function openCostGuidePdf(d: PdfData) {
     doc.line(MX, y, MX + CW, y);
     y += 5.5;
     const indFields = [
-      { lbl: "LAYOUT", val: d.layout ? LAYOUT_LABEL[d.layout] : "—" },
-      { lbl: "CARPENTRY", val: d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "—" },
-      { lbl: "FINISH", val: d.finish ? FINISH_LABEL[d.finish] : "—" },
+      { lbl: "LAYOUT", val: d.layout ? LAYOUT_LABEL[d.layout] : "-" },
+      { lbl: "CARPENTRY", val: d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "-" },
+      { lbl: "FINISH", val: d.finish ? FINISH_LABEL[d.finish] : "-" },
     ];
     const indColW = CW / indFields.length;
     indFields.forEach((f, i) => {
@@ -2140,7 +2140,7 @@ async function openCostGuidePdf(d: PdfData) {
       setText(r.valColor);
       doc.text(r.value, valX, cy + 5, { align: "right" });
 
-      // Divider between rows (not after the final row — total line draws its own).
+      // Divider between rows (not after the final row - total line draws its own).
       cy += rowH;
       if (i < costRows.length - 1) {
         setDraw(col.border);
@@ -2240,7 +2240,7 @@ async function openCostGuidePdf(d: PdfData) {
 }
 
 function propertyLine(d: PdfData): string {
-  if (!d.property) return "—";
+  if (!d.property) return "-";
   if (d.property === "HDB" && d.newResale === "new") {
     const ocsLabel = d.ocs === "yes" && (d.ocsFlooring || d.ocsDoors) ? "With OCS" : "No OCS";
     return `HDB · BTO (new) · ${ocsLabel}`;
@@ -2256,9 +2256,9 @@ const PROPERTY_LABEL: Record<Property, string> = {
   Landed: "Landed",
 };
 const INTENT_DESC: Record<Intent, string> = {
-  basics: "Move-in ready basics — wet areas, basic finishes, custom carpentry only where essential",
-  proper: "A proper home renovation — everything done, custom where it matters, unified design",
-  special: "Something special — fully designed, premium materials, custom throughout",
+  basics: "Move-in ready basics - wet areas, basic finishes, custom carpentry only where essential",
+  proper: "A proper home renovation - everything done, custom where it matters, unified design",
+  special: "Something special - fully designed, premium materials, custom throughout",
 };
 const JOURNEY_LABEL: Record<Journey, string> = {
   exploring: "Still exploring ideas",
@@ -2285,6 +2285,10 @@ function fmtCurrency(n: number): string {
 }
 
 function fmtK(n: number): string {
+  if (n >= 1_000_000) {
+    // Millions — 2 decimal places, trim trailing zeros (1.05M, 1.2M, 2M).
+    return `$${(Math.round(n / 10_000) / 100).toFixed(2).replace(/\.?0+$/, "")}M`;
+  }
   if (n >= 1000) return `$${(Math.round(n / 100) / 10).toFixed(1).replace(/\.0$/, "")}K`;
   return `$${n}`;
 }
@@ -2297,17 +2301,17 @@ function buildCostGuideHtml(d: PdfData, logoUrl: string): string {
         : d.property === "HDB"
           ? "HDB · Resale"
           : `${PROPERTY_LABEL[d.property]} · ${d.newResale === "new" ? "New" : "Resale"}`)
-    : "—";
-  const unitLine = d.unitType || "—";
-  const intentLine = d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : "—");
-  const journeyLine = d.journey ? JOURNEY_LABEL[d.journey] : "—";
-  const sourcingLine = d.sourcing ? SOURCING_LABEL[d.sourcing] : "—";
-  const layoutLine = d.layout ? LAYOUT_LABEL[d.layout] : "—";
-  const carpentryLine = d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "—";
-  const finishLine = d.finish ? FINISH_LABEL[d.finish] : "—";
+    : "-";
+  const unitLine = d.unitType || "-";
+  const intentLine = d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : "-");
+  const journeyLine = d.journey ? JOURNEY_LABEL[d.journey] : "-";
+  const sourcingLine = d.sourcing ? SOURCING_LABEL[d.sourcing] : "-";
+  const layoutLine = d.layout ? LAYOUT_LABEL[d.layout] : "-";
+  const carpentryLine = d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "-";
+  const finishLine = d.finish ? FINISH_LABEL[d.finish] : "-";
   const answered = [d.layout, d.carpentry, d.finish].filter(Boolean).length;
   const confidenceLine = d.property === "Landed"
-    ? (computed.confidence === "medium" ? "Medium — scope known" : "Range only")
+    ? (computed.confidence === "medium" ? "Medium - scope known" : "Range only")
     : `${computed.confidence === "high" ? "High" : computed.confidence === "medium" ? "Medium" : computed.confidence === "medium-low" ? "Medium-low" : "Range only"} (${answered} / 3 answered)`;
 
   const isOpenEnded = d.intent === "special" || (computed.isLanded && computed.workType === "rebuild");
@@ -2361,7 +2365,7 @@ function buildCostGuideHtml(d: PdfData, logoUrl: string): string {
       <div class="cost-row">
         <div class="cost-left">
           <div class="cost-section">Confidence band</div>
-          <div class="cost-desc">±${computed.bandPct}% — ${answered} of 3 scope indicators answered</div>
+          <div class="cost-desc">±${computed.bandPct}% - ${answered} of 3 scope indicators answered</div>
         </div>
         <div class="cost-scope">${computed.confidence === "high" ? "Narrow" : computed.confidence === "medium" ? "Moderate" : "Wide"}</div>
         <div class="cost-val">${escapeHtml(rangeText)}</div>
@@ -2376,7 +2380,7 @@ function buildCostGuideHtml(d: PdfData, logoUrl: string): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Network — Renovation Cost Report</title>
+<title>Network - Renovation Cost Report</title>
 <style>
   @page { size: A4; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2435,9 +2439,9 @@ function buildCostGuideHtml(d: PdfData, logoUrl: string): string {
   </div>
 
   <div class="row-3col">
-    <div><div class="lbl">Name</div><div class="val">${escapeHtml(d.lead.name || "—")}</div></div>
-    <div><div class="lbl">Contact</div><div class="val">${escapeHtml(d.lead.phone || "—")}</div></div>
-    <div><div class="lbl">Email</div><div class="val">${escapeHtml(d.lead.email || "—")}</div></div>
+    <div><div class="lbl">Name</div><div class="val">${escapeHtml(d.lead.name || "-")}</div></div>
+    <div><div class="lbl">Contact</div><div class="val">${escapeHtml(d.lead.phone || "-")}</div></div>
+    <div><div class="lbl">Email</div><div class="val">${escapeHtml(d.lead.email || "-")}</div></div>
   </div>
 
   <h2 class="section">Renovation Details</h2>

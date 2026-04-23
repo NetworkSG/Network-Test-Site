@@ -1447,8 +1447,10 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
 
   return (
     <div className="relative group isolate h-[280px] md:h-[400px] cursor-pointer">
-      {/* Ambient glow on hover (desktop only) */}
-      <div className="absolute -inset-6 opacity-0 group-hover:opacity-40 transition-opacity duration-700 hidden md:block" style={{ filter: "blur(60px)", transform: "scale(1.1)" }}>
+      {/* Ambient glow on hover (desktop only) — purely decorative, must not
+           capture pointer events or its bleed would trigger the neighbour
+           card's group-hover and block the delete button. */}
+      <div className="absolute -inset-6 opacity-0 group-hover:opacity-40 transition-opacity duration-700 hidden md:block pointer-events-none" style={{ filter: "blur(60px)", transform: "scale(1.1)" }}>
         <img src={resolveImg(p.img)} alt="" className="w-full h-full object-cover saturate-150 brightness-110" />
       </div>
       {/* Card inner */}
@@ -2912,7 +2914,18 @@ function isValidSGPostal(v: string) {
 
 export function ServiceArea() {
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const sa = ctx?.serviceArea;
+  // Hide the whole section in public mode when the firm hasn't supplied any
+  // Google Maps data yet — no point showing a fallback pin at our office.
+  const hasMapData = !!(
+    sa?.mapEmbedUrl ||
+    ctx?.profile?.googleMapsLink ||
+    ctx?.profile?.googlePlaceId ||
+    ctx?.profile?.placeId
+  );
+  if (!editCtx && !hasMapData) return null;
+
   const hqLat = sa?.hqLat || HQ_LAT;
   const hqLng = sa?.hqLng || HQ_LNG;
   const destLabel = sa?.hqAddress || DEST_LABEL;
@@ -3947,7 +3960,12 @@ export function ExperienceTable({ inline = false }: { inline?: boolean } = {}) {
       }
       // Public mode — chip rendering for list-type fields.
       if (isChipField(row.label) && row.value) {
-        const chips = row.value.split(/\s*\u00b7\s*/).map((s: string) => s.trim()).filter(Boolean);
+        // Split on " · " (legacy) or commas that are NOT inside parentheses
+        // so items like "HDB (BTO, Resale, Maisonette)" stay as a single chip.
+        const chips = row.value
+          .split(/\s*\u00b7\s*|,\s*(?![^()]*\))/)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
         const visible = chips.slice(0, 2);
         const overflow = chips.slice(2);
         return (

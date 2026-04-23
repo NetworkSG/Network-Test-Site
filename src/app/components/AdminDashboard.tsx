@@ -1748,17 +1748,25 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  // Filtered designers
-  const filteredDesigners = designers.filter((d: any) => {
-    const matchesSearch = !designerSearch ||
-      (d.name || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
-      (d.slug || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
-      (d.tagline || "").toLowerCase().includes(designerSearch.toLowerCase());
-    const matchesStatus = designerStatusFilter === "all" ||
-      (designerStatusFilter === "active" && d.active !== false) ||
-      (designerStatusFilter === "inactive" && d.active === false);
-    return matchesSearch && matchesStatus;
-  });
+  // Filtered designers — active firms always render first, then the rest
+  // alphabetically by name. Keeps the admin's own actionable set at the top.
+  const filteredDesigners = designers
+    .filter((d: any) => {
+      const matchesSearch = !designerSearch ||
+        (d.name || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
+        (d.slug || "").toLowerCase().includes(designerSearch.toLowerCase()) ||
+        (d.tagline || "").toLowerCase().includes(designerSearch.toLowerCase());
+      const matchesStatus = designerStatusFilter === "all" ||
+        (designerStatusFilter === "active" && d.active !== false) ||
+        (designerStatusFilter === "inactive" && d.active === false);
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a: any, b: any) => {
+      const aActive = a.active !== false ? 0 : 1;
+      const bActive = b.active !== false ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return (a.name || a.slug || "").localeCompare(b.name || b.slug || "");
+    });
 
   // Fetch designer list
   const fetchDesigners = useCallback(async () => {
