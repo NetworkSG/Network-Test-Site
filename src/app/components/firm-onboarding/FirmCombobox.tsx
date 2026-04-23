@@ -3,7 +3,7 @@ import { ChevronDown, Loader2, Check } from "lucide-react";
 import { C, sans } from "../homepage/v8/primitives";
 import { listAirtableFirms } from "./onboardingApi";
 
-type Firm = { id: string; firmName: string };
+type Firm = { id: string; firmName: string; contactEmail?: string };
 
 export function FirmCombobox({
   value,
@@ -13,7 +13,7 @@ export function FirmCombobox({
 }: {
   value: string;
   recordId: string;
-  onSelect: (recordId: string, firmName: string) => void;
+  onSelect: (recordId: string, firmName: string, contactEmail?: string) => void;
   placeholder?: string;
 }) {
   const [firms, setFirms] = useState<Firm[]>([]);
@@ -57,7 +57,7 @@ export function FirmCombobox({
   }, [filtered, highlight]);
 
   const pick = (f: Firm) => {
-    onSelect(f.id, f.firmName);
+    onSelect(f.id, f.firmName, f.contactEmail);
     setQuery(f.firmName);
     setOpen(false);
   };
