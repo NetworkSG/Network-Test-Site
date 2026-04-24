@@ -93,7 +93,6 @@ export function validateStudio(s: StudioInfo): Record<string, string> {
   if (!s.logoImage) errors.logoImage = "Upload your firm logo";
   if (!s.contactEmail.trim()) errors.contactEmail = "Confirm your registered email or phone";
   if (s.googleMapsUrl.trim() && !isValidGoogleMaps(s.googleMapsUrl)) errors.googleMapsUrl = "Paste a valid Google Maps URL";
-  if (!s.acraUen.trim()) errors.acraUen = "ACRA/UEN is required";
   if (!s.yearsExperience.trim()) errors.yearsExperience = "Years of experience is required";
   if (!s.officeAddress.trim()) errors.officeAddress = "Office address is required";
   if (!s.serviceArea.length) errors.serviceArea = "Select at least one service area";
@@ -470,7 +469,7 @@ export function StudioInfoStep({
       </div>
 
       <div>
-        <label style={labelStyle}>ACRA / UEN <span style={{ color: "#c14" }}>*</span></label>
+        <label style={labelStyle}>ACRA / UEN</label>
         <input
           type="text" value={value.acraUen} placeholder="e.g. 201912345A" maxLength={40}
           onChange={(e) => patch({ acraUen: e.target.value })} style={inputStyle}
