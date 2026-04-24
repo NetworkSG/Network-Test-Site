@@ -44,6 +44,7 @@ function report(payload: ErrorPayload) {
 export function initErrorReporter() {
   if (typeof window === "undefined") return;
   if ((window as any).__errorReporterInit) return;
+  if (typeof navigator !== "undefined" && /HeadlessChrome|bot|crawler|spider/i.test(navigator.userAgent)) return;
   (window as any).__errorReporterInit = true;
 
   window.addEventListener("error", (e: ErrorEvent) => {
