@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/get-matched-1", "destination": "/get-matched", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/" }
   ]

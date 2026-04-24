@@ -10,6 +10,7 @@ inject();
 initErrorReporter();
 import { HomepageV8 } from "./components/homepage/v8/HomepageV8";
 import { AdminGuard } from "./components/AdminGuard";
+import { NotFound } from "./components/NotFound";
 
 // ── Lazy-loaded routes (code-split per page) ──────────────────────
 const LazyHomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
@@ -123,5 +124,6 @@ export const router = createBrowserRouter([
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },
   // { path: "/mood-board/create", element: createElement(LazyRoute, { component: LazyMoodBoardGate }) },
   // { path: "/mood-board/create/:boardId", element: createElement(LazyRoute, { component: LazyMoodBoardPage }) },
+  { path: "*", Component: NotFound },
   ]},
 ]);
