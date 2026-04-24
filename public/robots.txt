@@ -15,4 +15,4 @@ Crawl-delay: 10
 User-agent: dotbot
 Crawl-delay: 10
 
-Sitemap: https://networksg.net/sitemap.xml
+Sitemap: https://www.networksg.net/sitemap.xml
