@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import handler from "serve-handler";
-import puppeteer from "puppeteer";
+import puppeteerCore from "puppeteer-core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = join(__dirname, "..", "dist");
@@ -30,10 +30,23 @@ const server = createServer((req, res) =>
 
 await new Promise((resolve) => server.listen(PORT, resolve));
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ["--no-sandbox", "--disable-setuid-sandbox"],
-});
+const isServerless = !!process.env.VERCEL || !!process.env.AWS_EXECUTION_ENV;
+
+let browser;
+if (isServerless) {
+  const { default: chromium } = await import("@sparticuz/chromium");
+  browser = await puppeteerCore.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+} else {
+  const { default: puppeteer } = await import("puppeteer");
+  browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+}
 
 const failures = [];
 
