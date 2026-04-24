@@ -10,10 +10,10 @@ const root = join(__dirname, "..");
 // [source, output, targetWidth, quality]
 const JOBS = [
   // Hero collage — display ≤540px, ship 1200px for retina
-  ["src/assets/607f6408c4c8fd9005fe7498e2284a7b2995acda.png", "src/assets/607f6408c4c8fd9005fe7498e2284a7b2995acda.webp", 1200, 78],
-  ["src/assets/561c829472a0cac14a59bfb33e444dc4e0ed8350.png", "src/assets/561c829472a0cac14a59bfb33e444dc4e0ed8350.webp", 1200, 78],
-  ["src/assets/bc9ffe9973654a94a381c863292fc3780b81397b.png", "src/assets/bc9ffe9973654a94a381c863292fc3780b81397b.webp", 1200, 78],
-  ["src/assets/51afa0ea316295d8d1d824fcab3b3afbe1092843.png", "src/assets/51afa0ea316295d8d1d824fcab3b3afbe1092843.webp", 1200, 78],
+  ["src/assets/607f6408c4c8fd9005fe7498e2284a7b2995acda.png", "src/assets/607f6408c4c8fd9005fe7498e2284a7b2995acda.webp", 800, 75],
+  ["src/assets/561c829472a0cac14a59bfb33e444dc4e0ed8350.png", "src/assets/561c829472a0cac14a59bfb33e444dc4e0ed8350.webp", 800, 75],
+  ["src/assets/bc9ffe9973654a94a381c863292fc3780b81397b.png", "src/assets/bc9ffe9973654a94a381c863292fc3780b81397b.webp", 800, 75],
+  ["src/assets/51afa0ea316295d8d1d824fcab3b3afbe1092843.png", "src/assets/51afa0ea316295d8d1d824fcab3b3afbe1092843.webp", 800, 75],
 
   // Blurred-background images — display ≤1080px, 60px blur destroys detail anyway
   ["public/DSC09723.webp", "public/DSC09723.webp", 1000, 75],
