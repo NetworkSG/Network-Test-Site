@@ -36,11 +36,11 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router'],
-          'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
           'vendor-mui': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
           'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-motion': ['motion'],
-          'vendor-recharts': ['recharts'],
+          // three + recharts intentionally absorbed into consuming lazy chunks
+          // (AdminDashboard, FloorPlan3DEditor) so they don't preload on homepage
         },
       },
     },

@@ -86,7 +86,7 @@ function RootLayout() {
   }, [location.pathname]);
 
   return createElement(
-    "div",
+    "main",
     { key: location.pathname, style: { animation: "pageFadeIn 0.3s ease-out forwards" } },
     createElement(Outlet)
   );

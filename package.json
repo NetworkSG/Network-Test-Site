@@ -6,7 +6,8 @@
   "scripts": {
     "build": "vite build",
     "postbuild": "node scripts/prerender.mjs",
-    "dev": "vite"
+    "dev": "vite",
+    "optimize:images": "node scripts/optimize-images.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -80,6 +81,7 @@
     "puppeteer": "^24.42.0",
     "puppeteer-core": "^24.42.0",
     "serve-handler": "^6.1.7",
+    "sharp": "^0.34.5",
     "tailwindcss": "4.1.12",
     "vite": "6.3.5"
   },

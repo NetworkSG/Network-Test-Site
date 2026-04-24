@@ -103,6 +103,7 @@ export function SiteFooter({
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
               <a
                 href="/"
+                aria-label="Network — home"
                 className="block shrink-0"
                 style={{
                   width: 110,
@@ -124,7 +125,7 @@ export function SiteFooter({
                     key={link.label}
                     href={link.href}
                     className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                    style={{ color: "#9a9790", fontFamily: sans, transition: "all 0.15s" }}
+                    style={{ color: "#5a574f", fontFamily: sans, transition: "all 0.15s" }}
                   >
                     {link.label}
                   </a>
@@ -133,7 +134,7 @@ export function SiteFooter({
             </div>
             <span
               className="text-[12px] font-normal"
-              style={{ color: "#9a9790", fontFamily: sans }}
+              style={{ color: "#5a574f", fontFamily: sans }}
             >
               Copyright &copy; 2026. All rights reserved.
             </span>

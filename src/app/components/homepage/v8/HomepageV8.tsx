@@ -54,7 +54,7 @@ export function HomepageV8() {
         {/* ═══ NAVBAR ═══ */}
         <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
           <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
-            <a href="/" className="cursor-pointer shrink-0 block" style={{
+            <a href="/" aria-label="Network — home" className="cursor-pointer shrink-0 block" style={{
               width: "110px", height: "23px", background: C.black,
               maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
               WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
@@ -148,7 +148,7 @@ export function HomepageV8() {
           <div className="max-w-[1280px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-                <a href="/" className="block shrink-0" style={{
+                <a href="/" aria-label="Network — home" className="block shrink-0" style={{
                   width: "110px", height: "23px", background: C.black,
                   maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
                   WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
@@ -157,12 +157,12 @@ export function HomepageV8() {
                   {FOOTER.links.map((link) => (
                     <a key={link.label} href={link.href}
                       className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                      style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}
+                      style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
                     >{link.label}</a>
                   ))}
                 </div>
               </div>
-              <span className="text-[12px] font-normal" style={{ color: C.grayLight, fontFamily: sans }}>
+              <span className="text-[12px] font-normal" style={{ color: C.gray, fontFamily: sans }}>
                 {FOOTER.copyright}
               </span>
             </div>

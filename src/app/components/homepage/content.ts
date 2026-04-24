@@ -279,21 +279,21 @@ export const TESTIMONIALS = {
       role: "Homeowner, Bishan HDB",
       quote:
         "The matching was spot on. Our designer understood exactly what we wanted before we could even explain it. The whole process felt effortless.",
-      avatar: "/Profile/unnamed.png",
+      avatar: "/Profile/avatar-1.webp",
     },
     {
       name: "James Tan",
       role: "Homeowner, Clementi Condo",
       quote:
         "No chasing contractors, no guesswork. Network matched us with a firm that delivered exactly what was promised. Every detail was considered.",
-      avatar: "/Profile/unnamed (2).png",
+      avatar: "/Profile/avatar-3.webp",
     },
     {
       name: "Rachel Wong",
       role: "Homeowner, Tampines HDB",
       quote:
         "We were nervous about our first renovation. Network made it easy to find a designer who fit our budget and style. Couldn't be happier with the result.",
-      avatar: "/Profile/unnamed (1).png",
+      avatar: "/Profile/avatar-2.webp",
     },
   ] as Testimonial[],
 };

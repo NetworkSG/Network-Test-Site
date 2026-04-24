@@ -11,8 +11,8 @@ export const C = {
   creamDark: "#e8e4db",
   creamBorder: "#d8d3c8",
   black: "#0f0f0d",
-  gray: "#6b6860",
-  grayLight: "#9a9790",
+  gray: "#5a574f",
+  grayLight: "#6b6860",
   white: "#fafaf8",
   footerDark: "#0f0f0d",
 } as const;

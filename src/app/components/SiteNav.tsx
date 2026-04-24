@@ -20,8 +20,10 @@ export function SiteNav({ logoImg, onLogoClick }: { logoImg: string; onLogoClick
     <nav className="sticky top-0 z-50 bg-[#f0ede6]">
       <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
         {/* Logo */}
-        <div
-          className="w-[110px] h-[23px] bg-[#2b2b2b] shrink-0 cursor-pointer"
+        <button
+          type="button"
+          aria-label="Network — home"
+          className="w-[110px] h-[23px] bg-[#2b2b2b] shrink-0 cursor-pointer border-0 p-0"
           onClick={onLogoClick || (() => { window.location.href = "/"; })}
           style={{
             maskImage: `url('${logoImg}')`,
@@ -42,7 +44,7 @@ export function SiteNav({ logoImg, onLogoClick }: { logoImg: string; onLogoClick
               key={link.href}
               href={link.href}
               className="text-[13px] font-normal cursor-pointer hover:opacity-60"
-              style={{ color: "#6b6860", fontFamily: sans, transition: "all 0.15s" }}
+              style={{ color: "#5a574f", fontFamily: sans, transition: "all 0.15s" }}
             >
               {link.label}
             </a>

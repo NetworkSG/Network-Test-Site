@@ -221,18 +221,23 @@ export function GoogleReviews() {
         </div>
 
         {/* Dots */}
-        <div className="flex justify-center gap-2.5 mt-10">
+        <div className="flex justify-center mt-10">
           {reviews.map((_, i) => (
             <button
               key={i}
               onClick={() => goTo(i)}
-              className="w-2 h-2 rounded-full transition-all duration-300 cursor-pointer"
-              style={{
-                background: i === current ? C.black : C.creamBorder,
-                transform: i === current ? "scale(1.25)" : "scale(1)",
-              }}
+              className="w-8 h-8 flex items-center justify-center cursor-pointer bg-transparent border-0"
               aria-label={`Go to review ${i + 1}`}
-            />
+            >
+              <span
+                aria-hidden="true"
+                className="w-2 h-2 rounded-full transition-all duration-300 block"
+                style={{
+                  background: i === current ? C.black : C.creamBorder,
+                  transform: i === current ? "scale(1.25)" : "scale(1)",
+                }}
+              />
+            </button>
           ))}
         </div>
       </div>

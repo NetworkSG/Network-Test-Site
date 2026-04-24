@@ -7,10 +7,10 @@ import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
 
-import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.png";
-import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.png";
-import photo3 from "figma:asset/bc9ffe9973654a94a381c863292fc3780b81397b.png";
-import heroPhoto from "figma:asset/51afa0ea316295d8d1d824fcab3b3afbe1092843.png";
+import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.webp";
+import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.webp";
+import photo3 from "figma:asset/bc9ffe9973654a94a381c863292fc3780b81397b.webp";
+import heroPhoto from "figma:asset/51afa0ea316295d8d1d824fcab3b3afbe1092843.webp";
 
 /* ── Qualifying Flow ── */
 function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, string>) => void }) {
@@ -167,10 +167,10 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
       {/* Ghost photo grid background */}
       <div className="absolute inset-0 pt-[64px] overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-0 w-[60%] h-full grid grid-cols-2 gap-3 p-6 opacity-[0.06]">
-          <img src={photo1} alt="" className="w-full h-[50%] object-cover rounded-[4px]" />
-          <img src={photo2} alt="" className="w-full h-[50%] object-cover rounded-[4px]" />
-          <img src={photo3} alt="" className="w-full h-[50%] object-cover rounded-[4px]" />
-          <img src={heroPhoto} alt="" className="w-full h-[50%] object-cover rounded-[4px]" />
+          <img src={photo1} alt="" loading="lazy" decoding="async" className="w-full h-[50%] object-cover rounded-[4px]" />
+          <img src={photo2} alt="" loading="lazy" decoding="async" className="w-full h-[50%] object-cover rounded-[4px]" />
+          <img src={photo3} alt="" loading="lazy" decoding="async" className="w-full h-[50%] object-cover rounded-[4px]" />
+          <img src={heroPhoto} alt="" loading="lazy" decoding="async" className="w-full h-[50%] object-cover rounded-[4px]" />
         </div>
       </div>
 
