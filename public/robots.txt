@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /designer-dashboard
+Disallow: /profile
+Disallow: /edit-profile/
+Disallow: /firm-onboarding
+Disallow: /project-import
+Disallow: /old-homepage
+
+# Respectful crawl delay for aggressive bots
+User-agent: AhrefsBot
+Crawl-delay: 10
+User-agent: dotbot
+Crawl-delay: 10
+
+Sitemap: https://networksg.net/sitemap.xml
