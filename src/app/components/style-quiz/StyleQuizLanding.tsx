@@ -8,6 +8,7 @@ import { PillButton } from "@/app/components/shared/PillButton"
 import { SiteNav } from "@/app/components/SiteNav"
 import { SiteFooter } from "@/app/components/shared/SiteFooter"
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png"
+import { Seo } from "@/app/components/shared/Seo"
 
 /* -- photo grid URLs -- */
 const gridPhotos = [
@@ -103,6 +104,11 @@ export function StyleQuizLanding() {
   const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-[#f0ede6]">
+      <Seo
+        title="Interior Design Style Quiz | Network"
+        description="Find your interior design style in 2 minutes. Take Network's free style quiz and use the result as a starting point with your matched designer."
+        canonical="/style-quiz"
+      />
       <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
       {/* HERO */}
       <section className="py-[60px] md:py-[80px] overflow-hidden">

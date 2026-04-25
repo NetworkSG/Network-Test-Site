@@ -10,6 +10,7 @@ import { useColorExtractor } from "@/app/hooks/useColorExtractor";
 import { uploadImageFromUrl } from "@/app/utils/mood-board-storage";
 import { supabase } from "@/app/components/supabaseClient";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { Seo } from "./shared/Seo";
 
 /* ═══ Design Tokens (from GUIDELINES.md) ═══ */
 const C = {
@@ -231,6 +232,11 @@ export function ExplorePage() {
 
   return (
     <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans, color: C.black }}>
+      <Seo
+        title="Explore Singapore Interior Design Projects | Network"
+        description="Browse real Singapore HDB, condo, and landed renovation projects. Save your favourites and use them as a brief when getting matched with a designer."
+        canonical="/explore"
+      />
       {/* ═══ NAVBAR ═══ */}
       <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
         <div className="max-w-[1800px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">

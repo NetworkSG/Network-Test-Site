@@ -99,8 +99,24 @@ export function FooterSection({ showCTA = true }: { showCTA?: boolean } = {}) {
                     Socials
                   </p>
                   <div className="font-['Inter',sans-serif] text-[16px] lg:text-[18px] text-[#09090b] tracking-[-0.9px] space-y-2 leading-[2.3] underline underline-offset-4">
-                    <p className="cursor-pointer">Instagram</p>
-                    <p className="cursor-pointer">Facebook</p>
+                    <a
+                      href="https://www.instagram.com/networksingapore/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Network on Instagram"
+                      className="block cursor-pointer hover:opacity-60 transition-opacity"
+                    >
+                      Instagram
+                    </a>
+                    <a
+                      href="https://www.facebook.com/networksingapore/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Network on Facebook"
+                      className="block cursor-pointer hover:opacity-60 transition-opacity"
+                    >
+                      Facebook
+                    </a>
                     <p className="cursor-pointer">WhatsApp</p>
                   </div>
                 </div>

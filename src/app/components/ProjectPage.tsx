@@ -10,6 +10,7 @@ import { SiteNav } from "./SiteNav";
 import { useDesignerData } from "./useDesignerData";
 import { transformApiData } from "./DesignerProfile";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { Seo } from "./shared/Seo";
 import { projectId as supaProjectId, publicAnonKey } from "/utils/supabase/info";
 
 const SUPABASE_STORAGE = `https://${supaProjectId}.supabase.co/storage/v1/object/public/`;
@@ -250,8 +251,17 @@ export function ProjectPage() {
     );
   }
 
+  const projectName = project?.name || "Project";
+  const projectMeta = project?.meta || "";
+  const seoDesc = `${projectName} by ${firmName} — ${projectMeta || "Singapore interior design project"}. See full photos, scope, and request a quote on Network.`;
+
   return (
     <div className="min-h-screen" style={{ background: C.cream, color: C.black, fontFamily: sans }}>
+      <Seo
+        title={`${projectName} — ${firmName} | Network`}
+        description={seoDesc.slice(0, 200)}
+        canonical={`/designer/${slug || ""}/project/${projectIdParam || ""}`}
+      />
       <SiteNav logoImg={logoMarkImg} />
 
       {/* ═══ BREADCRUMB ══════════════════════════════════════════════════════ */}

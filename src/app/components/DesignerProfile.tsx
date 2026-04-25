@@ -11,6 +11,7 @@ import { useDesignerData } from "./useDesignerData";
 import { useGoogleReviews } from "./useGoogleReviews";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { Seo } from "./shared/Seo";
 
 // All Figma assets
 import imgCover from "figma:asset/e4acf7c6e5d5f1811aa7429b53350cf1b67c5f4e.png";
@@ -4273,9 +4274,20 @@ export function DesignerProfile() {
     console.log("DesignerProfile: Rendering with hardcoded fallback data (API returned:", error || "empty", ")");
   }
 
+  const designerName = ctxValue?.profile?.name || "Interior Designer";
+  const designerBio = ctxValue?.profile?.bio || ctxValue?.profile?.tagline;
+  const seoDescription = designerBio
+    ? `${designerName} on Network — ${String(designerBio).slice(0, 140)}`
+    : `${designerName} — verified Singapore interior design firm on Network. Browse projects, reviews, and request a match.`;
+
   return (
     <DesignerDataContext.Provider value={ctxValue}>
       <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans }}>
+        <Seo
+          title={`${designerName} — Interior Designer Singapore | Network`}
+          description={seoDescription}
+          canonical={`/designer/${slug || ""}`}
+        />
         <SiteNav logoImg={logoMarkImg} />
 
         <main className="pt-[16px] md:pt-[24px]">

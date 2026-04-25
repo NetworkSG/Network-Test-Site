@@ -8,6 +8,7 @@ import { ValueProps } from "./ValueProps";
 import { GoogleReviewsLive } from "./GoogleReviewsLive";
 import { useHomeownerCount } from "../homepage/v8/useHomeownerCount";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { Seo } from "../shared/Seo";
 
 function FunnelNav() {
   return (
@@ -56,6 +57,11 @@ export function FunnelLeadPage() {
   const homeownerCount = useHomeownerCount();
   return (
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
+      <Seo
+        title="Get Matched with Singapore Interior Designers | Network"
+        description="Tell us about your home and we'll match you with 3 vetted interior design firms within the day. Free, no obligation."
+        canonical="/get-matched"
+      />
       <div
         className="min-h-screen"
         style={{ background: C.cream, fontFamily: sans, color: C.black }}

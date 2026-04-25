@@ -13,6 +13,7 @@ import { EditorPreviewAnimation } from "./EditorPreviewAnimation";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./supabaseClient";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { Seo } from "./shared/Seo";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH_H = { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" };
@@ -603,6 +604,11 @@ export function FloorPlan3DLanding() {
 
   return (
     <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans, color: C.black }}>
+      <Seo
+        title="3D Floor Plan & Layout Planner | Network"
+        description="Plan your renovation in 3D. Sketch your layout, drop in furniture, and visualise your home before signing with a designer. Free for Singapore homeowners."
+        canonical="/floorplan3d"
+      />
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
         <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">

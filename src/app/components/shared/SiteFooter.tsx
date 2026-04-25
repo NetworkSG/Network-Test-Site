@@ -132,12 +132,42 @@ export function SiteFooter({
                 ))}
               </div>
             </div>
-            <span
-              className="text-[12px] font-normal"
-              style={{ color: "#5a574f", fontFamily: sans }}
-            >
-              Copyright &copy; 2026. All rights reserved.
-            </span>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <a
+                  href="https://www.facebook.com/networksingapore/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Network on Facebook"
+                  className="inline-flex items-center justify-center w-9 h-9 hover:opacity-60 cursor-pointer"
+                  style={{ color: "#5a574f", transition: "all 0.15s" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M13.5 21.95V13.5h2.85l.43-3.32H13.5V8.06c0-.96.27-1.62 1.65-1.62h1.76V3.47a23.6 23.6 0 0 0-2.57-.13c-2.55 0-4.29 1.55-4.29 4.4v2.45H7.18v3.31h2.87v8.45z" />
+                  </svg>
+                </a>
+                <a
+                  href="https://www.instagram.com/networksingapore/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Network on Instagram"
+                  className="inline-flex items-center justify-center w-9 h-9 hover:opacity-60 cursor-pointer"
+                  style={{ color: "#5a574f", transition: "all 0.15s" }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="5" />
+                    <circle cx="12" cy="12" r="4" />
+                    <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+                  </svg>
+                </a>
+              </div>
+              <span
+                className="text-[12px] font-normal"
+                style={{ color: "#5a574f", fontFamily: sans }}
+              >
+                Copyright &copy; 2026. All rights reserved.
+              </span>
+            </div>
           </div>
         </div>
       </footer>

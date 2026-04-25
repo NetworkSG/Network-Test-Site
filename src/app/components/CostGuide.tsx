@@ -5,6 +5,7 @@ import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.
 import { C, serif, sans } from "./homepage/v8/primitives";
 import { ChevronDown, Check, Lock, Star, ShieldCheck } from "lucide-react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { Seo } from "./shared/Seo";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -645,6 +646,11 @@ export function CostGuide() {
   // ═══════════════════════════════════════════════════════════
   return (
     <div style={shell}>
+      <Seo
+        title="Renovation Cost Guide Singapore | Network"
+        description="Estimate your HDB, condo, or landed renovation budget with Network's interactive cost guide. Real ranges by property type, scope, and finish."
+        canonical="/cost-guide"
+      />
       <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
       <div style={app}>
         {/* Progress dots */}

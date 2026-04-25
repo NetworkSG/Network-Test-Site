@@ -9,6 +9,7 @@ import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { resolveAsset } from "../utils/resolveAsset";
+import { Seo } from "./shared/Seo";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -415,6 +416,11 @@ export function DesignersDirectory() {
 
   return (
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
+      <Seo
+        title="Verified Interior Designers in Singapore | Network"
+        description="Browse 120+ verified interior design firms in Singapore. Filter by style, budget, and property type — and request a match through Network."
+        canonical="/designers"
+      />
       <div className="min-h-screen relative overflow-x-clip" style={{ background: C.cream }}>
         <SiteNav logoImg={logoImg} />
 

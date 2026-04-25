@@ -7,6 +7,7 @@ import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2
 import imgBefore from "figma:asset/c280f9f6aaab4ae8bddb90591c886526cb64a9c8.png";
 import imgAfter from "figma:asset/f07ac02def74d08b83946b312fd388bd8374c28c.png";
 import { LeadModal } from "./render/LeadModal";
+import { Seo } from "./shared/Seo";
 
 // ─── Animation helper ────────────────────────────────────────────
 function FadeIn({
@@ -146,6 +147,11 @@ export function RenderLanding() {
 
   return (
     <>
+    <Seo
+      title="AI Room Designer | Network — See Your Renovation Before You Renovate"
+      description="Free AI room designer for Singapore homeowners. Upload a photo, generate styled renders in minutes, and share with your matched interior designer."
+      canonical="/render-tool"
+    />
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
       <div
         className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] relative overflow-x-clip"

@@ -14,6 +14,7 @@ import {
   TrendingUp, Award, Star, Plus
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
+import { Seo } from "./shared/Seo";
 
 // ─── ANIMATION HELPERS ───────────────────────────────────────────
 function FadeIn({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
@@ -56,6 +57,11 @@ function SectionLabel({ text, dark, icon: Icon, color = "#22C55E" }: { text: str
 export function HandshakeLanding() {
   return (
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
+      <Seo
+        title="Network × Handshake | Renovation Escrow & Protection for Singapore Homeowners"
+        description="Pay your interior designer with confidence. Handshake holds renovation milestones in escrow and releases them as work is completed."
+        canonical="/networkxhandshake"
+      />
       <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] relative overflow-x-clip">
         <Toaster position="top-center" richColors />
         <HandshakeNavbar />
