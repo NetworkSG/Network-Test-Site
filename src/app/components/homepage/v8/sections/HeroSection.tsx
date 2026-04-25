@@ -163,7 +163,11 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
   const homeownerCount = useHomeownerCount();
 
   return (
-    <section ref={heroRef} id="lead-form" className="relative pt-[100px] md:pt-[100px] min-h-screen flex flex-col">
+    <section
+      ref={heroRef}
+      id="lead-form"
+      className="relative flex flex-col min-h-[calc(100dvh-56px)] md:min-h-[calc(100dvh-64px)] py-8 md:py-0"
+    >
       {/* Ghost photo grid background */}
       <div className="absolute inset-0 pt-[64px] overflow-hidden pointer-events-none">
         <div className="absolute top-0 right-0 w-[60%] h-full grid grid-cols-2 gap-3 p-6 opacity-[0.06]">
@@ -174,7 +178,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
         </div>
       </div>
 
-      <div className="relative flex-1 flex flex-col justify-center px-6 md:px-10">
+      <div className="relative flex-1 flex flex-col justify-center px-6 md:px-10 pt-6 md:pt-0">
         <div className="max-w-[1280px] mx-auto w-full">
           <AnimatePresence mode="wait">
             {formState === "idle" && (
@@ -183,9 +187,39 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                   {/* Left - headline */}
                   <div>
                     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-                      className="flex items-center gap-2 mb-8">
-                      <span className="w-6 h-[1.5px] inline-block" style={{ background: C.grayLight }} />
-                      <TagLabel>Trusted by {homeownerCount} Singapore homeowners this year</TagLabel>
+                      className="mb-8">
+                      <span
+                        className="inline-flex items-center gap-2.5 pl-3 pr-4 py-2"
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid rgba(15,15,13,0.08)",
+                          borderRadius: 999,
+                          boxShadow: "0 1px 2px rgba(15,15,13,0.04)",
+                          fontFamily: sans,
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="inline-block shrink-0"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: "#22c55e",
+                            boxShadow: "0 0 0 3px rgba(34,197,94,0.15)",
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: C.black,
+                            letterSpacing: "-0.005em",
+                          }}
+                        >
+                          Trusted by {homeownerCount} Singapore homeowners this year
+                        </span>
+                      </span>
                     </motion.div>
 
                     <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}

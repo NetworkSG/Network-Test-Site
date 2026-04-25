@@ -598,6 +598,7 @@ export const FOOTER = {
     // { label: "Style Quiz", href: "/style-quiz" },
     // { label: "Mood Board", href: "/mood-board" },
     { label: "Handshake", href: "/networkxhandshake" },
+    { label: "Privacy Policy", href: "/privacy-policy" },
   ],
   social: [
     { label: "Instagram", href: "#" },

@@ -1051,7 +1051,7 @@ function LeadCaptureForm() {
               </div>
               <div className="space-y-3">
                 <p className="text-[11px] font-medium text-white/50 uppercase tracking-[1.5px]">Legal</p>
-                <a href="#" className="block text-[13px] text-white/40 hover:text-white/70 transition-colors">Privacy Policy</a>
+                <a href="/privacy-policy" className="block text-[13px] text-white/40 hover:text-white/70 transition-colors">Privacy Policy</a>
                 <a href="#" className="block text-[13px] text-white/40 hover:text-white/70 transition-colors">Terms of Service</a>
               </div>
             </div>

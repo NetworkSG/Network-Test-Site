@@ -105,7 +105,8 @@ export function StepLeadCapture({ data, onChange, emailLimitReached }: Props) {
 
       <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#9a9790] mt-5 leading-[1.5]">
         By continuing, you agree to receive your quiz results and relevant
-        renovation recommendations. We respect your privacy.
+        renovation recommendations. We respect your{" "}
+        <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-70">privacy</a>.
       </p>
     </div>
   )

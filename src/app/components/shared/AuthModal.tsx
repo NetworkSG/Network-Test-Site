@@ -270,7 +270,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
               <p className="font-['DM_Sans',sans-serif] text-[12px] text-[#9a9790] text-center mt-1">
                 By continuing, you agree to our{" "}
                 <span className="underline">Terms of Service</span> and{" "}
-                <span className="underline">Privacy Policy</span>.
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-70">Privacy Policy</a>.
               </p>
             </div>
           </motion.div>

@@ -11,6 +11,7 @@ const FOOTER_LINKS = [
   // { label: "Style Quiz", href: "/style-quiz" },
   // { label: "Mood Board", href: "/mood-board" },
   { label: "Handshake", href: "/networkxhandshake" },
+  { label: "Privacy Policy", href: "/privacy-policy" },
 ]
 
 interface SiteFooterProps {

@@ -2917,14 +2917,11 @@ export function ServiceArea() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const sa = ctx?.serviceArea;
-  // Hide the whole section in public mode when the firm hasn't supplied any
-  // Google Maps data yet — no point showing a fallback pin at our office.
-  const hasMapData = !!(
-    sa?.mapEmbedUrl ||
-    ctx?.profile?.googleMapsLink ||
-    ctx?.profile?.googlePlaceId ||
-    ctx?.profile?.placeId
-  );
+  // Hide the whole section in public mode unless the firm has supplied a real
+  // Maps embed URL of their own. Other fields (googleMapsLink, placeId) aren't
+  // enough — the current render only consumes mapEmbedUrl, so anything else
+  // would just show our office as a misleading fallback pin.
+  const hasMapData = !!sa?.mapEmbedUrl;
   if (!editCtx && !hasMapData) return null;
 
   const hqLat = sa?.hqLat || HQ_LAT;

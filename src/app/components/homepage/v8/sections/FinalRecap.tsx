@@ -26,7 +26,8 @@ export function FinalRecap({ scrollToForm }: { scrollToForm: () => void }) {
             </p>
 
             {/* Icon pill badges */}
-            <div className="flex flex-wrap justify-center gap-3 mb-10 max-w-[640px] mx-auto">
+            {/* Desktop: wrapped */}
+            <div className="hidden md:flex flex-wrap justify-center gap-3 mb-10 max-w-[640px] mx-auto">
               {FINAL_RECAP.bullets.map((bullet, i) => (
                 <span key={bullet} className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-normal"
                   style={{ color: "rgba(255,255,255,0.8)", fontFamily: sans, background: "rgba(255,255,255,0.08)", borderRadius: "100px", border: "1px solid rgba(255,255,255,0.1)" }}>
@@ -34,6 +35,31 @@ export function FinalRecap({ scrollToForm }: { scrollToForm: () => void }) {
                   {bullet}
                 </span>
               ))}
+            </div>
+            {/* Mobile: horizontal auto-scrolling marquee */}
+            <div
+              className="md:hidden mb-10 -mx-8 overflow-hidden"
+              style={{
+                maskImage: "linear-gradient(to right, transparent, #000 12%, #000 88%, transparent)",
+                WebkitMaskImage: "linear-gradient(to right, transparent, #000 12%, #000 88%, transparent)",
+              }}
+            >
+              <style>{`@keyframes finalRecapMarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+              <div
+                className="flex gap-3 w-max"
+                style={{ animation: "finalRecapMarquee 22s linear infinite" }}
+              >
+                {[...FINAL_RECAP.bullets, ...FINAL_RECAP.bullets].map((bullet, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-normal whitespace-nowrap shrink-0"
+                    style={{ color: "rgba(255,255,255,0.8)", fontFamily: sans, background: "rgba(255,255,255,0.08)", borderRadius: "100px", border: "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    {bulletIcons[i % bulletIcons.length]}
+                    {bullet}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">

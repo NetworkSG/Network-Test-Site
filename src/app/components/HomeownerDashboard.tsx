@@ -259,7 +259,7 @@ function AuthScreen({ onAuth }: { onAuth: (token: string, userId: string) => voi
           </motion.div>
         </div>
         <div className="px-8 md:px-12 pb-8 md:pb-10">
-          <p className="text-[12px] text-[#9ca3af]">By signing in, you agree to our Terms of Service and Privacy Policy.</p>
+          <p className="text-[12px] text-[#9ca3af]">By signing in, you agree to our Terms of Service and <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#6b7280]">Privacy Policy</a>.</p>
         </div>
       </div>
     </div>

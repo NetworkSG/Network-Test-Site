@@ -92,6 +92,12 @@ export function FooterSection({ showCTA = true }: { showCTA?: boolean } = {}) {
                     <p className="cursor-pointer">Get Matched</p>
                     <p className="cursor-pointer">AI Interior Design</p>
                     <p className="cursor-pointer">Quote Builder</p>
+                    <a
+                      href="/privacy-policy"
+                      className="block cursor-pointer hover:opacity-60 transition-opacity"
+                    >
+                      Privacy Policy
+                    </a>
                   </div>
                 </div>
                 <div>

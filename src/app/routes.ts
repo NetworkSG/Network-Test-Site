@@ -38,6 +38,7 @@ const LazyMoodBoardPage = lazy(() => import("./components/mood-board/MoodBoardPa
 const LazyFirmOnboardingPage = lazy(() => import("./components/firm-onboarding/FirmOnboardingPage").then((m) => ({ default: m.FirmOnboardingPage })));
 const LazyProjectSubmissionPage = lazy(() => import("./components/firm-onboarding/ProjectSubmissionPage").then((m) => ({ default: m.ProjectSubmissionPage })));
 const LazyQanvastImportTest = lazy(() => import("./components/qanvast-import/QanvastImportTest").then((m) => ({ default: m.QanvastImportTest })));
+const LazyPrivacyPolicy = lazy(() => import("./components/PrivacyPolicy").then((m) => ({ default: m.PrivacyPolicy })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -119,6 +120,7 @@ export const router = createBrowserRouter([
   { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },
   { path: "/firm-onboarding/project", element: createElement(LazyRoute, { component: LazyProjectSubmissionPage }) },
   { path: "/project-import", element: createElement(LazyRoute, { component: LazyQanvastImportTest }) },
+  { path: "/privacy-policy", element: createElement(LazyRoute, { component: LazyPrivacyPolicy }) },
   { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },
