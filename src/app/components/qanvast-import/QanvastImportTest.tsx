@@ -675,6 +675,8 @@ export function QanvastImportTest() {
                           await submitOnboarding({
                             variant: "project-only",
                             contactEmail: firmEmail,
+                            firmName,
+                            airtableRecordId: recordId,
                             project: {
                               title: p.title,
                               location: p.location,
