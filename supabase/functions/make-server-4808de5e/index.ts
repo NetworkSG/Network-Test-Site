@@ -2158,12 +2158,15 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       if (!submittedFirmName) return c.json({ error: "Firm name is required" }, 400);
 
       const sb = getDesignerSupabase();
-      const { data: matchByName } = await sb
+      // Look up by name, but exclude soft-deleted rows so we don't land
+      // projects on an archived duplicate. Pull a few candidates and pick
+      // the first non-deleted one (or fall through to the stub branch).
+      const { data: candidates } = await sb
         .from("designers")
         .select("slug, data")
         .ilike("name", submittedFirmName)
-        .limit(1)
-        .maybeSingle();
+        .limit(5);
+      const matchByName = (candidates || []).find((c: any) => !c?.data?.deletedAt) || null;
 
       let slug: string;
       if (matchByName) {
