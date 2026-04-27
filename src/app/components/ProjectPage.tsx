@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate, Link } from "react-router";
+import { motion, AnimatePresence } from "motion/react";
 import {
   MapPin, X, ChevronLeft, ChevronRight, ArrowUp, ArrowRight, Star, BadgeCheck,
   ChevronDown, CheckCircle,
@@ -170,6 +171,14 @@ export function ProjectPage() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [floorPlanOpen, setFloorPlanOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   // Fetch designer data
   const { data: apiData, loading } = useDesignerData(slug);
@@ -353,68 +362,120 @@ export function ProjectPage() {
                   <span className="text-white text-[13px]" style={{ fontFamily: sans }}>{galleryCaptions[activeImage - 1]}</span>
                 </div>
               )}
-              {projectFloorPlan && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setFloorPlanOpen(true); }}
-                  className="absolute bottom-4 left-4 md:bottom-5 md:left-5 flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
-                  style={{
-                    height: "40px",
-                    padding: "0 14px",
-                    background: "rgba(255,255,255,0.95)",
-                    color: C.black,
-                    border: "none",
-                    borderRadius: "10px",
-                    fontFamily: sans,
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    boxShadow: "0 2px 8px rgba(15,15,13,0.18)",
-                  }}
-                  aria-label="View floor plan"
-                >
-                  <LayoutPanelTop size={16} strokeWidth={2} />
-                  <span>Floor Plan</span>
-                </button>
+              {projectFloorPlan && !floorPlanOpen && (
+                isDesktop ? (
+                  <motion.button
+                    layoutId="floor-plan-card"
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setFloorPlanOpen(true); }}
+                    className="absolute bottom-5 left-5 overflow-hidden cursor-pointer"
+                    style={{
+                      width: "120px",
+                      height: "90px",
+                      background: C.white,
+                      border: "none",
+                      padding: 0,
+                      borderRadius: "10px",
+                      boxShadow: "0 4px 14px rgba(15,15,13,0.28)",
+                    }}
+                    aria-label="View floor plan"
+                    whileHover={{ scale: 1.04 }}
+                    transition={{ layout: { duration: 0.45, ease: [0.32, 0.72, 0, 1] } }}
+                  >
+                    <motion.img
+                      layoutId="floor-plan-image"
+                      src={projectFloorPlan}
+                      alt={`${project.name} floor plan thumbnail`}
+                      className="w-full h-full object-contain"
+                      style={{ background: C.white }}
+                      transition={{ layout: { duration: 0.45, ease: [0.32, 0.72, 0, 1] } }}
+                    />
+                    <div
+                      className="absolute bottom-0 left-0 right-0 px-2 py-1.5 flex items-center gap-1.5 pointer-events-none"
+                      style={{
+                        background: "linear-gradient(to top, rgba(15,15,13,0.85) 0%, rgba(15,15,13,0) 100%)",
+                        color: C.white,
+                      }}
+                    >
+                      <LayoutPanelTop size={11} strokeWidth={2.5} />
+                      <span className="text-[10px] font-semibold tracking-wide" style={{ fontFamily: sans }}>Floor Plan</span>
+                    </div>
+                  </motion.button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setFloorPlanOpen(true); }}
+                    className="absolute bottom-4 left-4 flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
+                    style={{
+                      height: "40px",
+                      padding: "0 14px",
+                      background: "rgba(255,255,255,0.95)",
+                      color: C.black,
+                      border: "none",
+                      borderRadius: "10px",
+                      fontFamily: sans,
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      boxShadow: "0 2px 8px rgba(15,15,13,0.18)",
+                    }}
+                    aria-label="View floor plan"
+                  >
+                    <LayoutPanelTop size={16} strokeWidth={2} />
+                    <span>Floor Plan</span>
+                  </button>
+                )
               )}
             </div>
           )}
 
-          {/* Floor plan modal — portaled to body so ancestor transforms (e.g. FadeIn motion) don't break `position: fixed` */}
-          {floorPlanOpen && projectFloorPlan && createPortal(
-            <div
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8"
-              style={{ background: "rgba(15,15,13,0.85)" }}
-              onClick={() => setFloorPlanOpen(false)}
-            >
-              <div
-                className="relative w-full max-w-[920px] max-h-[90vh] overflow-hidden flex flex-col"
-                style={{ background: C.white, borderRadius: "16px" }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${C.creamBorder}` }}>
-                  <div className="flex items-center gap-2">
-                    <LayoutPanelTop size={18} style={{ color: C.black }} />
-                    <h3 className="text-[15px] font-semibold" style={{ color: C.black, fontFamily: sans }}>Floor Plan</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFloorPlanOpen(false)}
-                    aria-label="Close floor plan"
-                    className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80"
-                    style={{ background: C.cream, color: C.black, border: "none" }}
+          {/* Floor plan modal — portaled to body so ancestor transforms don't break fixed positioning. Image shares a layoutId with the thumbnail for the zoom transition. */}
+          {projectFloorPlan && createPortal(
+            <AnimatePresence>
+              {floorPlanOpen && (
+                <motion.div
+                  key="fp-backdrop"
+                  className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8"
+                  initial={{ backgroundColor: "rgba(15,15,13,0)" }}
+                  animate={{ backgroundColor: "rgba(15,15,13,0.85)" }}
+                  exit={{ backgroundColor: "rgba(15,15,13,0)" }}
+                  transition={{ duration: 0.3 }}
+                  onClick={() => setFloorPlanOpen(false)}
+                >
+                  <motion.div
+                    {...(isDesktop ? { layoutId: "floor-plan-card" } : { initial: { scale: 0.92, opacity: 0 }, animate: { scale: 1, opacity: 1 }, exit: { scale: 0.95, opacity: 0 } })}
+                    className="relative w-full max-w-[920px] max-h-[90vh] overflow-hidden flex flex-col"
+                    style={{ background: C.white, borderRadius: "16px" }}
+                    onClick={(e) => e.stopPropagation()}
+                    transition={{ duration: 0.3, layout: { duration: 0.45, ease: [0.32, 0.72, 0, 1] } }}
                   >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-auto" style={{ background: C.cream }}>
-                  <img
-                    src={projectFloorPlan}
-                    alt={`${project.name} floor plan`}
-                    className="w-full h-auto object-contain"
-                  />
-                </div>
-              </div>
-            </div>,
+                    <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${C.creamBorder}` }}>
+                      <div className="flex items-center gap-2">
+                        <LayoutPanelTop size={18} style={{ color: C.black }} />
+                        <h3 className="text-[15px] font-semibold" style={{ color: C.black, fontFamily: sans }}>Floor Plan</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFloorPlanOpen(false)}
+                        aria-label="Close floor plan"
+                        className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80"
+                        style={{ background: C.cream, color: C.black, border: "none" }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto flex items-center justify-center" style={{ background: C.cream }}>
+                      <motion.img
+                        {...(isDesktop ? { layoutId: "floor-plan-image" } : {})}
+                        src={projectFloorPlan}
+                        alt={`${project.name} floor plan`}
+                        className="w-full h-auto object-contain"
+                        transition={{ layout: { duration: 0.45, ease: [0.32, 0.72, 0, 1] } }}
+                      />
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>,
             document.body
           )}
 
