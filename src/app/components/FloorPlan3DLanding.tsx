@@ -14,6 +14,8 @@ import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./supabaseClient";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { Seo } from "./shared/Seo";
+import { HomepageNav } from "./shared/HomepageNav";
+import { HomepageFooter } from "./shared/HomepageFooter";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH_H = { Authorization: `Bearer ${publicAnonKey}`, "Content-Type": "application/json" };
@@ -610,74 +612,7 @@ export function FloorPlan3DLanding() {
         canonical="/floorplan3d"
       />
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
-        <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
-          <a href="/" className="cursor-pointer shrink-0 block" style={{
-            width: "110px", height: "23px", background: C.black,
-            maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
-            WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
-          }} />
-          {/* Desktop nav */}
-          <div className="hidden md:flex items-center gap-8">
-            <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Home</a>
-            <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Room Designer</a>
-            <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Layout Planner</a>
-            <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
-            {/* <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Style Quiz</a> */}
-            {/* <a href="/mood-board" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Mood Board</a> */}
-            <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Handshake</a>
-          </div>
-          {/* Desktop CTA */}
-          <button onClick={openSignup}
-            className="hidden md:block text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
-            style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>
-            Start Free
-          </button>
-          {/* Mobile hamburger */}
-          <button
-            className="md:hidden w-10 h-10 flex items-center justify-center cursor-pointer"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.5" strokeLinecap="round">
-              {mobileMenuOpen ? (
-                <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
-              ) : (
-                <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>
-              )}
-            </svg>
-          </button>
-        </div>
-        <div className="h-[1px]" style={{ background: C.creamBorder }} />
-        {/* Mobile menu dropdown */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="md:hidden overflow-hidden"
-              style={{ background: C.cream, borderBottom: `1px solid ${C.creamBorder}` }}
-            >
-              <div className="px-6 py-4 flex flex-col gap-1">
-                <a href="/" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Home</a>
-                <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Room Designer</a>
-                <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Layout Planner</a>
-                <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
-                {/* <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Style Quiz</a> */}
-                {/* <a href="/mood-board" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Mood Board</a> */}
-                <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Handshake</a>
-                <button
-                  onClick={() => { setMobileMenuOpen(false); openSignup(); }}
-                  className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
-                  style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
-                >Start Free</button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </nav>
+      <HomepageNav onCtaClick={openSignup} ctaLabel="Start Free" />
 
       <HeroSection onSignup={openSignup} />
 
@@ -703,7 +638,7 @@ export function FloorPlan3DLanding() {
       <FAQSection />
 
       <FooterCTASection onSignup={openSignup} />
-      <FooterNav />
+      <HomepageFooter />
 
       <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
     </div>

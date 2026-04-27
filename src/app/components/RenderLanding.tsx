@@ -2,7 +2,8 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { motion, useInView } from "motion/react";
 import { ReactLenis } from "lenis/react";
-import { SiteNav } from "./SiteNav";
+import { HomepageNav } from "./shared/HomepageNav";
+import { HomepageFooter } from "./shared/HomepageFooter";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import imgBefore from "figma:asset/c280f9f6aaab4ae8bddb90591c886526cb64a9c8.png";
 import imgAfter from "figma:asset/f07ac02def74d08b83946b312fd388bd8374c28c.png";
@@ -157,7 +158,7 @@ export function RenderLanding() {
         className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif] relative overflow-x-clip"
         style={{ color: "#0f0f0d" }}
       >
-        <SiteNav logoImg={imgNetworkLogo} onLogoClick={() => navigate("/")} />
+        <HomepageNav />
 
         {/* ── HERO ──────────────────────────────────────── */}
         <section className="relative pt-24 md:pt-32 pb-20">
@@ -428,14 +429,7 @@ export function RenderLanding() {
         </section>
 
         {/* ── FOOTER ────────────────────────────────────── */}
-        <footer className="bg-[#f0ede6] py-12 border-t border-[#e5e1d6]">
-          <div className="max-w-[1200px] mx-auto px-6 text-center">
-            <p className="text-[12px] text-[#9a9790]">
-              © {new Date().getFullYear()} NETWORK · All AI renders are
-              NETWORK previews and are watermarked.
-            </p>
-          </div>
-        </footer>
+        <HomepageFooter />
       </div>
     </ReactLenis>
 

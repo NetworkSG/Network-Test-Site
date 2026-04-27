@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { SiteNav } from "./SiteNav";
+import { HomepageNav } from "./shared/HomepageNav";
+import { HomepageFooter } from "./shared/HomepageFooter";
 import imgRectangle1 from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { C, serif, sans } from "./homepage/v8/primitives";
 import { ChevronDown, Check, Lock, Star, ShieldCheck } from "lucide-react";
@@ -651,7 +652,7 @@ export function CostGuide() {
         description="Estimate your HDB, condo, or landed renovation budget with Network's interactive cost guide. Real ranges by property type, scope, and finish."
         canonical="/cost-guide"
       />
-      <SiteNav logoImg={imgRectangle1} onLogoClick={() => navigate("/")} />
+      <HomepageNav />
       <div style={app}>
         {/* Progress dots */}
         <Progress activeIndex={progressIndex} />
@@ -806,6 +807,7 @@ export function CostGuide() {
 
         {screen === 6 && <Screen6 />}
       </div>
+      <HomepageFooter />
     </div>
   );
 }

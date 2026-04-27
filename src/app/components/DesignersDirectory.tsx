@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2 } from "lucide-react";
-import { SiteNav } from "./SiteNav";
+import { HomepageNav } from "./shared/HomepageNav";
+import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
@@ -453,7 +454,7 @@ export function DesignersDirectory() {
         canonical="/designers"
       />
       <div className="min-h-screen relative overflow-x-clip" style={{ background: C.cream }}>
-        <SiteNav logoImg={logoImg} />
+        <HomepageNav />
 
         {/* ─── HERO ─── */}
         <section className="pt-16 md:pt-24 pb-12 md:pb-16 px-6 md:px-10">
@@ -805,35 +806,7 @@ export function DesignersDirectory() {
         </section>
 
         {/* ─── FOOTER ─── */}
-        <footer className="px-6 md:px-10 py-10 md:py-14">
-          <div className="max-w-[1280px] mx-auto">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-                <a href="/" className="block shrink-0" style={{
-                  width: "110px", height: "23px", background: C.black,
-                  maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
-                  WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
-                }} />
-                <div className="flex items-center gap-6">
-                  {[
-                    { label: "Home", href: "/" },
-                    { label: "Designers", href: "/designers" },
-                    { label: "Layout Planner", href: "/floorplan3d" },
-                    { label: "Cost Guide", href: "/cost-guide" },
-                  ].map((link) => (
-                    <a key={link.label} href={link.href}
-                      className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                      style={{ color: C.grayLight, fontFamily: sans, transition: "all 0.15s" }}
-                    >{link.label}</a>
-                  ))}
-                </div>
-              </div>
-              <span className="text-[12px] font-normal" style={{ color: C.grayLight, fontFamily: sans }}>
-                © 2026 Network. All rights reserved.
-              </span>
-            </div>
-          </div>
-        </footer>
+        <HomepageFooter />
       </div>
     </ReactLenis>
   );

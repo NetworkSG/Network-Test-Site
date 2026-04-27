@@ -6,6 +6,8 @@ import { NAVBAR, FOOTER } from "../content";
 import type { FormState, LeadFormData } from "../types";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { Seo } from "../../shared/Seo";
+import { HomepageNav } from "../../shared/HomepageNav";
+import { HomepageFooter } from "../../shared/HomepageFooter";
 import { buildHomeStructuredData } from "../../shared/homeSchema";
 import { useGoogleReviews } from "../../useGoogleReviews";
 
@@ -142,86 +144,7 @@ export function HomepageV8() {
       <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans, color: C.black }}>
 
         {/* ═══ NAVBAR ═══ */}
-        <nav
-          className="sticky top-0 z-50"
-          style={{
-            background: C.cream,
-            transform: navHidden && !mobileMenuOpen ? "translateY(-100%)" : "translateY(0)",
-            transition: "transform 0.3s ease",
-          }}
-        >
-          <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
-            <a href="/" aria-label="Network — home" className="cursor-pointer shrink-0 block" style={{
-              width: "110px", height: "23px", background: C.black,
-              maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
-              WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
-            }} />
-            {/* Desktop nav */}
-            <div className="hidden md:flex items-center gap-8">
-              <a href="/" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Home</a>
-              <a href="/interior-designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Interior Designers</a>
-              <a href="/render-tool" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Room Designer</a>
-              <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Layout Planner</a>
-              <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
-              {/* <a href="/style-quiz" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Style Quiz</a> */}
-              {/* <a href="/mood-board" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Mood Board</a> */}
-              <a href="/networkxhandshake" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Handshake</a>
-            </div>
-            {/* Desktop CTA */}
-            <button onClick={scrollToForm}
-              className="hidden md:block text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
-              style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
-            >{NAVBAR.cta.label}</button>
-            {/* Mobile hamburger */}
-            <button
-              className="md:hidden w-10 h-10 flex items-center justify-center cursor-pointer"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.black} strokeWidth="1.5" strokeLinecap="round">
-                {mobileMenuOpen ? (
-                  <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
-                ) : (
-                  <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>
-                )}
-              </svg>
-            </button>
-          </div>
-          <div className="h-[1px]" style={{ background: C.creamBorder }} />
-          {/* Mobile menu dropdown */}
-          <AnimatePresence>
-            {mobileMenuOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="md:hidden overflow-hidden absolute left-0 right-0 top-full"
-                style={{
-                  background: C.cream,
-                  borderBottom: `1px solid ${C.creamBorder}`,
-                  boxShadow: "0 8px 24px rgba(15,15,13,0.06), 0 2px 6px rgba(15,15,13,0.04)",
-                }}
-              >
-                <div className="px-6 py-4 flex flex-col gap-1">
-                  <a href="/" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Home</a>
-                  <a href="/interior-designers" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Interior Designers</a>
-                  <a href="/render-tool" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Room Designer</a>
-                  <a href="/floorplan3d" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Layout Planner</a>
-                  <a href="/cost-guide" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Cost Guide</a>
-                  {/* <a href="/style-quiz" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Style Quiz</a> */}
-                  {/* <a href="/mood-board" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Mood Board</a> */}
-                  <a href="/networkxhandshake" className="py-3 text-[15px] font-normal cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Handshake</a>
-                  <button
-                    onClick={() => { setMobileMenuOpen(false); scrollToForm(); }}
-                    className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
-                    style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}
-                  >Get matched</button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </nav>
+        <HomepageNav onCtaClick={scrollToForm} ctaLabel={NAVBAR.cta.label} />
 
         {/* ═══ SECTIONS ═══ */}
         <HeroSection
@@ -247,117 +170,7 @@ export function HomepageV8() {
         <FinalRecap scrollToForm={scrollToForm} />
 
         {/* ═══ FOOTER ═══ */}
-        <footer className="px-6 md:px-10 py-10 md:py-14">
-          <div className="max-w-[1280px] mx-auto">
-            {/* Top row: logo (left) + nav (right) [mobile: logo + socials + privacy stacked under logo] */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5 md:gap-6">
-              <div className="flex flex-col gap-4 md:gap-0">
-                <a href="/" aria-label="Network — home" className="block shrink-0" style={{
-                  width: "110px", height: "23px", background: C.black,
-                  maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
-                  WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
-                }} />
-                {/* Mobile-only: socials (left) + privacy (right) below logo */}
-                <div className="flex md:hidden items-center justify-between">
-                  <div className="flex items-center gap-2 -ml-1.5">
-                    <a
-                      href="https://www.facebook.com/networksingapore/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Network on Facebook"
-                      className="inline-flex items-center justify-center w-8 h-8 hover:opacity-60 cursor-pointer"
-                      style={{ color: C.gray, transition: "all 0.15s" }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M13.5 21.95V13.5h2.85l.43-3.32H13.5V8.06c0-.96.27-1.62 1.65-1.62h1.76V3.47a23.6 23.6 0 0 0-2.57-.13c-2.55 0-4.29 1.55-4.29 4.4v2.45H7.18v3.31h2.87v8.45z" />
-                      </svg>
-                    </a>
-                    <a
-                      href="https://www.instagram.com/networksingapore/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Network on Instagram"
-                      className="inline-flex items-center justify-center w-8 h-8 hover:opacity-60 cursor-pointer"
-                      style={{ color: C.gray, transition: "all 0.15s" }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="3" y="3" width="18" height="18" rx="5" />
-                        <circle cx="12" cy="12" r="4" />
-                        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-                      </svg>
-                    </a>
-                  </div>
-                  <a
-                    href="/privacy-policy"
-                    className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                    style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
-                  >
-                    Privacy Policy
-                  </a>
-                </div>
-              </div>
-
-              {/* Desktop nav */}
-              <div className="hidden md:flex items-center gap-6 flex-wrap">
-                {FOOTER.links
-                  .filter((link) => link.label !== "Privacy Policy")
-                  .map((link) => (
-                    <a key={link.label} href={link.href}
-                      className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                      style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
-                    >{link.label}</a>
-                  ))}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="h-px my-6 md:my-8" style={{ background: C.creamBorder }} />
-
-            {/* Bottom row: copyright (left) + socials + privacy (right, desktop only) */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <span className="text-[12px] font-normal" style={{ color: C.gray, fontFamily: sans }}>
-                {FOOTER.copyright}
-              </span>
-              <div className="hidden md:flex items-center gap-5">
-                <div className="flex items-center gap-2">
-                  <a
-                    href="https://www.facebook.com/networksingapore/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Network on Facebook"
-                    className="inline-flex items-center justify-center w-8 h-8 hover:opacity-60 cursor-pointer"
-                    style={{ color: C.gray, transition: "all 0.15s" }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M13.5 21.95V13.5h2.85l.43-3.32H13.5V8.06c0-.96.27-1.62 1.65-1.62h1.76V3.47a23.6 23.6 0 0 0-2.57-.13c-2.55 0-4.29 1.55-4.29 4.4v2.45H7.18v3.31h2.87v8.45z" />
-                    </svg>
-                  </a>
-                  <a
-                    href="https://www.instagram.com/networksingapore/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Network on Instagram"
-                    className="inline-flex items-center justify-center w-8 h-8 hover:opacity-60 cursor-pointer"
-                    style={{ color: C.gray, transition: "all 0.15s" }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="3" y="3" width="18" height="18" rx="5" />
-                      <circle cx="12" cy="12" r="4" />
-                      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-                    </svg>
-                  </a>
-                </div>
-                <a
-                  href="/privacy-policy"
-                  className="text-[13px] font-normal hover:opacity-60 cursor-pointer"
-                  style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
-                >
-                  Privacy Policy
-                </a>
-              </div>
-            </div>
-          </div>
-        </footer>
+        <HomepageFooter />
         </div>
 
 
