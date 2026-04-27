@@ -92,6 +92,7 @@ export interface ProjectSubmission {
   worksIncluded: string[];
   driveUrl: string;
   images?: string[];
+  floorPlan?: string;
 }
 
 export interface OnboardingPayload {

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { C, sans, serif } from "../homepage/v8/primitives";
 import { OnboardingShell } from "../firm-onboarding/OnboardingShell";
 import { FirmCombobox } from "../firm-onboarding/FirmCombobox";
 import { listAirtableFirms, submitOnboarding } from "../firm-onboarding/onboardingApi";
+import { useFloorPlanSet, classifyFloorPlan } from "../../utils/floor-plan-detect";
 import {
   Hammer,
   Layers,
@@ -14,6 +15,7 @@ import {
   Paintbrush,
   Lightbulb,
   Check,
+  LayoutPanelTop,
 } from "lucide-react";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -576,62 +578,8 @@ export function QanvastImportTest() {
               </div>
             </div>
 
-            {/* Photos */}
-            {(() => {
-              const imgs720 = (p.images || []).filter((src) => /\/720-width(?:$|\?)/.test(src));
-              return imgs720.length > 0 && (
-              <div style={{ marginTop: 28 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    justifyContent: "space-between",
-                    marginBottom: 12,
-                  }}
-                >
-                  <label style={labelStyle}>Project Photos</label>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: C.grayLight,
-                      fontFamily: sans,
-                    }}
-                  >
-                    {imgs720.length} found
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(160px, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  {imgs720.map((src, i) => (
-                    <img
-                      key={i}
-                      src={src}
-                      alt=""
-                      loading="lazy"
-                      style={{
-                        width: "100%",
-                        aspectRatio: "1/1",
-                        objectFit: "cover",
-                        borderRadius: 10,
-                        background: C.cream,
-                        border: `1px solid ${C.creamBorder}`,
-                      }}
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.opacity =
-                          "0.2";
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-            })()}
+            {/* Photos + auto-detected Floorplan */}
+            <PhotosWithFloorPlan images={p.images || []} explicitFloorPlan={(p as any).floorPlan} labelStyle={labelStyle} />
 
             {/* Submit to own-website designer projects */}
             <div style={{ marginTop: 28 }}>
@@ -671,7 +619,19 @@ export function QanvastImportTest() {
                         try {
                           // Prefer the Qanvast 720-width variants; fall back to full list.
                           const imgs720 = (p.images || []).filter((src) => /\/720-width(?:$|\?)/.test(src));
-                          const imagesToMirror = imgs720.length ? imgs720 : (p.images || []).slice(0, 30);
+                          const baseImages = imgs720.length ? imgs720 : (p.images || []).slice(0, 30);
+                          // Auto-detect floor plan client-side and route it out
+                          // of the gallery, so the saved record splits photos
+                          // and floor plan correctly. Falls back to the
+                          // server-tagged floorPlan if scraping found one.
+                          let detectedFloorPlan = (p as any).floorPlan || "";
+                          if (!detectedFloorPlan) {
+                            const verdicts = await Promise.all(baseImages.map(async (u) => ({ u, fp: await classifyFloorPlan(u) })));
+                            detectedFloorPlan = verdicts.find((v) => v.fp)?.u || "";
+                          }
+                          const imagesToMirror = detectedFloorPlan
+                            ? baseImages.filter((u) => u !== detectedFloorPlan)
+                            : baseImages;
                           await submitOnboarding({
                             variant: "project-only",
                             contactEmail: firmEmail,
@@ -690,6 +650,7 @@ export function QanvastImportTest() {
                               worksIncluded: p.worksIncluded || [],
                               driveUrl: p.sourceUrl || url.trim(),
                               images: imagesToMirror,
+                              floorPlan: detectedFloorPlan,
                               sourceUrl: p.sourceUrl || url.trim(),
                             } as any,
                           });
@@ -730,6 +691,98 @@ export function QanvastImportTest() {
         )}
       </div>
     </OnboardingShell>
+  );
+}
+
+function PhotosWithFloorPlan({ images, explicitFloorPlan, labelStyle }: { images: string[]; explicitFloorPlan?: string; labelStyle: React.CSSProperties }) {
+  const imgs720 = useMemo(() => (images || []).filter((src) => /\/720-width(?:$|\?)/.test(src)), [images]);
+  const candidates = useMemo(() => {
+    const out: string[] = [];
+    if (explicitFloorPlan) out.push(explicitFloorPlan);
+    for (const u of imgs720) out.push(u);
+    return out;
+  }, [imgs720, explicitFloorPlan]);
+  const fpSet = useFloorPlanSet(candidates);
+  const detectedFloorPlans = useMemo(() => {
+    const set = new Set<string>();
+    if (explicitFloorPlan) set.add(explicitFloorPlan);
+    for (const u of imgs720) if (fpSet.has(u)) set.add(u);
+    return Array.from(set);
+  }, [imgs720, fpSet, explicitFloorPlan]);
+  const photoOnly = useMemo(() => imgs720.filter((u) => !detectedFloorPlans.includes(u)), [imgs720, detectedFloorPlans]);
+
+  if (imgs720.length === 0 && detectedFloorPlans.length === 0) return null;
+
+  return (
+    <>
+      {detectedFloorPlans.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+            <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
+              <LayoutPanelTop size={12} /> Floorplan
+            </label>
+            <span style={{ fontSize: 12, color: C.grayLight, fontFamily: sans }}>
+              {detectedFloorPlans.length} detected
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+            {detectedFloorPlans.map((src, i) => (
+              <a
+                key={i}
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "block",
+                  background: C.cream,
+                  border: `1px solid ${C.creamBorder}`,
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  aspectRatio: "4/3",
+                  position: "relative",
+                }}
+              >
+                <img
+                  src={src}
+                  alt="Floor plan"
+                  loading="lazy"
+                  style={{ width: "100%", height: "100%", objectFit: "contain", background: C.white }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.2"; }}
+                />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {photoOnly.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+            <label style={labelStyle}>Project Photos</label>
+            <span style={{ fontSize: 12, color: C.grayLight, fontFamily: sans }}>{photoOnly.length} found</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+            {photoOnly.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt=""
+                loading="lazy"
+                style={{
+                  width: "100%",
+                  aspectRatio: "1/1",
+                  objectFit: "cover",
+                  borderRadius: 10,
+                  background: C.cream,
+                  border: `1px solid ${C.creamBorder}`,
+                }}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.2"; }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

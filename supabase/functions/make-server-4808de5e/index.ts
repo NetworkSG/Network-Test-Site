@@ -1076,6 +1076,53 @@ app.get("/make-server-4808de5e/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+// ─── Image proxy ──────────────────────────────────────────────────
+// Tiny same-origin pass-through used by the client-side floor-plan detector.
+// Qanvast's CDN (d1hy6t2xeg0mdl.cloudfront.net) doesn't return CORS headers,
+// so the browser can't readPixels from those images. This endpoint fetches the
+// upstream bytes server-side and re-emits them with `Access-Control-Allow-Origin: *`.
+// Allow-list only known image hosts to prevent open-proxy abuse.
+const IMG_PROXY_HOSTS = [
+  /(^|\.)qanvast\.com$/i,
+  /(^|\.)cloudfront\.net$/i,
+  /(^|\.)supabase\.co$/i,
+];
+app.get("/make-server-4808de5e/img-proxy", async (c) => {
+  try {
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.text("Too many requests", 429);
+    const raw = c.req.query("url");
+    if (!raw) return c.text("Missing url", 400);
+    let parsed: URL;
+    try { parsed = new URL(raw); } catch { return c.text("Invalid url", 400); }
+    if (!/^https?:$/.test(parsed.protocol)) return c.text("Bad protocol", 400);
+    if (!IMG_PROXY_HOSTS.some((re) => re.test(parsed.hostname))) {
+      return c.text("Host not allowed", 400);
+    }
+    const upstream = await fetch(parsed.toString(), {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (img-proxy)",
+        "Accept": "image/*,*/*;q=0.8",
+      },
+      redirect: "follow",
+    });
+    if (!upstream.ok || !upstream.body) {
+      return c.text(`Upstream ${upstream.status}`, 502);
+    }
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        "content-type": upstream.headers.get("content-type") || "image/jpeg",
+        "cache-control": "public, max-age=600",
+        "access-control-allow-origin": "*",
+      },
+    });
+  } catch (err: any) {
+    return c.text("Proxy error: " + (err?.message || String(err)), 502);
+  }
+});
+
 // --- Zapier webhook proxy ---
 // Webhook URLs are server-side only, never exposed to frontend
 const ZAPIER_WEBHOOKS: Record<string, string> = {
@@ -1961,11 +2008,15 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
     } else if (isDriveFolder) {
       mirroredImagesPre = await listDriveFolderImageUrls(inboundDriveUrl);
     }
+    // Mirror floor plan separately so it never lands in the gallery scroll.
+    const inboundFloorPlan = String((project as any).floorPlan || "").slice(0, 600);
+    const mirroredFloorPlan = inboundFloorPlan ? (await mirrorProjectImages([inboundFloorPlan]))[0] || "" : "";
     const pendingProject = {
       name: String(project.title || "").slice(0, 200),
       meta: buildProjectMeta(project),
       image: mirroredImagesPre[0] || "",
       gallery: mirroredImagesPre.slice(1).map((src) => ({ src, caption: "" })),
+      floorPlan: mirroredFloorPlan,
       driveUrl: String(project.driveUrl || "").slice(0, 500),
       location: String(project.location || "").slice(0, 200),
       cost: String(project.cost || "").slice(0, 100),
@@ -2573,16 +2624,44 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       (v.companyName || v.companyId) && (v.description || v.overallRating || v.prettyUrl)
     );
     // Image base URLs — photo records carry `baseUrl` on the Cloudfront CDN.
+    // Floor-plan photos are usually flagged by a category/type/tag/kind/name
+    // field; we route them to a separate `floorPlanUrl` and exclude from gallery.
     const photoBaseUrls: string[] = [];
+    const floorPlanCandidates: string[] = [];
+    const isFloorPlanItem = (item: any): boolean => {
+      if (!item || typeof item !== "object") return false;
+      const fields = ["category", "type", "kind", "tag", "tags", "label", "name", "title", "section", "group"];
+      for (const f of fields) {
+        const v = item[f];
+        if (typeof v === "string" && /floor[\s_-]?plan/i.test(v)) return true;
+        if (Array.isArray(v) && v.some((x: any) => typeof x === "string" && /floor[\s_-]?plan/i.test(x))) return true;
+      }
+      return !!item.isFloorPlan || !!item.is_floor_plan;
+    };
     for (const v of Object.values(rscDict)) {
       if (Array.isArray(v)) {
         for (const item of v) {
           if (item && typeof item === "object" && typeof item.baseUrl === "string" && /d1hy6t2xeg0mdl\.cloudfront\.net/.test(item.baseUrl)) {
-            photoBaseUrls.push(item.baseUrl + "/standard");
+            const url = item.baseUrl + "/standard";
+            if (isFloorPlanItem(item)) floorPlanCandidates.push(url);
+            else photoBaseUrls.push(url);
           }
         }
       }
     }
+    // Direct fields on the project record that may carry a floor plan URL.
+    if (projectRecord) {
+      for (const k of ["floorPlan", "floorPlanUrl", "floorPlanImage", "floorplan", "layoutPlan"]) {
+        const v = (projectRecord as any)[k];
+        if (typeof v === "string" && /^https?:\/\//.test(v)) floorPlanCandidates.push(v);
+        else if (v && typeof v === "object" && typeof (v as any).url === "string") floorPlanCandidates.push((v as any).url);
+      }
+    }
+    // HTML fallback: <img> with alt mentioning floor plan, or near a "Floor Plan" label.
+    const htmlFloorPlanRe = /<img[^>]+(?:alt|aria-label)=["'][^"']*floor[\s_-]?plan[^"']*["'][^>]*src=["']([^"']+)["']/i;
+    const htmlFloorPlanMatch = html.match(htmlFloorPlanRe);
+    if (htmlFloorPlanMatch) floorPlanCandidates.push(htmlFloorPlanMatch[1]);
+    const floorPlanUrl = floorPlanCandidates.find((u) => typeof u === "string" && u.length > 0) || "";
 
     // If we found a structured project, use it as the canonical project entry.
     if (projectRecord) {
@@ -2741,6 +2820,7 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         worksIncluded,
         driveUrl: "",
         images: Array.isArray(p.images) ? p.images : [],
+        floorPlan: floorPlanUrl || "",
         sourceUrl: p.sourceUrl || rawUrl,
       };
     });

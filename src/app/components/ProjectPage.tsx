@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate, Link } from "react-router";
 import {
   MapPin, X, ChevronLeft, ChevronRight, ArrowUp, ArrowRight, Star, BadgeCheck,
   ChevronDown, CheckCircle,
   Hammer, Layers, Square as SquareIcon, Wind, Zap, Droplet, Paintbrush, Lightbulb,
+  LayoutPanelTop,
 } from "lucide-react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
+import { useIsFloorPlan } from "../utils/floor-plan-detect";
 import { SiteNav } from "./SiteNav";
 import { useDesignerData } from "./useDesignerData";
 import { transformApiData } from "./DesignerProfile";
@@ -166,6 +169,7 @@ export function ProjectPage() {
   const navigate = useNavigate();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [activeImage, setActiveImage] = useState(0);
+  const [floorPlanOpen, setFloorPlanOpen] = useState(false);
 
   // Fetch designer data
   const { data: apiData, loading } = useDesignerData(slug);
@@ -196,8 +200,25 @@ export function ProjectPage() {
   // Project images — cover + gallery
   const projectImage = resolveImg(project?.coverImage || project?.img || project?.image);
   const galleryImages = (project?.gallery || []).map((g: any) => resolveImg(g.src || g)).filter(Boolean);
-  const images = [projectImage, ...galleryImages].filter(Boolean);
-  const galleryCaptions = (project?.gallery || []).map((g: any) => g.caption || "");
+  const rawImages = [projectImage, ...galleryImages].filter(Boolean);
+  const rawCaptions = ["", ...(project?.gallery || []).map((g: any) => g.caption || "")];
+  const explicitFloorPlan = project?.floorPlan ? resolveImg(project.floorPlan) : "";
+  // Auto-detect floor plan in the first image when the project doesn't have an
+  // explicit floorPlan field. Qanvast imports historically dropped the floor
+  // plan into the cover slot, so we look at images[0] only and check whether
+  // the pixels are near-grayscale (typical of architectural plans).
+  const autoDetected = useIsFloorPlan(!explicitFloorPlan ? rawImages[0] || "" : "");
+  const detectedAsFloorPlan = autoDetected === true && !explicitFloorPlan && !!rawImages[0];
+  const projectFloorPlan = explicitFloorPlan || (detectedAsFloorPlan ? rawImages[0] : "");
+  // Always hide the floor plan from the scrolling gallery — only the Floor Plan
+  // button + modal should ever show it. Filter by URL so it works regardless of
+  // whether the floor plan came from explicit data or auto-detection.
+  const images = projectFloorPlan
+    ? rawImages.filter((u) => u !== projectFloorPlan)
+    : rawImages;
+  const galleryCaptions = projectFloorPlan
+    ? rawImages.map((u, i) => rawCaptions[i]).filter((_, i) => rawImages[i] !== projectFloorPlan).slice(1)
+    : rawCaptions.slice(1);
 
   // Rich metadata
   const projectLocation = project?.location || "";
@@ -332,7 +353,69 @@ export function ProjectPage() {
                   <span className="text-white text-[13px]" style={{ fontFamily: sans }}>{galleryCaptions[activeImage - 1]}</span>
                 </div>
               )}
+              {projectFloorPlan && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setFloorPlanOpen(true); }}
+                  className="absolute bottom-4 left-4 md:bottom-5 md:left-5 flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
+                  style={{
+                    height: "40px",
+                    padding: "0 14px",
+                    background: "rgba(255,255,255,0.95)",
+                    color: C.black,
+                    border: "none",
+                    borderRadius: "10px",
+                    fontFamily: sans,
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    boxShadow: "0 2px 8px rgba(15,15,13,0.18)",
+                  }}
+                  aria-label="View floor plan"
+                >
+                  <LayoutPanelTop size={16} strokeWidth={2} />
+                  <span>Floor Plan</span>
+                </button>
+              )}
             </div>
+          )}
+
+          {/* Floor plan modal — portaled to body so ancestor transforms (e.g. FadeIn motion) don't break `position: fixed` */}
+          {floorPlanOpen && projectFloorPlan && createPortal(
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8"
+              style={{ background: "rgba(15,15,13,0.85)" }}
+              onClick={() => setFloorPlanOpen(false)}
+            >
+              <div
+                className="relative w-full max-w-[920px] max-h-[90vh] overflow-hidden flex flex-col"
+                style={{ background: C.white, borderRadius: "16px" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${C.creamBorder}` }}>
+                  <div className="flex items-center gap-2">
+                    <LayoutPanelTop size={18} style={{ color: C.black }} />
+                    <h3 className="text-[15px] font-semibold" style={{ color: C.black, fontFamily: sans }}>Floor Plan</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFloorPlanOpen(false)}
+                    aria-label="Close floor plan"
+                    className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer hover:opacity-80"
+                    style={{ background: C.cream, color: C.black, border: "none" }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto" style={{ background: C.cream }}>
+                  <img
+                    src={projectFloorPlan}
+                    alt={`${project.name} floor plan`}
+                    className="w-full h-auto object-contain"
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body
           )}
 
           {/* Thumbnail carousel */}

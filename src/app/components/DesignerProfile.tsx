@@ -8,6 +8,7 @@ import { SiteNav } from "./SiteNav";
 import { FOOTER } from "./homepage/content";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { useDesignerData } from "./useDesignerData";
+import { useFloorPlanSet, projectCandidateImages } from "../utils/floor-plan-detect";
 import { useGoogleReviews } from "./useGoogleReviews";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
@@ -356,22 +357,29 @@ export function HeroSection() {
   const cp = p?.coverProject;
   const companyName = p?.name || "Input Interior Designer name";
 
-  // Build the list of featured slides (up to 5). Falls back to a single
-  // synthetic slide using the profile's cover image when nothing is featured.
-  const featuredSlides = useMemo(() => {
+  // Build the list of featured slides (up to 5). Each slide carries an ordered
+  // list of candidate images so we can skip floor plans when detected.
+  const baseSlides = useMemo(() => {
     const featured = (ctx?.projects || []).filter((proj: any) => proj.isFeatured).slice(0, 5);
     if (featured.length > 0) {
-      return featured.map((fp: any) => ({
-        img: fp.featuredImage || fp.coverImage || fp.image || "",
-        name: fp.name || fp.title || "",
-        cost: fp.cost || "",
-        area: fp.size || "",
-        style: fp.style || "",
-        href: fp.name ? `/designer/${slug}/project/${encodeURIComponent(fp.name)}` : null,
-      }));
+      return featured.map((fp: any) => {
+        const candidates: string[] = [];
+        const seen = new Set<string>();
+        for (const u of [fp.featuredImage, fp.coverImage, fp.image, ...(Array.isArray(fp.gallery) ? fp.gallery.map((g: any) => g?.src || g) : [])]) {
+          if (typeof u === "string" && u && !seen.has(u)) { candidates.push(u); seen.add(u); }
+        }
+        return {
+          candidates,
+          name: fp.name || fp.title || "",
+          cost: fp.cost || "",
+          area: fp.size || "",
+          style: fp.style || "",
+          href: fp.name ? `/designer/${slug}/project/${encodeURIComponent(fp.name)}` : null,
+        };
+      });
     }
     return [{
-      img: p?.images?.cover || "",
+      candidates: p?.images?.cover ? [p.images.cover] : [],
       name: cp?.name || "Featured project name",
       cost: cp?.cost || "",
       area: cp?.area || "",
@@ -379,6 +387,18 @@ export function HeroSection() {
       href: null as string | null,
     }];
   }, [ctx?.projects, p?.images?.cover, cp, slug]);
+
+  const allCandidates = useMemo(() => baseSlides.flatMap((s) => s.candidates), [baseSlides]);
+  const floorPlans = useFloorPlanSet(allCandidates);
+
+  const featuredSlides = useMemo(() => {
+    return baseSlides
+      .map((s) => {
+        const img = s.candidates.find((u) => !floorPlans.has(u)) || "";
+        return { ...s, img };
+      })
+      .filter((s) => s.img); // drop slides where every candidate was a floor plan
+  }, [baseSlides, floorPlans]);
 
   const [activeIdx, setActiveIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -1510,18 +1530,24 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
     <Link to={`/designer/${slug}/project/${encodeURIComponent(p.name)}`} className="absolute inset-0 z-[1]" />
   );
 
+  // Skip the cover image if it's a floor plan; fall back to the next gallery
+  // candidate. Floor plans should never appear as a project card cover.
+  const candidates = useMemo(() => projectCandidateImages(p), [p]);
+  const fpSet = useFloorPlanSet(candidates);
+  const cover = candidates.find((c) => !fpSet.has(c)) || candidates[0] || p.img || "";
+
   return (
     <div className="relative group isolate h-[280px] md:h-[400px] cursor-pointer">
       {/* Ambient glow on hover (desktop only) — purely decorative, must not
            capture pointer events or its bleed would trigger the neighbour
            card's group-hover and block the delete button. */}
       <div className="absolute -inset-6 opacity-0 group-hover:opacity-40 transition-opacity duration-700 hidden md:block pointer-events-none" style={{ filter: "blur(60px)", transform: "scale(1.1)" }}>
-        <img src={resolveImg(p.img)} alt="" className="w-full h-full object-cover saturate-150 brightness-110" />
+        <img src={resolveImg(cover)} alt="" className="w-full h-full object-cover saturate-150 brightness-110" />
       </div>
       {/* Card inner */}
       <div className="relative z-10 bg-[#0f0f0d] rounded-[16px] overflow-hidden h-full">
         {/* Image layer — full color, subtle zoom on hover */}
-        <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        <img src={resolveImg(cover)} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
         {/* Gradient overlay for caption legibility */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
         {overlay}
@@ -1567,6 +1593,19 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
     else if (sort === "oldest") list.reverse();
     return list;
   }, [projs, search, sort]);
+
+  // Detect floor plans across all candidate images so we can substitute the
+  // displayed cover when the picked one is a floor plan.
+  const allCovers = useMemo(() => {
+    const out = new Set<string>();
+    for (const p of projs) for (const c of projectCandidateImages(p)) out.add(c);
+    return Array.from(out);
+  }, [projs]);
+  const fpSet = useFloorPlanSet(allCovers);
+  const pickCover = (p: any): string => {
+    const cands = projectCandidateImages(p);
+    return cands.find((c) => !fpSet.has(c)) || cands[0] || "";
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -1631,7 +1670,7 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   onClick={onClose}
                   className="relative rounded-[20px] overflow-hidden h-[220px] group cursor-pointer block"
                 >
-                  <img src={resolveImg(p.img)} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <img src={resolveImg(pickCover(p))} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
                   <div className="absolute bottom-3 left-4 right-4">
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>

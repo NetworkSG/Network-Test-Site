@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./supabaseClient";
+import { useFloorPlanSet, classifyFloorPlan } from "../utils/floor-plan-detect";
 import {
   DesignerDataContext,
   ProfileEditContext,
@@ -1153,6 +1154,40 @@ function slugifyTitle(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
 }
 
+/** Inspect a project draft and, if any of its images is a floor plan, route
+ *  that image to `floorPlan` and rebuild `coverImage` + `gallery` so it never
+ *  appears in the scrolling photos. Returns a new draft (no mutation). */
+async function applyFloorPlanDetection(draft: NewProjectDraft): Promise<NewProjectDraft> {
+  // Already explicitly set — trust it.
+  if (draft.floorPlan) return draft;
+  const candidates: string[] = [];
+  if (draft.coverImage) candidates.push(draft.coverImage);
+  for (const g of draft.gallery) if (g.src) candidates.push(g.src);
+  if (!candidates.length) return draft;
+  const verdicts = await Promise.all(
+    candidates.map(async (u) => ({ u, isFp: await classifyFloorPlan(u) }))
+  );
+  const fpUrl = verdicts.find((v) => v.isFp)?.u;
+  if (!fpUrl) return draft;
+  const isCoverFp = draft.coverImage === fpUrl;
+  const remainingGallery = draft.gallery.filter((g) => g.src !== fpUrl);
+  let nextCover = draft.coverImage;
+  let nextGallery = remainingGallery;
+  if (isCoverFp) {
+    // Promote the first remaining gallery image to cover so the project still
+    // has a non-floor-plan hero shot.
+    nextCover = remainingGallery[0]?.src || "";
+    nextGallery = remainingGallery.slice(1);
+  }
+  return {
+    ...draft,
+    coverImage: nextCover,
+    gallery: nextGallery,
+    floorPlan: fpUrl,
+    featuredImage: draft.featuredImage === fpUrl ? "" : draft.featuredImage,
+  };
+}
+
 // ─── ADD PROJECT MODAL ───────────────────────────────────────────
 interface NewProjectDraft {
   title: string;
@@ -1241,6 +1276,14 @@ function AddProjectModal({
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+
+  // Detect floor plans among the cover + gallery so they can be excluded
+  // from the featured photo picker.
+  const pickerCandidates = useMemo(
+    () => [draft.coverImage, ...draft.gallery.map((g) => g.src)].filter(Boolean) as string[],
+    [draft.coverImage, draft.gallery]
+  );
+  const floorPlanSet = useFloorPlanSet(pickerCandidates);
 
   // Reset form whenever modal opens
   useEffect(() => {
@@ -1339,7 +1382,8 @@ function AddProjectModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || saving) return;
-    await onSave(draft);
+    const adjusted = await applyFloorPlanDetection(draft);
+    await onSave(adjusted);
   };
 
   const labelStyle: React.CSSProperties = {
@@ -1731,8 +1775,8 @@ function AddProjectModal({
                   {draft.isFeatured && (() => {
                     const choices: { src: string; label: string }[] = [];
                     const seen = new Set<string>();
-                    if (draft.coverImage && !seen.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
-                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
+                    if (draft.coverImage && !seen.has(draft.coverImage) && !floorPlanSet.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
+                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src) && !floorPlanSet.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
                     if (choices.length === 0) return null;
                     const selected = draft.featuredImage || draft.coverImage;
                     return (
@@ -1852,6 +1896,13 @@ function EditProjectModal({
   const coverRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
+  // Detect floor plans so they can be hidden from the featured photo picker.
+  const pickerCandidates = useMemo(
+    () => [draft.coverImage, ...draft.gallery.map((g) => g.src)].filter(Boolean) as string[],
+    [draft.coverImage, draft.gallery]
+  );
+  const floorPlanSet = useFloorPlanSet(pickerCandidates);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !saving) onClose(); };
     document.addEventListener("keydown", onKey);
@@ -1933,7 +1984,8 @@ function EditProjectModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || saving) return;
-    await onSave(draft);
+    const adjusted = await applyFloorPlanDetection(draft);
+    await onSave(adjusted);
   };
 
   const labelStyle: React.CSSProperties = {
@@ -2142,8 +2194,8 @@ function EditProjectModal({
                   {draft.isFeatured && (() => {
                     const choices: { src: string; label: string }[] = [];
                     const seen = new Set<string>();
-                    if (draft.coverImage && !seen.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
-                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
+                    if (draft.coverImage && !seen.has(draft.coverImage) && !floorPlanSet.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
+                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src) && !floorPlanSet.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
                     if (choices.length === 0) return null;
                     const selected = draft.featuredImage || draft.coverImage;
                     return (
@@ -2256,6 +2308,7 @@ function InlineProjects() {
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
         featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
+        floorPlan: draft.floorPlan || "",
       };
       const next = projects.map((p, j) => (j === editIndex ? updated : p));
       const ok = await saveSection("projects", next);
@@ -2303,6 +2356,7 @@ function InlineProjects() {
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
         featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
+        floorPlan: draft.floorPlan || "",
       };
 
       const ok = await saveSection("projects", [...projects, newProject]);
@@ -4287,6 +4341,7 @@ function EditorView({ slug }: { slug: string }) {
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
         featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
+        floorPlan: draft.floorPlan || "",
       };
 
       const ok = await saveSection("projects", [...projects, newProject]);
@@ -4343,6 +4398,7 @@ function EditorView({ slug }: { slug: string }) {
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
         featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
+        floorPlan: draft.floorPlan || "",
       };
       const next = projects.map((p, j) => (j === editProjectIndex ? updated : p));
       const ok = await saveSection("projects", next);
