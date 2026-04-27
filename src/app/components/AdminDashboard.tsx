@@ -1744,7 +1744,9 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [showForm, setShowForm] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [designerToggleConfirm, setDesignerToggleConfirm] = useState<{ slug: string; currentlyActive: boolean } | null>(null);
-  const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor" | "debug">("overview");
+  const [designerDeleteConfirm, setDesignerDeleteConfirm] = useState<{ slug: string; name: string } | null>(null);
+  const [deletingDesigner, setDeletingDesigner] = useState<string | null>(null);
+  const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor" | "debug" | "deleted">("overview");
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
@@ -1767,6 +1769,26 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
       if (aActive !== bActive) return aActive - bActive;
       return (a.name || a.slug || "").localeCompare(b.name || b.slug || "");
     });
+
+  // Permanently delete a designer profile + all its sections.
+  const deleteDesigner = useCallback(async (slug: string) => {
+    setDeletingDesigner(slug);
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`${API}/designers/${encodeURIComponent(slug)}`, { method: "DELETE", headers });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success) {
+        setToast({ type: "success", message: `Archived "${slug}" — view in Deleted Designers to restore or remove forever` });
+        setDesigners((prev) => prev.filter((d: any) => d.slug !== slug));
+      } else {
+        setToast({ type: "error", message: json.error || `Archive failed (${res.status})` });
+      }
+    } catch (err: any) {
+      setToast({ type: "error", message: err?.message || "Network error" });
+    }
+    setDeletingDesigner(null);
+    setDesignerDeleteConfirm(null);
+  }, []);
 
   // Fetch designer list
   const fetchDesigners = useCallback(async () => {
@@ -2017,7 +2039,10 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
             { key: "designers" as const, icon: Users, label: "Designer Profiles" },
             { key: "template-editor" as const, icon: PenLine, label: "Template Editor" },
             ...((adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
-              ? [{ key: "debug" as const, icon: Activity, label: "Debug" }]
+              ? [
+                  { key: "deleted" as const, icon: Trash2, label: "Deleted Designers" },
+                  { key: "debug" as const, icon: Activity, label: "Debug" },
+                ]
               : []),
           ]).map((s) => (
             <button
@@ -2044,6 +2069,10 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
         ) : adminSection === "debug" ? (
           (adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
             ? <AdminDebugPanel />
+            : <div className="p-8 text-center text-[#6a7282]">Access restricted.</div>
+        ) : adminSection === "deleted" ? (
+          (adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
+            ? <DeletedDesignersPanel />
             : <div className="p-8 text-center text-[#6a7282]">Access restricted.</div>
         ) : !showForm ? (
           /* ──────── DESIGNER LIST VIEW ──────── */
@@ -2208,8 +2237,17 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                         onClick={() => setDesignerToggleConfirm({ slug: d.slug, currentlyActive: d.active !== false })}
                         disabled={toggling === d.slug}
                         className={`size-[34px] flex items-center justify-center border rounded-lg transition-all cursor-pointer disabled:opacity-50 ${d.active === false ? "border-[#e5e7eb] text-[#d1d5db] hover:text-[#22c55e] hover:border-[#bbf7d0] hover:bg-[#f0fdf4]" : "border-[#e5e7eb] text-[#d1d5db] hover:text-[#f59e0b] hover:border-[#fde68a] hover:bg-[#fffbeb]"}`}
+                        title={d.active === false ? "Activate" : "Deactivate"}
                       >
                         {toggling === d.slug ? <Loader2 className="size-4 animate-spin" /> : <Power className="size-4" />}
+                      </button>
+                      <button
+                        onClick={() => setDesignerDeleteConfirm({ slug: d.slug, name: d.name || d.slug })}
+                        disabled={deletingDesigner === d.slug}
+                        className="size-[34px] flex items-center justify-center border border-[#e5e7eb] text-[#d1d5db] rounded-lg transition-all cursor-pointer hover:text-[#ef4444] hover:border-[#fecaca] hover:bg-[#fef2f2] disabled:opacity-50"
+                        title="Delete designer"
+                      >
+                        {deletingDesigner === d.slug ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
                       </button>
                     </div>
                   </div>
@@ -2766,6 +2804,39 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
       </div>{/* close sidebar + content flex wrapper */}
 
       {/* Designer Activate/Deactivate Confirmation Modal */}
+      {designerDeleteConfirm && typeof document !== "undefined" && document.body && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !deletingDesigner && setDesignerDeleteConfirm(null)}>
+          <div className="bg-white rounded-[17px] shadow-[0_25px_35.9px_rgba(0,0,0,0.07)] border border-[#F3F4F6] w-[90vw] max-w-[440px] p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="size-[40px] rounded-[14px] flex items-center justify-center bg-red-50">
+                <Trash2 className="size-[20px] text-red-600" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="font-['Inter',sans-serif] font-bold text-[16px] text-[#09090B] tracking-[-0.3px]">Delete designer?</h3>
+                <p className="font-['Inter',sans-serif] text-[12px] text-[#71717A]">{designerDeleteConfirm.slug}</p>
+              </div>
+            </div>
+            <p className="font-['Inter',sans-serif] text-[13px] text-[#6a7282] mb-5">
+              <strong>{designerDeleteConfirm.name}</strong> will be archived and hidden from the public site. You can restore it from the <em>Deleted Designers</em> tab at any time.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDesignerDeleteConfirm(null)} disabled={!!deletingDesigner} className="flex-1 h-[40px] rounded-[14px] border border-[#E5E7EB] bg-white text-[#09090B] font-['Inter',sans-serif] text-[13px] font-medium hover:bg-[#F6F6F6] transition-colors cursor-pointer disabled:opacity-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteDesigner(designerDeleteConfirm.slug)}
+                disabled={!!deletingDesigner}
+                className="flex-1 flex items-center justify-center gap-2 h-[40px] rounded-[14px] text-white font-['Inter',sans-serif] text-[13px] font-semibold bg-red-600 hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {deletingDesigner === designerDeleteConfirm.slug ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {designerToggleConfirm && typeof document !== "undefined" && document.body && createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !toggling && setDesignerToggleConfirm(null)}>
           <div className="bg-white rounded-[17px] shadow-[0_25px_35.9px_rgba(0,0,0,0.07)] border border-[#F3F4F6] w-[90vw] max-w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
@@ -2808,6 +2879,184 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+    </div>
+  );
+}
+
+/* ─────────────────── DELETED DESIGNERS PANEL ─────────────────── */
+
+function DeletedDesignersPanel() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [purgeConfirm, setPurgeConfirm] = useState<{ slug: string; name: string } | null>(null);
+
+  // Fetch helper that gracefully handles non-JSON responses (e.g. when the
+  // Supabase function hasn't been deployed yet and the platform returns
+  // plain-text 404 / auth errors instead of our normal `{error}` JSON).
+  const callApi = async (path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; json: any; text?: string }> => {
+    const headers = await getAdminAuthHeaders();
+    const res = await fetch(`${API}${path}`, { ...init, headers: { ...headers, ...(init?.headers || {}) } });
+    const text = await res.text();
+    let json: any = null;
+    try { json = text ? JSON.parse(text) : null; } catch {}
+    return { ok: res.ok, status: res.status, json, text };
+  };
+  const explain = (r: { status: number; json: any; text?: string }, fallback: string) => {
+    if (r.json?.error) return r.json.error;
+    if (r.status === 404) return "Endpoint not found — the deployed Supabase function is older than this client. Redeploy `make-server-4808de5e` to pick up the new admin/deleted-designers routes.";
+    if (r.status === 401 || r.status === 403) return "Not authorised. Sign out and back in, or confirm your email is on the admin allowlist.";
+    return r.text?.slice(0, 200) || fallback;
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const r = await callApi("/admin/deleted-designers");
+      if (r.ok && r.json) setItems(r.json.data || []);
+      else setError(explain(r, `Failed (${r.status})`));
+    } catch (e: any) {
+      setError(e?.message || "Network error");
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const restore = async (slug: string) => {
+    setBusy(slug);
+    try {
+      const r = await callApi(`/admin/deleted-designers/${encodeURIComponent(slug)}/restore`, { method: "POST" });
+      if (r.ok && r.json?.success) setItems((prev) => prev.filter((d) => d.slug !== slug));
+      else setError(explain(r, `Restore failed (${r.status})`));
+    } catch (e: any) {
+      setError(e?.message || "Network error");
+    }
+    setBusy(null);
+  };
+
+  const purge = async (slug: string) => {
+    setBusy(slug);
+    try {
+      const r = await callApi(`/admin/deleted-designers/${encodeURIComponent(slug)}`, { method: "DELETE" });
+      if (r.ok && r.json?.success) setItems((prev) => prev.filter((d) => d.slug !== slug));
+      else setError(explain(r, `Purge failed (${r.status})`));
+    } catch (e: any) {
+      setError(e?.message || "Network error");
+    }
+    setBusy(null);
+    setPurgeConfirm(null);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="font-bold text-[22px] text-[#101828] tracking-tight">Deleted Interior Designers</h2>
+          <p className="text-[14px] text-[#6a7282] mt-0.5">
+            {loading ? "Loading…" : `${items.length} archived profile${items.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="flex items-center gap-2 bg-white border border-[#e5e7eb] text-[#364153] px-4 py-2 rounded-lg text-[13px] font-medium hover:bg-[#f9fafb] transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <Activity className="size-4" />}
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">{error}</div>
+      )}
+
+      {!loading && items.length === 0 && !error && (
+        <div className="bg-white border border-[#e5e7eb] rounded-2xl p-12 text-center">
+          <Trash2 className="size-12 text-[#d1d5db] mx-auto mb-3" strokeWidth={1.5} />
+          <p className="text-[15px] font-medium text-[#374151]">No deleted designers</p>
+          <p className="text-[13px] text-[#6a7282] mt-1">Soft-deleted profiles will appear here for restore or permanent removal.</p>
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="bg-white border border-[#e5e7eb] rounded-2xl overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead className="bg-[#f9fafb] border-b border-[#e5e7eb] text-left">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-[#374151]">Name</th>
+                <th className="px-4 py-3 font-semibold text-[#374151]">Slug</th>
+                <th className="px-4 py-3 font-semibold text-[#374151]">Deleted at</th>
+                <th className="px-4 py-3 font-semibold text-[#374151]">Deleted by</th>
+                <th className="px-4 py-3 font-semibold text-[#374151] text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((d) => (
+                <tr key={d.slug} className="border-b border-[#f3f4f6] last:border-b-0">
+                  <td className="px-4 py-3 text-[#101828] font-medium">{d.name || d.slug}</td>
+                  <td className="px-4 py-3 text-[#6a7282]">/{d.slug}</td>
+                  <td className="px-4 py-3 text-[#6a7282]">{d.deletedAt ? new Date(d.deletedAt).toLocaleString() : "—"}</td>
+                  <td className="px-4 py-3 text-[#6a7282]">{d.deletedBy || "—"}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        onClick={() => restore(d.slug)}
+                        disabled={busy === d.slug}
+                        className="px-3 py-1.5 bg-white border border-[#e5e7eb] text-[#364153] rounded-lg text-[12px] font-medium hover:bg-[#f0fdf4] hover:border-[#bbf7d0] hover:text-[#15803d] cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {busy === d.slug ? "…" : "Restore"}
+                      </button>
+                      <button
+                        onClick={() => setPurgeConfirm({ slug: d.slug, name: d.name || d.slug })}
+                        disabled={busy === d.slug}
+                        className="px-3 py-1.5 bg-white border border-[#e5e7eb] text-[#364153] rounded-lg text-[12px] font-medium hover:bg-[#fef2f2] hover:border-[#fecaca] hover:text-red-600 cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        Delete forever
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {purgeConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => setPurgeConfirm(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className="size-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="size-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[16px] text-[#101828]">Permanently delete this profile?</h3>
+                <p className="text-[13px] text-[#6a7282] mt-1">
+                  <strong>{purgeConfirm.name}</strong> will be removed from the database, including all sections and projects. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setPurgeConfirm(null)}
+                className="px-4 py-2 bg-white border border-[#e5e7eb] text-[#364153] rounded-lg text-[13px] font-medium hover:bg-[#f9fafb] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => purge(purgeConfirm.slug)}
+                disabled={busy === purgeConfirm.slug}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-[13px] font-semibold hover:bg-red-700 cursor-pointer disabled:opacity-50"
+              >
+                {busy === purgeConfirm.slug ? "Deleting…" : "Delete forever"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

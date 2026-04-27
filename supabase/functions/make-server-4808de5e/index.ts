@@ -3116,14 +3116,78 @@ app.get("/make-server-4808de5e/admin/designers", async (c) => {
       return { filled, total, missing };
     }
 
-    const designers = (designersRes.data || []).map((d: any) => {
-      const merged = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
-      merged.completeness = completeness(merged, sectionsBySlug[d.slug] || {});
-      return merged;
-    });
+    const designers = (designersRes.data || [])
+      .filter((d: any) => !d.data?.deletedAt) // hide soft-deleted from active list
+      .map((d: any) => {
+        const merged = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
+        merged.completeness = completeness(merged, sectionsBySlug[d.slug] || {});
+        return merged;
+      });
     return c.json({ count: designers.length, data: designers });
   } catch (err: any) {
     return c.json({ error: "Failed to load designers: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: list soft-deleted designer profiles. Gated by the same admin
+// allowlist as the Debug tab (raemerdr@gmail.com etc.).
+app.get("/make-server-4808de5e/admin/deleted-designers", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const { data, error } = await sb.from("designers").select("slug, name, data, updated_at");
+    if (error) return c.json({ error: error.message }, 500);
+    const deleted = (data || [])
+      .filter((d: any) => !!d.data?.deletedAt)
+      .map((d: any) => ({
+        slug: d.slug,
+        name: d.data?.name || d.name,
+        deletedAt: d.data.deletedAt,
+        deletedBy: d.data.deletedBy || "",
+        contactEmail: d.data.contactEmail || "",
+        tagline: d.data.tagline || "",
+      }))
+      .sort((a: any, b: any) => (b.deletedAt || "").localeCompare(a.deletedAt || ""));
+    return c.json({ count: deleted.length, data: deleted });
+  } catch (err: any) {
+    return c.json({ error: "Failed to load deleted designers: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: restore a soft-deleted designer (clears deletedAt).
+app.post("/make-server-4808de5e/admin/deleted-designers/:slug/restore", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const existing = await getDesignerProfile(slug);
+    if (!existing) return c.json({ error: "Designer not found" }, 404);
+    const { deletedAt, deletedBy, ...rest } = existing as any;
+    delete rest.slug;
+    const sb = getDesignerSupabase();
+    await sb.from("designers").update({ data: rest, updated_at: new Date().toISOString() }).eq("slug", slug);
+    return c.json({ success: true, slug });
+  } catch (err: any) {
+    return c.json({ error: "Restore failed: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Admin: PERMANENTLY purge a soft-deleted designer (no undo).
+app.delete("/make-server-4808de5e/admin/deleted-designers/:slug", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const existing = await getDesignerProfile(slug);
+    if (!existing) return c.json({ error: "Designer not found" }, 404);
+    if (!existing.deletedAt) return c.json({ error: "Designer is not soft-deleted; restore or use regular delete" }, 400);
+    await deleteDesignerAndSections(slug);
+    return c.json({ success: true, slug, purged: true });
+  } catch (err: any) {
+    return c.json({ error: "Purge failed: " + String(err?.message || err).slice(0, 200) }, 500);
   }
 });
 
@@ -5499,8 +5563,8 @@ app.get("/make-server-4808de5e/designers", async (c) => {
     });
 
     const activeDesigners = showAll
-      ? allDesigners
-      : allDesigners.filter((d: any) => d.active !== false);
+      ? allDesigners.filter((d: any) => !d.deletedAt)
+      : allDesigners.filter((d: any) => d.active !== false && !d.deletedAt);
     // Pagination — limit response size to prevent bulk scraping
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
@@ -5535,6 +5599,11 @@ app.get("/make-server-4808de5e/designers/:slug", async (c) => {
     const { profile, sections } = await getDesignerWithSections(slug);
 
     if (!profile) {
+      return c.json({ error: "Designer not found" }, 404);
+    }
+
+    // Soft-deleted profiles are hidden from the public profile route.
+    if (profile.deletedAt) {
       return c.json({ error: "Designer not found" }, 404);
     }
 
@@ -6156,15 +6225,37 @@ app.delete("/make-server-4808de5e/designers/:slug", async (c) => {
       return c.json({ error: "Designer not found" }, 404);
     }
 
-    // IDOR protection: verify the requesting user owns this designer profile
+    // IDOR protection: verify the requesting user owns this designer profile.
+    // Admin users (with isAdmin flag) bypass ownership checks so they can
+    // archive imported / orphaned records that have no ownerId set anyway.
     const designerDelUser = await getUserFromRequest(c);
-    if (existing.ownerId && (!designerDelUser || designerDelUser.id !== existing.ownerId)) {
+    let isAdminCaller = false;
+    let adminEmail = "";
+    if (designerDelUser) {
+      try {
+        const adminFlag = await fp3dDb.getAdmin(designerDelUser.id);
+        isAdminCaller = !!(adminFlag && adminFlag.isAdmin === true);
+        adminEmail = (designerDelUser as any).email || "";
+      } catch {}
+    }
+    if (existing.ownerId && !isAdminCaller && (!designerDelUser || designerDelUser.id !== existing.ownerId)) {
       return c.json({ error: "Designer not found" }, 404);
     }
 
-    await deleteDesignerAndSections(slug);
-    console.log(`Deleted designer profile: ${slug}`);
-    return c.json({ success: true, slug });
+    // Soft-delete: stamp the row with deletedAt so it's hidden from the
+    // active list but recoverable via /admin/deleted-designers/:slug/restore.
+    // Hard-delete still happens via the dedicated /admin/deleted-designers/:slug
+    // endpoint, which is gated to a smaller email allowlist.
+    const sb = getDesignerSupabase();
+    const newData = {
+      ...existing,
+      deletedAt: new Date().toISOString(),
+      deletedBy: adminEmail || designerDelUser?.id || "admin",
+    };
+    delete (newData as any).slug; // slug is the table column, not part of the data blob
+    await sb.from("designers").update({ data: newData, updated_at: new Date().toISOString() }).eq("slug", slug);
+    console.log(`Soft-deleted designer profile: ${slug}`);
+    return c.json({ success: true, slug, softDeleted: true });
   } catch (err) {
     console.log("Unexpected error in DELETE /designers/:slug:", err);
     return c.json({ error: "Internal server error" }, 500);
