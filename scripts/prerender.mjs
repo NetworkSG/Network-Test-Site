@@ -11,7 +11,7 @@ const PORT = 4173;
 
 const ROUTES = [
   "/",
-  "/designers",
+  "/interior-designers",
   "/get-matched",
   "/cost-guide",
   "/explore",

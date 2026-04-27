@@ -249,7 +249,7 @@ export function ProjectPage() {
 
   // Breadcrumbs
   const breadcrumbs = [
-    { label: "Designers", href: "/designers" },
+    { label: "Designers", href: "/interior-designers" },
     { label: firmName, href: `/designer/${firmSlug}` },
     { label: project?.name || "Project" },
   ];
@@ -270,7 +270,7 @@ export function ProjectPage() {
           <h1 className="text-[28px] mb-4" style={{ fontFamily: serif, color: C.black }}>Project not found</h1>
           <p className="text-[15px] mb-8" style={{ color: C.gray }}>This project may have been removed or the link is incorrect.</p>
           <Link
-            to={slug ? `/designer/${slug}` : "/designers"}
+            to={slug ? `/designer/${slug}` : "/interior-designers"}
             className="inline-flex items-center gap-2 h-[48px] px-7 text-[14px] font-medium hover:opacity-85"
             style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans }}
           >

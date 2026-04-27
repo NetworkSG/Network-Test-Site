@@ -708,7 +708,7 @@ function OverviewSection({ data, setTab, refreshData }: { data: any; setTab: (t:
           <div className="space-y-2.5">
             <ActionLink to="/get-matched" icon={Search} color="#FFA929" label="Get Matched" desc="Find your ideal designer" />
             <ActionLink to="/floorplan3d/dashboard" icon={Box} color="#2b7fff" label="New Floor Plan" desc="Create 3D layout" />
-            <ActionLink to="/designers" icon={Eye} color="#00c950" label="Browse Designers" desc="Explore portfolios" />
+            <ActionLink to="/interior-designers" icon={Eye} color="#00c950" label="Browse Designers" desc="Explore portfolios" />
             <ActionLink to="/cost-guide" icon={DollarSign} color="#FFA929" label="Cost Guide" desc="Renovation pricing" />
           </div>
         </Card>
@@ -996,7 +996,7 @@ function InquiriesSection({ data }: { data: any }) {
           <p className="text-[14px] text-[#6A7282] mt-1 mb-5">Start by browsing designers or getting matched</p>
           <div className="flex items-center justify-center gap-2.5">
             <Link to="/get-matched" className="px-5 py-2.5 text-[13px] font-semibold text-white bg-[#09090b] hover:opacity-90 cursor-pointer" style={{ borderRadius: 100 }}>Get Matched</Link>
-            <Link to="/designers" className="px-5 py-2.5 text-[13px] font-semibold text-[#101828] border border-[#e5e7eb] hover:bg-[#f8fafc] cursor-pointer" style={{ borderRadius: 100 }}>Browse Designers</Link>
+            <Link to="/interior-designers" className="px-5 py-2.5 text-[13px] font-semibold text-[#101828] border border-[#e5e7eb] hover:bg-[#f8fafc] cursor-pointer" style={{ borderRadius: 100 }}>Browse Designers</Link>
           </div>
         </Card>
       ) : (

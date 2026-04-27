@@ -1,7 +1,8 @@
 {
   "redirects": [
     { "source": "/get-matched-1", "destination": "/get-matched", "permanent": true },
-    { "source": "/home", "destination": "/", "permanent": true }
+    { "source": "/home", "destination": "/", "permanent": true },
+    { "source": "/designers", "destination": "/interior-designers", "permanent": true }
   ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/" }

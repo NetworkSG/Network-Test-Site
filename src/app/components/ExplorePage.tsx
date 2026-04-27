@@ -247,7 +247,7 @@ export function ExplorePage() {
           }} />
           <div className="hidden md:flex items-center gap-8">
             <a href="/explore" className="text-[13px] font-medium cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Explore</a>
-            <a href="/designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Designers</a>
+            <a href="/interior-designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Designers</a>
             <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Layout Planner</a>
             <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
           </div>

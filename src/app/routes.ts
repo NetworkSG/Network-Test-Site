@@ -102,6 +102,8 @@ export const router = createBrowserRouter([
   { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderLanding }) },
   { path: "/render-tool/studio", element: createElement(LazyRoute, { component: LazyRenderStudioPage }) },
   { path: "/cost-guide", element: createElement(LazyRoute, { component: LazyCostGuide }) },
+  { path: "/interior-designers", element: createElement(LazyRoute, { component: LazyDesignersDirectory }) },
+  // Legacy URL — keep mounted so direct visits still work; vercel.json also has a 301 redirect for SEO.
   { path: "/designers", element: createElement(LazyRoute, { component: LazyDesignersDirectory }) },
   { path: "/designer/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfile }) },
   { path: "/designer/:slug/project/:projectId", element: createElement(LazyRoute, { component: LazyProjectPage }) },

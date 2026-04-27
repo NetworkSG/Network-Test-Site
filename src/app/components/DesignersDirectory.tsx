@@ -10,6 +10,7 @@ import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { resolveAsset } from "../utils/resolveAsset";
 import { Seo } from "./shared/Seo";
+import { collapseBudgetRange } from "./DesignerProfile";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -30,6 +31,7 @@ interface DesignerCard {
   budget: string;
   verified: boolean;
   yearsActive: number;
+  accreditations: string[];
 }
 
 /* ─── MAP API DATA → CARD ─── */
@@ -73,9 +75,38 @@ function mapDesigner(d: any): DesignerCard {
     if (allText.includes("landed")) propertyTypes.push("Landed");
   }
 
-  // Budget from businessInfo, then btoPackage
+  // Budget from businessInfo, then btoPackage. Collapse multi-segment ranges
+  // ("$30K–$50K — Essential, $50K–$80K — Full") to a single floor-to-ceiling
+  // range ("$30K – $80K") with no descriptions, matching the public profile.
   const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
-  const budget = budgetEntry?.value || (btoPackage.startingPrice ? `From ${btoPackage.startingPrice}` : "");
+  const budgetRaw = budgetEntry?.value || (btoPackage.startingPrice ? `From ${btoPackage.startingPrice}` : "");
+  const budget = collapseBudgetRange(budgetRaw);
+
+  // Prefer the firm's own office address over the service-area region list
+  // (which on the directory card just looks like "West, East, North, ...").
+  const addressEntry = bInfo.find((b: any) => /office\s*address/i.test(b.label || ""));
+  const location = String(addressEntry?.value || d.officeAddress || d.location || "").trim();
+
+  // Accreditations from credentials block + businessInfo "Licenses" row.
+  const credentials = d.credentials || {};
+  const accreditations: string[] = [];
+  if (credentials.hdb?.active) accreditations.push("HDB Licensed");
+  if (credentials.bca?.active) accreditations.push("BCA Registered");
+  if (credentials.landedEligible) accreditations.push("Landed Eligible");
+  const licensesEntry = bInfo.find((b: any) => /licens/i.test(b.label || ""));
+  if (licensesEntry?.value) {
+    // Normalise license tokens so "HDB License" / "BCA" don't double up with
+    // the structured credentials block above. First-word match against
+    // existing tags is enough to suppress the common duplicates.
+    for (const piece of String(licensesEntry.value).split(/[,·]/).map((s) => s.trim()).filter(Boolean)) {
+      const head = piece.split(/\s+/)[0]?.toLowerCase();
+      const dupe = accreditations.some((a) => {
+        const aHead = a.split(/\s+/)[0]?.toLowerCase();
+        return a.toLowerCase() === piece.toLowerCase() || (head && aHead && head === aHead);
+      });
+      if (!dupe) accreditations.push(piece);
+    }
+  }
 
   const currentYear = new Date().getFullYear();
   const yearsActive = d.foundedYear ? currentYear - d.foundedYear : parseInt(stats.years) || 0;
@@ -90,12 +121,13 @@ function mapDesigner(d: any): DesignerCard {
     rating: parseFloat(stats.rating) || 0,
     reviews: parseInt(stats.reviewCount) || 0,
     projects: d.totalProjects || 0,
-    location: d.location || "",
+    location,
     propertyTypes,
     styles,
     budget,
     verified: d.verified || false,
     yearsActive,
+    accreditations,
   };
 }
 
@@ -261,42 +293,41 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
 
           {/* Location */}
           {designer.location && (
-            <div className="flex items-center gap-1.5 mb-4">
-              <MapPin className="w-[14px] h-[14px]" style={{ color: C.grayLight }} />
-              <span className="text-[13px]" style={{ fontFamily: sans, color: C.gray }}>{designer.location}</span>
+            <div className="flex items-center gap-1.5 mb-4 min-w-0">
+              <MapPin className="w-[14px] h-[14px] shrink-0" style={{ color: C.grayLight }} />
+              <span
+                className="text-[13px] truncate min-w-0"
+                style={{ fontFamily: sans, color: C.gray }}
+                title={designer.location}
+              >{designer.location}</span>
               {designer.yearsActive > 0 && (
-                <span className="text-[13px] ml-1" style={{ fontFamily: sans, color: C.grayLight }}>{designer.yearsActive}+ yrs</span>
+                <span className="text-[13px] ml-1 shrink-0" style={{ fontFamily: sans, color: C.grayLight }}>{designer.yearsActive} yrs</span>
               )}
             </div>
           )}
 
-          {/* Tags row */}
-          {(designer.propertyTypes.length > 0 || designer.styles.length > 0) && (
+          {/* Accreditations row — show 2 inline, hide the rest behind a +N pill (hover for full list). */}
+          {designer.accreditations.length > 0 && (
             <div className="flex flex-wrap gap-[6px] mb-5">
-              {designer.propertyTypes.map((t) => (
+              {designer.accreditations.slice(0, 2).map((a) => (
                 <span
-                  key={t}
-                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium"
+                  key={a}
+                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium inline-flex items-center gap-1"
                   style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.black }}
                 >
-                  {t}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#22c55e" }}>
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  {a}
                 </span>
               ))}
-              {designer.styles.slice(0, 3).map((s) => (
+              {designer.accreditations.length > 2 && (
                 <span
-                  key={s}
-                  className="rounded-[100px] px-3 py-[5px] text-[12px]"
-                  style={{ border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.gray }}
+                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium cursor-help"
+                  style={{ background: C.white, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.gray }}
+                  title={designer.accreditations.slice(2).join(" · ")}
                 >
-                  {s}
-                </span>
-              ))}
-              {designer.styles.length > 3 && (
-                <span
-                  className="rounded-[100px] px-3 py-[5px] text-[12px]"
-                  style={{ border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.grayLight }}
-                >
-                  +{designer.styles.length - 3}
+                  +{designer.accreditations.length - 2} more
                 </span>
               )}
             </div>

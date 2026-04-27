@@ -5,6 +5,7 @@ const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-ser
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
+  { label: "Interior Designers", href: "/interior-designers" },
   { label: "Room Designer", href: "/render-tool" },
   { label: "Layout Planner", href: "/floorplan3d" },
   { label: "Cost Guide", href: "/cost-guide" },

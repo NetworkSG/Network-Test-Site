@@ -3304,7 +3304,7 @@ function Breadcrumbs() {
 // Extract all dollar amounts from a budget string and collapse them into a
 // single floor-to-ceiling range (e.g. "$30K-$50K - Essential, $50K-$80K - Full"
 // → "$30K - $80K"). Returns the original string if no amounts were found.
-function collapseBudgetRange(raw: string): string {
+export function collapseBudgetRange(raw: string): string {
   if (!raw) return raw;
   const matches = raw.match(/\$\s*[\d,]+(?:\.\d+)?\s*[Kk]?/g);
   if (!matches || matches.length < 2) return raw;

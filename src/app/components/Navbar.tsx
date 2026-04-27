@@ -161,7 +161,7 @@ export function Navbar() {
               Explore
             </Link>
             <Link
-              to="/designers"
+              to="/interior-designers"
               className="font-['Inter',sans-serif] text-[14px] text-black hover:text-[#71717a] transition-colors"
             >
               Designers
@@ -393,7 +393,7 @@ export function Navbar() {
                 Explore <ArrowRight size={16} className="text-[#9ca3af]" />
               </button>
               <button
-                onClick={() => { setMobileMenuOpen(false); navigate("/designers"); }}
+                onClick={() => { setMobileMenuOpen(false); navigate("/interior-designers"); }}
                 className="w-full flex items-center justify-between px-5 py-3.5 font-['Inter',sans-serif] text-[15px] text-[#09090b] hover:bg-[#f9fafb] transition-colors cursor-pointer"
               >
                 Designers <ArrowRight size={16} className="text-[#9ca3af]" />
