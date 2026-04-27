@@ -1584,13 +1584,36 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
   const [sort, setSort] = useState<"newest" | "oldest" | "name">("newest");
 
   const filtered = useMemo(() => {
+    // Pull the year out of project.year (string like "2022") or fall back to
+    // the first 4-digit token in project.meta. Projects without a year sink
+    // to the bottom under "newest" and rise to the top under "oldest" — they
+    // share a sentinel of 0 so the secondary tiebreaker (submittedAt) keeps
+    // the order stable.
+    const yearOf = (p: any): number => {
+      const raw = String(p?.year ?? "").match(/(19|20)\d{2}/)?.[0]
+        || String(p?.meta ?? "").match(/(19|20)\d{2}/)?.[0]
+        || "";
+      return raw ? Number(raw) : 0;
+    };
     let list = [...projs];
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((p: any) => p.name?.toLowerCase().includes(q) || p.meta?.toLowerCase().includes(q));
     }
-    if (sort === "name") list.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
-    else if (sort === "oldest") list.reverse();
+    if (sort === "name") {
+      list.sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""));
+    } else {
+      const dir = sort === "newest" ? -1 : 1;
+      list.sort((a: any, b: any) => {
+        const ay = yearOf(a);
+        const by = yearOf(b);
+        if (ay !== by) return (ay - by) * dir;
+        const at = String(a?.submittedAt || "");
+        const bt = String(b?.submittedAt || "");
+        if (at !== bt) return at < bt ? -dir : dir;
+        return 0;
+      });
+    }
     return list;
   }, [projs, search, sort]);
 
