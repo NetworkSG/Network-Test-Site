@@ -351,48 +351,112 @@ function Stars({ count = 5, size = "size-[14px]" }: { count?: number; size?: str
 export function HeroSection() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
+  const { slug } = useParams<{ slug: string }>();
   const p = ctx?.profile;
   const cp = p?.coverProject;
-  // Check for a featured project in the projects array as override
-  const featuredProject = ctx?.projects?.find((proj: any) => proj.isFeatured);
-  const coverImg = featuredProject?.coverImage ? resolveImg(featuredProject.coverImage) : (featuredProject?.image ? resolveImg(featuredProject.image) : (p?.images?.cover ? resolveImg(p.images.cover) : PLACEHOLDER_COVER));
-  const logoImg = p?.images?.logo ? resolveImg(p.images.logo) : PLACEHOLDER_LOGO;
   const companyName = p?.name || "Input Interior Designer name";
-  const taglineText = p?.tagline || "Add your tagline";
-  const availText = p?.availability || "";
-  const locText = p?.location || "Singapore Based";
-  const isVerified = p?.verified ?? false;
-  const hasGoogleR = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
-  const rating = hasGoogleR ? String(ctx!.googleMeta!.rating) : (p?.stats?.rating || "4.9");
-  const coverName = featuredProject?.name || featuredProject?.title || cp?.name || "Featured project name";
-  const coverCost = featuredProject?.cost || cp?.cost || "";
-  const coverArea = featuredProject?.size || cp?.area || "";
-  const coverYear = featuredProject?.year || cp?.year || "";
-  const coverStyle = featuredProject?.style || cp?.style || "";
+
+  // Build the list of featured slides (up to 5). Falls back to a single
+  // synthetic slide using the profile's cover image when nothing is featured.
+  const featuredSlides = useMemo(() => {
+    const featured = (ctx?.projects || []).filter((proj: any) => proj.isFeatured).slice(0, 5);
+    if (featured.length > 0) {
+      return featured.map((fp: any) => ({
+        img: fp.featuredImage || fp.coverImage || fp.image || "",
+        name: fp.name || fp.title || "",
+        cost: fp.cost || "",
+        area: fp.size || "",
+        style: fp.style || "",
+        href: fp.name ? `/designer/${slug}/project/${encodeURIComponent(fp.name)}` : null,
+      }));
+    }
+    return [{
+      img: p?.images?.cover || "",
+      name: cp?.name || "Featured project name",
+      cost: cp?.cost || "",
+      area: cp?.area || "",
+      style: cp?.style || "",
+      href: null as string | null,
+    }];
+  }, [ctx?.projects, p?.images?.cover, cp, slug]);
+
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Auto-advance every 5s when there are 2+ slides
+  useEffect(() => {
+    if (featuredSlides.length < 2 || paused) return;
+    const t = setInterval(() => {
+      setActiveIdx((i) => (i + 1) % featuredSlides.length);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [featuredSlides.length, paused]);
+
+  // Clamp index when slide list shrinks
+  useEffect(() => {
+    if (activeIdx >= featuredSlides.length) setActiveIdx(0);
+  }, [featuredSlides.length, activeIdx]);
+
+  const active = featuredSlides[activeIdx] || featuredSlides[0];
+  const coverImg = active?.img ? resolveImg(active.img) : PLACEHOLDER_COVER;
+
+  const inEditor = !!editCtx; // disable navigation while editing
+  const Wrapper: any = active?.href && !inEditor ? Link : "div";
+  const wrapperProps: any = active?.href && !inEditor ? { to: active.href } : {};
 
   return (
     <section className="relative w-full">
-      {/* Full-width cover banner — acts as the page header */}
-      <div className="group relative w-full h-[260px] md:h-[420px] lg:h-[480px] rounded-[20px] overflow-hidden">
-        <img
-          src={coverImg}
-          alt={`${companyName} project`}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
+      <div
+        className="group relative w-full h-[260px] md:h-[420px] lg:h-[480px] rounded-[20px] overflow-hidden"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+      >
+        <Wrapper {...wrapperProps} className="absolute inset-0 block" aria-label={active?.name ? `View ${active.name}` : undefined}>
+          {/* Crossfade slides */}
+          {featuredSlides.map((s, i) => (
+            <img
+              key={`${s.img}-${i}`}
+              src={s.img ? resolveImg(s.img) : PLACEHOLDER_COVER}
+              alt={`${companyName} project — ${s.name}`}
+              className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out"
+              style={{ opacity: i === activeIdx ? 1 : 0 }}
+            />
+          ))}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
 
-        {/* Project name overlay */}
-        <div className="absolute bottom-5 left-6 md:bottom-7 md:left-9 z-[2]">
-          <p style={{ fontFamily: sans }} className="font-semibold text-[13px] md:text-[14px] text-white/90 tracking-wide uppercase">{coverName}</p>
-          <div className="flex items-center gap-3 mt-1">
-            {coverCost && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverCost}</span>}
-            {coverArea && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverArea}</span>}
-            {coverStyle && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{coverStyle}</span>}
+          {/* Project name overlay */}
+          <div className="absolute bottom-5 left-6 md:bottom-7 md:left-9 z-[2] pointer-events-none">
+            <p style={{ fontFamily: sans }} className="font-semibold text-[13px] md:text-[14px] text-white/90 tracking-wide uppercase">{active?.name}</p>
+            <div className="flex items-center gap-3 mt-1">
+              {active?.cost && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{active.cost}</span>}
+              {active?.area && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{active.area}</span>}
+              {active?.style && <span style={{ fontFamily: sans }} className="text-[12px] md:text-[13px] text-white/75">{active.style}</span>}
+            </div>
           </div>
-        </div>
+        </Wrapper>
 
+        {/* Carousel dots — only when 2+ slides */}
+        {featuredSlides.length > 1 && (
+          <div className="absolute bottom-5 right-6 md:bottom-7 md:right-9 z-[3] flex items-center gap-1.5">
+            {featuredSlides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveIdx(i); }}
+                aria-label={`Go to slide ${i + 1}`}
+                className="cursor-pointer transition-all"
+                style={{
+                  width: i === activeIdx ? "20px" : "6px",
+                  height: "6px",
+                  borderRadius: "999px",
+                  background: i === activeIdx ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.5)",
+                  border: "none",
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
-
     </section>
   );
 }

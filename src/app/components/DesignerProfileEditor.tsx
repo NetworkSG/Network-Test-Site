@@ -1168,6 +1168,7 @@ interface NewProjectDraft {
   worksIncluded: string[];
   designerName: string;
   isFeatured: boolean;
+  featuredImage: string;
 }
 
 /** Auto-format a cost string: strip non-digits, add $ prefix and thousand separators */
@@ -1234,8 +1235,8 @@ function AddProjectModal({
     worksIncluded: [],
     designerName: "",
     isFeatured: false,
+    featuredImage: "",
   });
-  const [showFeaturedConfirm, setShowFeaturedConfirm] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
@@ -1247,6 +1248,7 @@ function AddProjectModal({
       setDraft({
         title: "", location: "", cost: "", size: "", year: String(new Date().getFullYear()),
         propertyType: "", propertySubType: "", style: "", coverImage: "", gallery: [], worksIncluded: [],
+        designerName: "", isFeatured: false, featuredImage: "",
       });
     }
   }, [open]);
@@ -1678,12 +1680,15 @@ function AddProjectModal({
           {/* ── Featured Project Toggle ── */}
           <div className="px-6 pb-2">
             {(() => {
-              const currentFeatured = existingProjects.find((p: any) => p.isFeatured);
+              const FEATURED_MAX = 5;
+              const featuredOthers = existingProjects.filter((p: any) => p.isFeatured).length;
+              const remaining = Math.max(0, FEATURED_MAX - featuredOthers - (draft.isFeatured ? 1 : 0));
+              const atCap = !draft.isFeatured && featuredOthers >= FEATURED_MAX;
               return (
                 <div className="relative">
                   <div
                     className="flex items-center justify-between px-4 py-3.5"
-                    style={{ background: draft.isFeatured ? "#fef9e7" : C.cream, border: `1px solid ${draft.isFeatured ? "#f59e0b" : C.creamBorder}`, borderRadius: "12px", transition: "all 0.2s" }}
+                    style={{ background: draft.isFeatured ? "#fef9e7" : C.cream, border: `1px solid ${draft.isFeatured ? "#f59e0b" : C.creamBorder}`, borderRadius: "12px", transition: "all 0.2s", opacity: atCap ? 0.6 : 1 }}
                   >
                     <div className="flex items-center gap-3">
                       <svg className="size-[18px] shrink-0" viewBox="0 0 24 24" fill={draft.isFeatured ? "#f59e0b" : "none"} stroke={draft.isFeatured ? "#f59e0b" : C.grayLight} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1691,19 +1696,23 @@ function AddProjectModal({
                       </svg>
                       <div>
                         <p className="text-[13px] font-semibold" style={{ color: C.black, fontFamily: sans }}>Set as Featured Project</p>
-                        <p className="text-[11px] mt-0.5" style={{ color: C.gray, fontFamily: sans }}>This project will appear in your profile hero section</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: C.gray, fontFamily: sans }}>
+                          Up to 5 featured projects rotate in your hero carousel ({featuredOthers + (draft.isFeatured ? 1 : 0)}/{FEATURED_MAX} used)
+                        </p>
                       </div>
                     </div>
                     <button
                       type="button"
+                      disabled={atCap}
                       onClick={() => {
-                        if (!draft.isFeatured && currentFeatured) {
-                          setShowFeaturedConfirm(true);
-                        } else {
-                          patch({ isFeatured: !draft.isFeatured });
-                        }
+                        if (atCap) return;
+                        const next = !draft.isFeatured;
+                        patch({
+                          isFeatured: next,
+                          featuredImage: next && !draft.featuredImage ? draft.coverImage : draft.featuredImage,
+                        });
                       }}
-                      className="relative w-[44px] h-[24px] rounded-full transition-colors cursor-pointer shrink-0"
+                      className="relative w-[44px] h-[24px] rounded-full transition-colors cursor-pointer shrink-0 disabled:cursor-not-allowed"
                       style={{ background: draft.isFeatured ? "#f59e0b" : "#d1d5db", border: "none" }}
                     >
                       <div
@@ -1712,27 +1721,60 @@ function AddProjectModal({
                       />
                     </button>
                   </div>
-                  {draft.isFeatured && currentFeatured && (
+                  {atCap && (
                     <p className="mt-2 text-[11px] px-1" style={{ color: "#d97706", fontFamily: sans }}>
-                      This will replace <strong>{currentFeatured.name || currentFeatured.title || "the current project"}</strong> as your featured project
+                      You've reached the {FEATURED_MAX}-project limit. Unfeature another project first.
                     </p>
                   )}
 
-                  {/* Featured replacement confirmation popup */}
-                  {showFeaturedConfirm && currentFeatured && (
-                    <div className="absolute inset-x-0 -bottom-2 translate-y-full z-20 px-1">
-                      <div className="p-4" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px", boxShadow: "0 8px 24px rgba(15,15,13,0.15)" }}>
-                        <p className="text-[13px] font-medium mb-1" style={{ color: C.black, fontFamily: sans }}>Replace featured project?</p>
-                        <p className="text-[12px] mb-3" style={{ color: C.gray, fontFamily: sans }}>
-                          <strong>{currentFeatured.name || currentFeatured.title || "Current project"}</strong> is currently your featured project. Replace it with this one?
+                  {/* Featured photo picker — appears when toggle is on */}
+                  {draft.isFeatured && (() => {
+                    const choices: { src: string; label: string }[] = [];
+                    const seen = new Set<string>();
+                    if (draft.coverImage && !seen.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
+                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
+                    if (choices.length === 0) return null;
+                    const selected = draft.featuredImage || draft.coverImage;
+                    return (
+                      <div className="mt-3 px-1">
+                        <p className="text-[11px] font-semibold mb-2" style={{ color: C.black, fontFamily: sans, letterSpacing: "0.04em" }}>
+                          Choose featured hero photo
                         </p>
-                        <div className="flex items-center gap-2 justify-end">
-                          <button type="button" onClick={() => setShowFeaturedConfirm(false)} className="h-8 px-3 text-[12px] font-medium cursor-pointer hover:opacity-85" style={{ background: C.white, color: C.black, border: `1px solid ${C.creamBorder}`, borderRadius: "8px" }}>Cancel</button>
-                          <button type="button" onClick={() => { patch({ isFeatured: true }); setShowFeaturedConfirm(false); }} className="h-8 px-3 text-[12px] font-medium cursor-pointer hover:opacity-85" style={{ background: "#f59e0b", color: C.white, border: "none", borderRadius: "8px" }}>Replace</button>
+                        <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
+                          This photo will appear in your profile hero carousel.
+                        </p>
+                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                          {choices.map((c) => {
+                            const isSel = c.src === selected;
+                            return (
+                              <button
+                                key={c.src}
+                                type="button"
+                                onClick={() => patch({ featuredImage: c.src })}
+                                className="relative overflow-hidden cursor-pointer hover:opacity-90"
+                                style={{
+                                  aspectRatio: "1/1",
+                                  borderRadius: "10px",
+                                  border: isSel ? "2px solid #f59e0b" : `1px solid ${C.creamBorder}`,
+                                  outline: isSel ? "2px solid rgba(245,158,11,0.25)" : "none",
+                                  outlineOffset: "1px",
+                                  background: C.cream,
+                                }}
+                                aria-label={`Select ${c.label} as featured photo`}
+                              >
+                                <img src={c.src} alt={c.label} className="w-full h-full object-cover" />
+                                {isSel && (
+                                  <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#f59e0b", color: C.white }}>
+                                    <Check size={11} strokeWidth={3} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -1803,8 +1845,8 @@ function EditProjectModal({
     worksIncluded: project.worksIncluded || [],
     designerName: project.designerName || "",
     isFeatured: project.isFeatured || false,
+    featuredImage: project.featuredImage || project.coverImage || project.image || "",
   });
-  const [showFeaturedConfirm, setShowFeaturedConfirm] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
@@ -2050,12 +2092,14 @@ function EditProjectModal({
           {/* ── Featured Project Toggle ── */}
           <div className="px-6 pb-2">
             {(() => {
-              const currentFeatured = existingProjects.find((p: any) => p.isFeatured && (p.id !== project.id && p.name !== project.name));
+              const FEATURED_MAX = 5;
+              const featuredOthers = existingProjects.filter((p: any) => p.isFeatured && p.id !== project.id && p.name !== project.name).length;
+              const atCap = !draft.isFeatured && featuredOthers >= FEATURED_MAX;
               return (
                 <div className="relative">
                   <div
                     className="flex items-center justify-between px-4 py-3.5"
-                    style={{ background: draft.isFeatured ? "#fef9e7" : C.cream, border: `1px solid ${draft.isFeatured ? "#f59e0b" : C.creamBorder}`, borderRadius: "12px", transition: "all 0.2s" }}
+                    style={{ background: draft.isFeatured ? "#fef9e7" : C.cream, border: `1px solid ${draft.isFeatured ? "#f59e0b" : C.creamBorder}`, borderRadius: "12px", transition: "all 0.2s", opacity: atCap ? 0.6 : 1 }}
                   >
                     <div className="flex items-center gap-3">
                       <svg className="size-[18px] shrink-0" viewBox="0 0 24 24" fill={draft.isFeatured ? "#f59e0b" : "none"} stroke={draft.isFeatured ? "#f59e0b" : C.grayLight} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2063,19 +2107,23 @@ function EditProjectModal({
                       </svg>
                       <div>
                         <p className="text-[13px] font-semibold" style={{ color: C.black, fontFamily: sans }}>Set as Featured Project</p>
-                        <p className="text-[11px] mt-0.5" style={{ color: C.gray, fontFamily: sans }}>This project will appear in your profile hero section</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: C.gray, fontFamily: sans }}>
+                          Up to 5 featured projects rotate in your hero carousel ({featuredOthers + (draft.isFeatured ? 1 : 0)}/{FEATURED_MAX} used)
+                        </p>
                       </div>
                     </div>
                     <button
                       type="button"
+                      disabled={atCap}
                       onClick={() => {
-                        if (!draft.isFeatured && currentFeatured) {
-                          setShowFeaturedConfirm(true);
-                        } else {
-                          patch({ isFeatured: !draft.isFeatured });
-                        }
+                        if (atCap) return;
+                        const next = !draft.isFeatured;
+                        patch({
+                          isFeatured: next,
+                          featuredImage: next && !draft.featuredImage ? draft.coverImage : draft.featuredImage,
+                        });
                       }}
-                      className="relative w-[44px] h-[24px] rounded-full transition-colors cursor-pointer shrink-0"
+                      className="relative w-[44px] h-[24px] rounded-full transition-colors cursor-pointer shrink-0 disabled:cursor-not-allowed"
                       style={{ background: draft.isFeatured ? "#f59e0b" : "#d1d5db", border: "none" }}
                     >
                       <div
@@ -2084,27 +2132,61 @@ function EditProjectModal({
                       />
                     </button>
                   </div>
-                  {draft.isFeatured && currentFeatured && (
+                  {atCap && (
                     <p className="mt-2 text-[11px] px-1" style={{ color: "#d97706", fontFamily: sans }}>
-                      This will replace <strong>{currentFeatured.name || currentFeatured.title || "the current project"}</strong> as your featured project
+                      You've reached the {FEATURED_MAX}-project limit. Unfeature another project first.
                     </p>
                   )}
 
-                  {/* Featured replacement confirmation popup */}
-                  {showFeaturedConfirm && currentFeatured && (
-                    <div className="absolute inset-x-0 -bottom-2 translate-y-full z-20 px-1">
-                      <div className="p-4" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "12px", boxShadow: "0 8px 24px rgba(15,15,13,0.15)" }}>
-                        <p className="text-[13px] font-medium mb-1" style={{ color: C.black, fontFamily: sans }}>Replace featured project?</p>
-                        <p className="text-[12px] mb-3" style={{ color: C.gray, fontFamily: sans }}>
-                          <strong>{currentFeatured.name || currentFeatured.title || "Current project"}</strong> is currently your featured project. Replace it with this one?
+                  {/* Featured photo picker — appears when toggle is on */}
+                  {draft.isFeatured && (() => {
+                    const choices: { src: string; label: string }[] = [];
+                    const seen = new Set<string>();
+                    if (draft.coverImage && !seen.has(draft.coverImage)) { choices.push({ src: draft.coverImage, label: "Cover" }); seen.add(draft.coverImage); }
+                    draft.gallery.forEach((g, i) => { if (g.src && !seen.has(g.src)) { choices.push({ src: g.src, label: `Gallery ${i + 1}` }); seen.add(g.src); } });
+                    if (choices.length === 0) return null;
+                    const selected = draft.featuredImage || draft.coverImage;
+                    return (
+                      <div className="mt-3 px-1">
+                        <p className="text-[11px] font-semibold mb-2" style={{ color: C.black, fontFamily: sans, letterSpacing: "0.04em" }}>
+                          Choose featured hero photo
                         </p>
-                        <div className="flex items-center gap-2 justify-end">
-                          <button type="button" onClick={() => setShowFeaturedConfirm(false)} className="h-8 px-3 text-[12px] font-medium cursor-pointer hover:opacity-85" style={{ background: C.white, color: C.black, border: `1px solid ${C.creamBorder}`, borderRadius: "8px" }}>Cancel</button>
-                          <button type="button" onClick={() => { patch({ isFeatured: true }); setShowFeaturedConfirm(false); }} className="h-8 px-3 text-[12px] font-medium cursor-pointer hover:opacity-85" style={{ background: "#f59e0b", color: C.white, border: "none", borderRadius: "8px" }}>Replace</button>
+                        <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
+                          This photo will appear in your profile hero banner.
+                        </p>
+                        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+                          {choices.map((c) => {
+                            const isSel = c.src === selected;
+                            return (
+                              <button
+                                key={c.src}
+                                type="button"
+                                onClick={() => patch({ featuredImage: c.src })}
+                                className="relative overflow-hidden cursor-pointer hover:opacity-90"
+                                style={{
+                                  aspectRatio: "1/1",
+                                  borderRadius: "10px",
+                                  border: isSel ? "2px solid #f59e0b" : `1px solid ${C.creamBorder}`,
+                                  outline: isSel ? "2px solid rgba(245,158,11,0.25)" : "none",
+                                  outlineOffset: "1px",
+                                  background: C.cream,
+                                }}
+                                aria-label={`Select ${c.label} as featured photo`}
+                              >
+                                <img src={c.src} alt={c.label} className="w-full h-full object-cover" />
+                                {isSel && (
+                                  <div className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#f59e0b", color: C.white }}>
+                                    <Check size={11} strokeWidth={3} />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
+
                 </div>
               );
             })()}
@@ -2173,17 +2255,15 @@ function InlineProjects() {
         worksIncluded: draft.worksIncluded,
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
+        featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
       };
-      let next = projects.map((p, j) => {
-        if (j === editIndex) return updated;
-        return draft.isFeatured ? { ...p, isFeatured: false } : p;
-      });
+      const next = projects.map((p, j) => (j === editIndex ? updated : p));
       const ok = await saveSection("projects", next);
       if (ok) {
         if (draft.isFeatured) {
           await saveSection("profile", {
             coverProject: { name: draft.title, cost: draft.cost, area: draft.size, year: draft.year, style: draft.style },
-            images: { ...(rawData?.images || {}), cover: draft.coverImage },
+            images: { ...(rawData?.images || {}), cover: draft.featuredImage || draft.coverImage },
           });
         }
         toast.success("Project updated");
@@ -2222,18 +2302,15 @@ function InlineProjects() {
         worksIncluded: draft.worksIncluded,
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
+        featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
       };
 
-      let updatedProjects = draft.isFeatured
-        ? projects.map((p: any) => ({ ...p, isFeatured: false }))
-        : projects;
-
-      const ok = await saveSection("projects", [...updatedProjects, newProject]);
+      const ok = await saveSection("projects", [...projects, newProject]);
       if (ok) {
         if (draft.isFeatured) {
           await saveSection("profile", {
             coverProject: { name: draft.title, cost: draft.cost, area: draft.size, year: draft.year, style: draft.style },
-            images: { ...(rawData?.images || {}), cover: draft.coverImage },
+            images: { ...(rawData?.images || {}), cover: draft.featuredImage || draft.coverImage },
           });
         }
         toast.success("Project added");
@@ -4209,14 +4286,10 @@ function EditorView({ slug }: { slug: string }) {
         worksIncluded: draft.worksIncluded,
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
+        featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
       };
 
-      // If this project is featured, unset isFeatured on all others
-      let updatedProjects = draft.isFeatured
-        ? projects.map((p: any) => ({ ...p, isFeatured: false }))
-        : projects;
-
-      const ok = await saveSection("projects", [...updatedProjects, newProject]);
+      const ok = await saveSection("projects", [...projects, newProject]);
       if (ok) {
         // Sync featured project to cover/hero section
         if (draft.isFeatured) {
@@ -4228,7 +4301,7 @@ function EditorView({ slug }: { slug: string }) {
               year: draft.year,
               style: draft.style,
             },
-            images: { ...(rawData?.images || {}), cover: draft.coverImage },
+            images: { ...(rawData?.images || {}), cover: draft.featuredImage || draft.coverImage },
           });
         }
         toast.success("Project added");
@@ -4269,12 +4342,9 @@ function EditorView({ slug }: { slug: string }) {
         worksIncluded: draft.worksIncluded,
         designerName: draft.designerName,
         isFeatured: draft.isFeatured,
+        featuredImage: draft.isFeatured ? (draft.featuredImage || draft.coverImage) : "",
       };
-      // If this project is featured, unset isFeatured on all others
-      let next = projects.map((p, j) => {
-        if (j === editProjectIndex) return updated;
-        return draft.isFeatured ? { ...p, isFeatured: false } : p;
-      });
+      const next = projects.map((p, j) => (j === editProjectIndex ? updated : p));
       const ok = await saveSection("projects", next);
       if (ok) {
         // Sync featured project to cover/hero section
@@ -4287,7 +4357,7 @@ function EditorView({ slug }: { slug: string }) {
               year: draft.year,
               style: draft.style,
             },
-            images: { ...(rawData?.images || {}), cover: draft.coverImage },
+            images: { ...(rawData?.images || {}), cover: draft.featuredImage || draft.coverImage },
           });
         }
         toast.success("Project updated");
