@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { useNavigate } from "react-router";
@@ -1749,6 +1749,46 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [adminSection, setAdminSection] = useState<"overview" | "designers" | "templates" | "template-editor" | "debug" | "deleted">("overview");
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [salesRepFilter, setSalesRepFilter] = useState<string>("all");
+  // Map: lowercased firm name → primary sales rep, sourced from Airtable
+  // (Clients Pipeline → ALL view → Sales Representatives field).
+  const [salesRepByFirm, setSalesRepByFirm] = useState<Map<string, string>>(new Map());
+
+  // Pull the firms list once so we can drive the Sales Rep filter without
+  // adding a second admin endpoint. Cached server-side for ~5 minutes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/firm-onboarding/airtable-firms`, {
+          headers: { Authorization: `Bearer ${publicAnonKey}` },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const firms: any[] = Array.isArray(json?.firms) ? json.firms : [];
+        if (cancelled) return;
+        const m = new Map<string, string>();
+        for (const f of firms) {
+          const name = String(f?.firmName || "").trim().toLowerCase();
+          const rep = String(f?.salesRep || "").trim();
+          if (name && rep) m.set(name, rep);
+        }
+        setSalesRepByFirm(m);
+      } catch { /* surface nothing — filter just stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const repForDesigner = useCallback((d: any): string => {
+    const name = String(d?.name || "").trim().toLowerCase();
+    return name ? (salesRepByFirm.get(name) || "") : "";
+  }, [salesRepByFirm]);
+
+  const salesRepOptions = useMemo(() => {
+    const set = new Set<string>();
+    salesRepByFirm.forEach((rep) => { if (rep) set.add(rep); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [salesRepByFirm]);
 
   // Filtered designers — active firms always render first, then the rest
   // alphabetically by name. Keeps the admin's own actionable set at the top.
@@ -1761,7 +1801,10 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
       const matchesStatus = designerStatusFilter === "all" ||
         (designerStatusFilter === "active" && d.active !== false) ||
         (designerStatusFilter === "inactive" && d.active === false);
-      return matchesSearch && matchesStatus;
+      const rep = repForDesigner(d);
+      const matchesRep = salesRepFilter === "all"
+        || (salesRepFilter === "__unassigned" ? !rep : rep === salesRepFilter);
+      return matchesSearch && matchesStatus && matchesRep;
     })
     .sort((a: any, b: any) => {
       const aActive = a.active !== false ? 0 : 1;
@@ -2126,6 +2169,20 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                   </button>
                 ))}
               </div>
+              {/* Sales Representative — sourced from Airtable Clients Pipeline */}
+              <select
+                value={salesRepFilter}
+                onChange={(e) => setSalesRepFilter(e.target.value)}
+                className="h-[42px] pl-3 pr-8 bg-white border border-[#e5e7eb] rounded-xl text-[13px] text-[#364153] outline-none focus:border-[#2b7fff] cursor-pointer appearance-none"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236b6860' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center" }}
+                title="Filter by sales representative"
+              >
+                <option value="all">All sales reps</option>
+                {salesRepOptions.map((rep) => (
+                  <option key={rep} value={rep}>{rep}</option>
+                ))}
+                <option value="__unassigned">— Unassigned</option>
+              </select>
             </div>
 
             {loadingList ? (

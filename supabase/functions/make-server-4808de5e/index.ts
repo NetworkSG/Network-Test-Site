@@ -2231,6 +2231,81 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
 const AIRTABLE_FIRMS_CACHE: { at: number; data: { id: string; firmName: string }[] } = { at: 0, data: [] };
 const AIRTABLE_FIRMS_TTL_MS = 5 * 60 * 1000;
 
+/** Resolve a batch of Airtable linked-record IDs to their primary-field
+ *  display names. Uses the Meta API to discover which table the source
+ *  field links to, then fetches the linked records by id. Cached for the
+ *  same TTL as the firms list to avoid repeated schema lookups. */
+const LINKED_TABLE_CACHE = new Map<string, { tableId: string; at: number }>();
+const LINKED_NAMES_CACHE = new Map<string, { names: Map<string, string>; at: number }>();
+async function resolveLinkedRecordNames(sourceFieldName: string | null, ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!sourceFieldName || ids.length === 0) return out;
+  const token = Deno.env.get("AIRTABLE_TOKEN");
+  if (!token) return out;
+  try {
+    // 1. Discover the linked table id via Meta API (cached per source field).
+    const cached = LINKED_TABLE_CACHE.get(sourceFieldName);
+    let linkedTableId = cached && Date.now() - cached.at < AIRTABLE_FIRMS_TTL_MS ? cached.tableId : "";
+    if (!linkedTableId) {
+      const metaRes = await fetch(`https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!metaRes.ok) return out;
+      const meta = await metaRes.json();
+      for (const t of meta.tables || []) {
+        for (const f of t.fields || []) {
+          if (f.name === sourceFieldName && f.type === "multipleRecordLinks") {
+            linkedTableId = f.options?.linkedTableId || "";
+            if (linkedTableId) {
+              LINKED_TABLE_CACHE.set(sourceFieldName, { tableId: linkedTableId, at: Date.now() });
+              break;
+            }
+          }
+        }
+        if (linkedTableId) break;
+      }
+    }
+    if (!linkedTableId) return out;
+
+    // 2. Pull the linked table once (cached) and build an id → primary-field map.
+    const namesCached = LINKED_NAMES_CACHE.get(linkedTableId);
+    if (namesCached && Date.now() - namesCached.at < AIRTABLE_FIRMS_TTL_MS) {
+      for (const id of ids) {
+        const n = namesCached.names.get(id);
+        if (n) out.set(id, n);
+      }
+      return out;
+    }
+    const map = new Map<string, string>();
+    let offset: string | undefined;
+    for (let i = 0; i < 10; i++) {
+      const qs = `pageSize=100${offset ? `&offset=${encodeURIComponent(offset)}` : ""}`;
+      const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${linkedTableId}?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) break;
+      const j = await res.json();
+      for (const r of j.records || []) {
+        const fields = r.fields || {};
+        // Primary field is usually the first key Airtable returns; fall back to
+        // common variants if the schema has reordered fields.
+        const name = fields.Name || fields["Full Name"] || Object.values(fields)[0] || "";
+        if (typeof name === "string" && name.trim()) map.set(r.id, name.trim());
+      }
+      offset = j.offset;
+      if (!offset) break;
+    }
+    LINKED_NAMES_CACHE.set(linkedTableId, { names: map, at: Date.now() });
+    for (const id of ids) {
+      const n = map.get(id);
+      if (n) out.set(id, n);
+    }
+  } catch (err) {
+    console.log("resolveLinkedRecordNames error:", err);
+  }
+  return out;
+}
+
 async function fetchAirtableIdProfiles(fields: string[] = ["Client"]): Promise<any[]> {
   const token = Deno.env.get("AIRTABLE_TOKEN");
   if (!token) throw new Error("AIRTABLE_TOKEN not configured");
@@ -2258,13 +2333,42 @@ app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
     if (now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
       return c.json({ firms: AIRTABLE_FIRMS_CACHE.data, cached: true });
     }
-    const records = await fetchAirtableIdProfiles(["Client", "Email"]);
+    // Pull all fields so we can locate the sales-rep column whatever the exact
+    // header reads ("Sales Representatives" / "Sales Rep" / "Sales Representative").
+    const records = await fetchAirtableIdProfiles([]);
+    const findRepFieldKey = (fields: Record<string, any>): string | null => {
+      for (const k of Object.keys(fields || {})) {
+        if (/sales\s*rep/i.test(k)) return k;
+      }
+      return null;
+    };
+    const repFieldKey = records[0]?.fields ? findRepFieldKey(records[0].fields) : null;
+
+    // Collect every linked rep id across all firms, then resolve them to
+    // names in one batch via the linked table (Sales Representative is a
+    // linked-record column, so the raw values are recXXX ids, not strings).
+    const linkedIds = new Set<string>();
+    const rawRepsByFirm = new Map<string, string[]>();
+    for (const r of records) {
+      const raw = repFieldKey ? r.fields?.[repFieldKey] : null;
+      const ids: string[] = Array.isArray(raw) ? raw.filter((v: any) => typeof v === "string") : [];
+      rawRepsByFirm.set(r.id, ids);
+      ids.forEach((id) => linkedIds.add(id));
+    }
+    const repIdToName = await resolveLinkedRecordNames(repFieldKey, Array.from(linkedIds));
+
     const firms = records
-      .map((r) => ({
-        id: r.id as string,
-        firmName: String(r.fields?.Client || "").trim(),
-        contactEmail: String(r.fields?.Email || "").trim(),
-      }))
+      .map((r) => {
+        const ids = rawRepsByFirm.get(r.id) || [];
+        const reps = ids.map((id) => repIdToName.get(id) || id).filter(Boolean);
+        return {
+          id: r.id as string,
+          firmName: String(r.fields?.Client || "").trim(),
+          contactEmail: String(r.fields?.Email || "").trim(),
+          salesRep: reps[0] || "",
+          salesReps: reps,
+        };
+      })
       .filter((f) => f.id && f.firmName)
       .sort((a, b) => a.firmName.localeCompare(b.firmName));
     AIRTABLE_FIRMS_CACHE.at = now;
