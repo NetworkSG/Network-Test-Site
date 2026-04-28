@@ -1131,6 +1131,7 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
   "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/ujejbhx/",
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
   "concierge-match-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmm8f4/",
+  "designer-profile-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmnj1y/",
 };
 
 // Upload a Cost Guide PDF (base64) to public storage, return its URL so the
@@ -8400,7 +8401,9 @@ app.post("/make-server-4808de5e/designer-inquiry/:slug", async (c) => {
       phone: sanitizeString(body.phone || "", 20),
       propertyType: body.propertyType || "",
       budget: body.budget || "",
-      timeline: body.timeline || "",
+      // QuoteCard sends `keyCollection`; legacy callers send `timeline` —
+      // accept either so the field always lands on the inquiry record + Zapier.
+      timeline: sanitizeString(body.keyCollection || body.timeline || "", 60),
       message: sanitizeString(body.message || "", 2000),
       status: "new",
       createdAt: new Date().toISOString(),
@@ -8410,6 +8413,28 @@ app.post("/make-server-4808de5e/designer-inquiry/:slug", async (c) => {
     existing.unshift(inquiry);
     if (existing.length > 200) existing.length = 200;
     await saveDesignerSection(slug, "inquiries", existing);
+
+    // Fire-and-forget Zapier forward — keeps the response fast even if
+    // Zapier is slow / down. The KV record above is the source of truth.
+    const profile = await getDesignerProfile(slug).catch(() => null);
+    const firmName = profile?.name || slug;
+    fetch(ZAPIER_WEBHOOKS["designer-profile-lead"], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        "First Name": inquiry.name,
+        "Contact Phone": inquiry.phone,
+        "Email Address": inquiry.email,
+        "Property Type": inquiry.propertyType,
+        "Renovation Budget": inquiry.budget,
+        "Key Collection": inquiry.timeline,
+        "Message": inquiry.message,
+        "Designer Firm": firmName,
+        "Designer Slug": slug,
+        "Source": "Designer Profile",
+        "Submitted At": inquiry.createdAt,
+      }),
+    }).catch((err) => console.log("designer-profile-lead zapier forward failed:", err));
 
     console.log(`New inquiry for designer ${slug} from ${inquiry.name}`);
     return c.json({ success: true, id: inquiry.id });

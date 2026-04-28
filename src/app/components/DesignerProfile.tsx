@@ -583,7 +583,7 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
         body: JSON.stringify({
           name: sanitizeInput(form.name, 100),
-          phone: sanitizeInput(form.phone, 20),
+          phone: form.phone ? `+65${form.phone}` : "",
           email: sanitizeEmail(form.email),
           propertyType: form.propertyType,
           budget: form.budget,
@@ -683,7 +683,29 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
               </div>
               <div>
                 <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Contact Number</label>
-                <input type="tel" required placeholder="+65 9XXX XXXX" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className={inputCls} style={{ fontFamily: sans, color: C.black, background: C.cream }} />
+                <div className="relative">
+                  <span
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[14px] pointer-events-none"
+                    style={{ fontFamily: sans, color: C.gray }}
+                  >+65</span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="9123 4567"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={8}
+                    pattern="[0-9]{8}"
+                    title="Singapore mobile number — 8 digits"
+                    value={form.phone}
+                    onChange={e => {
+                      const digits = e.target.value.replace(/\D+/g, "").slice(0, 8);
+                      setForm({ ...form, phone: digits });
+                    }}
+                    className={inputCls}
+                    style={{ fontFamily: sans, color: C.black, background: C.cream, paddingLeft: 52 }}
+                  />
+                </div>
               </div>
               <div>
                 <label style={{ fontFamily: sans, color: C.black }} className="font-medium text-[13px] block mb-1">Email</label>
