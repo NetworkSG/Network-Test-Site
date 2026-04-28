@@ -1130,6 +1130,7 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
   "render-lead": "https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/",
   "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/ujejbhx/",
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
+  "concierge-match-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmm8f4/",
 };
 
 // Upload a Cost Guide PDF (base64) to public storage, return its URL so the

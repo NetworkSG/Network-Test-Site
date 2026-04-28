@@ -1,35 +1,26 @@
 import { useEffect, useState } from "react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
-import { Seo } from "../shared/Seo";
-import { LEAD_PAGE_CSS, LEAD_PAGE_CLASS, LeadPageFonts } from "../shared/leadPageStyles";
-
-const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
-import { useHomeownerCount } from "../homepage/v8/useHomeownerCount";
-import { useGoogleReviews } from "../useGoogleReviews";
-import { GoogleReviewsLive } from "./GoogleReviewsLive";
-import { SocialProof3 } from "../homepage/v8/sections/SocialProof3";
-import { FreeTools } from "../homepage/v8/sections/FreeTools";
-import { FUNNEL_HERO, FUNNEL_VALUE_PROPS } from "./content";
+import { Seo } from "./shared/Seo";
+import { LEAD_PAGE_CSS, LEAD_PAGE_CLASS, LeadPageFonts } from "./shared/leadPageStyles";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
+const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
+
 /**
- * /get-matched — primary lead-capture page.
+ * /escrow — alt landing page that leads with the DBS-protected escrow
+ * positioning. Self-contained styling (Plus Jakarta Sans + Fraunces, scoped
+ * via a single <style> block) so this concept can ship without touching the
+ * main homepage palette.
  *
- * Copy + section order are preserved from the previous funnel layout
- * (FUNNEL_HERO + Google reviews + social proof + FUNNEL_VALUE_PROPS + Free
- * Tools + footer CTA). The visual design now uses the shared `lead-page`
- * system from /escrow (orange accent, Fraunces serif, Plus Jakarta Sans),
- * and the lead form is the qualifier-radio variant from /escrow.
+ * NOTE: this page intentionally does NOT use the shared HomepageNav / Footer
+ * — the brief is a one-off variant for the escrow trust angle.
  */
-export function FunnelLeadPage() {
-  const homeownerCount = useHomeownerCount();
-  const { payload } = useGoogleReviews("network");
-  const rating = payload?.rating ? payload.rating.toFixed(1) : "4.5";
+export function Escrow() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // Smooth-scroll for in-page anchors that bypass the global router.
+  // Smooth-scroll for in-page anchors that aren't covered by the global router.
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const a = (e.target as HTMLElement)?.closest('a[href^="#"]') as HTMLAnchorElement | null;
@@ -49,9 +40,9 @@ export function FunnelLeadPage() {
   return (
     <>
       <Seo
-        title="Get Matched with Singapore Interior Designers | Network"
-        description="Tell us about your home and we'll match you with 3 vetted interior design firms within the day. Free, no obligation."
-        canonical="/get-matched"
+        title="Network | Your Renovation Deposit, Protected by DBS Bank"
+        description="Match with Singapore's most trusted interior designers within 24 hours. Bank-grade deposit protection via DBS escrow. Free for homeowners, 120+ vetted firms."
+        canonical="/escrow"
       />
 
       <LeadPageFonts />
@@ -80,17 +71,12 @@ export function FunnelLeadPage() {
                 WebkitMaskPosition: "0px 0px",
               }}
             />
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: 600,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "var(--ink-muted)",
-              }}
-            >
-              {FUNNEL_HERO.microTrust}
-            </span>
+            <div className="nav-links">
+              <a href="#how">How it works</a>
+              <a href="#why">Why Network</a>
+              <a href="#tools">Free tools</a>
+            </div>
+            <a href="#match" className="btn-nav">Get matched</a>
           </div>
         </nav>
 
@@ -99,58 +85,37 @@ export function FunnelLeadPage() {
           <div className="container">
             <div className="hero-grid">
               <div>
-                <div className="trust-badge">{homeownerCount.toLocaleString()} homeowners matched</div>
-                <h1>
-                  {FUNNEL_HERO.headline}{" "}
-                  <em>{FUNNEL_HERO.headlineItalic}</em>
-                </h1>
-                <p className="hero-lede">{FUNNEL_HERO.subheadline}</p>
-
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 36px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {[
-                    `Rated ${rating} on Google`,
-                    FUNNEL_HERO.trustBullets[1],
-                    FUNNEL_HERO.trustBullets[2],
-                  ].map((bullet) => (
-                    <li
-                      key={bullet}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        fontSize: "15px",
-                        color: "var(--ink)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          width: "26px",
-                          height: "26px",
-                          borderRadius: "999px",
-                          background: "var(--accent)",
-                          color: "white",
-                          flexShrink: 0,
-                          fontSize: "13px",
-                          fontWeight: 700,
-                        }}
-                        aria-hidden
-                      >✓</span>
-                      {bullet}
-                    </li>
-                  ))}
-                </ul>
+                <div className="trust-badge">MAS-regulated · Funds held with DBS</div>
+                <h1>Your renovation deposit, <em>protected by DBS Bank.</em></h1>
+                <p className="hero-lede">
+                  Match with Singapore's most trusted interior designers — within 24 hours.
+                  Free for homeowners. Bank-grade deposit protection. 120+ vetted firms.
+                </p>
+                <div className="hero-stats">
+                  <div>
+                    <div className="hero-stat-num">2,735</div>
+                    <div className="hero-stat-label">Matched 2026</div>
+                  </div>
+                  <div>
+                    <div className="hero-stat-num">120+</div>
+                    <div className="hero-stat-label">Verified firms</div>
+                  </div>
+                  <div>
+                    <div className="hero-stat-num">4.8</div>
+                    <div className="hero-stat-label">Avg rating</div>
+                  </div>
+                  <div>
+                    <div className="hero-stat-num">$0</div>
+                    <div className="hero-stat-label">Cost to you</div>
+                  </div>
+                </div>
               </div>
 
-              {/* ── FORM (escrow-style qualifier radios) ── */}
               <div className="form-card" id="match">
                 <div className="form-header">
-                  <div className="form-eyebrow">{FUNNEL_HERO.eyebrow}</div>
-                  <h2 className="form-title">{FUNNEL_HERO.formTitle}</h2>
-                  <p className="form-sub">{FUNNEL_HERO.formSubtitle}</p>
+                  <div className="form-eyebrow">3-Designer Concierge Match</div>
+                  <h2 className="form-title">Get matched in 24 hours</h2>
+                  <p className="form-sub">Tell us about your renovation. Our concierge handpicks 3 firms that fit.</p>
                 </div>
 
                 <form
@@ -170,7 +135,7 @@ export function FunnelLeadPage() {
                         "Property Type": String(fd.get("propertyType") || ""),
                         "Move-In Window": String(fd.get("movein") || ""),
                         "Renovation Budget": String(fd.get("budget") || ""),
-                        "Source": "Get Matched Landing",
+                        "Source": "Escrow Landing",
                         "Submitted At": new Date().toISOString(),
                       };
                       const r = await fetch(`${API}/zapier-proxy`, {
@@ -182,6 +147,8 @@ export function FunnelLeadPage() {
                         const j = await r.json().catch(() => ({}));
                         throw new Error(j?.error || `Submit failed (${r.status})`);
                       }
+                      // Wipe inputs + radio selections so the form is ready for the
+                      // next visitor without a manual page refresh.
                       formEl.reset();
                       setSubmitted(true);
                     } catch (err: any) {
@@ -191,18 +158,18 @@ export function FunnelLeadPage() {
                   }}
                 >
                   <div className="field-group">
-                    <label className="field-label" htmlFor="lead-name">Your name</label>
-                    <input type="text" id="lead-name" name="name" placeholder="Jane Tan" required />
+                    <label className="field-label" htmlFor="esc-name">Your name</label>
+                    <input type="text" id="esc-name" name="name" placeholder="Jane Tan" required />
                   </div>
 
                   <div className="field-row-2">
                     <div className="field-group">
-                      <label className="field-label" htmlFor="lead-phone">Mobile number</label>
+                      <label className="field-label" htmlFor="esc-phone">Mobile number</label>
                       <div className="phone-wrapper">
                         <span className="phone-prefix">+65</span>
                         <input
                           type="tel"
-                          id="lead-phone"
+                          id="esc-phone"
                           name="phone"
                           placeholder="9123 4567"
                           inputMode="numeric"
@@ -220,8 +187,8 @@ export function FunnelLeadPage() {
                       </div>
                     </div>
                     <div className="field-group">
-                      <label className="field-label" htmlFor="lead-email">Email</label>
-                      <input type="email" id="lead-email" name="email" placeholder="jane@example.com" required />
+                      <label className="field-label" htmlFor="esc-email">Email</label>
+                      <input type="email" id="esc-email" name="email" placeholder="jane@example.com" required />
                     </div>
                   </div>
 
@@ -283,7 +250,7 @@ export function FunnelLeadPage() {
                   </div>
 
                   <button type="submit" className="btn-primary" disabled={submitting || submitted}>
-                    {submitted ? "Thanks — we'll be in touch within 24 hours." : submitting ? "Sending…" : FUNNEL_HERO.finalCTA}
+                    {submitted ? "Thanks — we'll be in touch within 24 hours." : submitting ? "Sending…" : "Match me with 3 designers"}
                   </button>
 
                   {submitError && (
@@ -295,9 +262,9 @@ export function FunnelLeadPage() {
                   <div className="form-trust">
                     <span>Free</span>
                     <span>·</span>
-                    <span>No obligations</span>
+                    <span>24-hour match</span>
                     <span>·</span>
-                    <span>Unsubscribe anytime</span>
+                    <span>No obligation</span>
                   </div>
                 </form>
 
@@ -311,6 +278,9 @@ export function FunnelLeadPage() {
                   onClick={(e) => {
                     e.preventDefault();
                     const form = document.querySelector("#match form") as HTMLFormElement | null;
+                    // Require the form to be complete before opening WhatsApp —
+                    // surfaces the browser's native validation tooltip for any
+                    // missing field and scrolls it into view.
                     if (!form || !form.checkValidity()) {
                       form?.reportValidity();
                       form?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -345,49 +315,105 @@ export function FunnelLeadPage() {
           </div>
         </section>
 
-        {/* ── GOOGLE REVIEWS (existing live component, original copy) ── */}
-        <GoogleReviewsLive />
-
-        {/* ── SOCIAL PROOF (existing component) ── */}
-        <SocialProof3 />
-
-        {/* ── VALUE PROPS — original FUNNEL_VALUE_PROPS copy, restyled ── */}
-        <section className="why">
+        {/* ── WHY NETWORK ────────────────────────────────────── */}
+        <section className="why" id="why">
           <div className="container">
             <div className="why-header">
-              <span className="section-eyebrow">{FUNNEL_VALUE_PROPS.eyebrow}</span>
-              <h2>
-                {FUNNEL_VALUE_PROPS.headline}{" "}
-                <em style={{ fontStyle: "italic", color: "var(--accent)", fontWeight: 300 }}>
-                  {FUNNEL_VALUE_PROPS.headlineItalic}
-                </em>
-              </h2>
+              <span className="section-eyebrow">Why Network</span>
+              <h2>The only platform with bank-grade renovation protection</h2>
+              <p>Other platforms offer "guarantees". We offer escrow held by DBS — the same protection you'd get from a property purchase.</p>
             </div>
+
             <div className="why-grid">
-              {FUNNEL_VALUE_PROPS.cards.map((card, i) => (
-                <div key={card.title} className={i === 0 ? "why-card featured" : "why-card"}>
-                  <div className="why-card-icon" style={i === 0 ? { color: "white" } : undefined}>
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <h3>{card.title}</h3>
-                  <p>{card.body}</p>
-                </div>
-              ))}
+              <div className="why-card featured">
+                <div className="why-card-icon" style={{ color: "white" }}>$</div>
+                <span className="why-card-tag">Exclusive to Network</span>
+                <h3>Handshake Escrow by DBS</h3>
+                <p>Your renovation deposit sits in a MAS-regulated escrow account, held with DBS. Funds release only when you approve milestones. Not an insurance promise — actual bank protection.</p>
+              </div>
+
+              <div className="why-card">
+                <div className="why-card-icon">AI</div>
+                <span className="why-card-tag">Free Tool</span>
+                <h3>See your space transformed</h3>
+                <p>Upload a photo of your room. Our AI shows it in 6 different styles in 5 minutes. Test before you commit to any designer.</p>
+              </div>
+
+              <div className="why-card">
+                <div className="why-card-icon">24h</div>
+                <span className="why-card-tag">Concierge</span>
+                <h3>Matched by a person, not a bot</h3>
+                <p>Our concierge reads your brief and handpicks 3 firms from 120+ verified designers. WhatsApp intro within 24 hours.</p>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* ── FREE TOOLS (existing component) ── */}
-        <FreeTools />
+        {/* ── HOW IT WORKS ───────────────────────────────────── */}
+        <section className="how" id="how">
+          <div className="container">
+            <div className="how-header">
+              <span className="section-eyebrow">How it works</span>
+              <h2>From brief to match in 24 hours</h2>
+            </div>
+            <div className="how-steps">
+              <div className="how-step">
+                <span className="how-step-num">01</span>
+                <h3>Tell us your brief</h3>
+                <p>Two minutes. Six questions about your home, style, budget, and timeline. No account needed.</p>
+              </div>
+              <div className="how-step">
+                <span className="how-step-num">02</span>
+                <h3>Concierge handpicks 3 firms</h3>
+                <p>A real person reviews your brief and selects 3 verified designers from our network. Within the day.</p>
+              </div>
+              <div className="how-step">
+                <span className="how-step-num">03</span>
+                <h3>Meet, compare, decide</h3>
+                <p>Designers WhatsApp you directly with portfolios and itemised quotes. Compare at your pace. Walk away anytime.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── TOOLS ──────────────────────────────────────────── */}
+        <section className="tools" id="tools">
+          <div className="container">
+            <div className="tools-header">
+              <span className="section-eyebrow">Free for everyone</span>
+              <h2>Plan smart. Match smarter.</h2>
+              <p>Our renovation tools are free, no signup wall. Use them before you decide to engage anyone.</p>
+            </div>
+
+            <div className="tools-grid">
+              <div className="tool-card">
+                <span className="tool-card-tag">AI Render</span>
+                <h3>Room Designer</h3>
+                <p>Upload your room. See it transformed in 6 styles in 5 minutes. No commitment.</p>
+                <a href="/render-tool" className="tool-card-cta">Try Room Designer →</a>
+              </div>
+              <div className="tool-card">
+                <span className="tool-card-tag">Calculator</span>
+                <h3>Cost Guide</h3>
+                <p>Itemised renovation cost breakdown by room, scope, and finish quality. Honest numbers.</p>
+                <a href="/cost-guide" className="tool-card-cta">Calculate budget →</a>
+              </div>
+              <div className="tool-card">
+                <span className="tool-card-tag">3D Planner</span>
+                <h3>Layout Planner</h3>
+                <p>Convert any floor plan to 3D. Drag furniture, test layouts. Plan visually.</p>
+                <a href="/floorplan3d" className="tool-card-cta">Plan layout →</a>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ── FINAL CTA ──────────────────────────────────────── */}
         <section className="final-cta">
           <div className="container">
-            <h2>Still <em>thinking about it?</em></h2>
-            <p>
-              {homeownerCount.toLocaleString()} homeowners used Network this year to find a designer they can trust. Free, within the day, zero obligations.
-            </p>
-            <a href="#match" className="btn-large">Get my free match</a>
+            <h2>Match with designers you can <em>actually trust.</em></h2>
+            <p>2,735 Singapore homeowners matched in 2026. Bank-grade escrow. 24-hour concierge match. Always free.</p>
+            <a href="#match" className="btn-large">Get my 3 matches</a>
           </div>
         </section>
 
@@ -402,4 +428,3 @@ export function FunnelLeadPage() {
   );
 }
 
-export default FunnelLeadPage;
