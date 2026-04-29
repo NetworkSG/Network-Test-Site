@@ -154,7 +154,7 @@ function SizeField({ size, unit }: { size: string; unit: string }) {
             gap: 8,
           }}
         >
-          <span>{unit || "sqft"}</span>
+          <span>{unit || "sqm"}</span>
           <span style={{ color: C.grayLight, fontSize: 10 }}>▾</span>
         </div>
       </div>

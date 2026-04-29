@@ -1213,8 +1213,6 @@ function formatCost(raw: string): string {
   return "$" + Number(digits).toLocaleString("en-US");
 }
 
-const SIZE_UNITS = ["sqft", "sqm", "m²"] as const;
-type SizeUnit = (typeof SIZE_UNITS)[number];
 
 /** Extract numeric digits from a size string */
 function parseSizeDigits(raw: string): string {
@@ -1228,17 +1226,10 @@ function formatSizeNumber(raw: string): string {
   return Number(digits).toLocaleString("en-US");
 }
 
-/** Detect the unit suffix in a size string, default sqft */
-function detectSizeUnit(raw: string): SizeUnit {
-  if (raw.includes("m²")) return "m²";
-  if (raw.toLowerCase().includes("sqm")) return "sqm";
-  return "sqft";
-}
-
-/** Combine number + unit into display string — always keeps unit so dropdown persists */
-function buildSizeString(num: string, unit: SizeUnit): string {
-  if (!num) return unit; // store unit even when no number yet
-  return `${num} ${unit}`;
+/** Combine number + sqm unit into display string */
+function buildSizeString(num: string): string {
+  if (!num) return "sqm";
+  return `${num} sqm`;
 }
 
 function AddProjectModal({
@@ -1548,26 +1539,31 @@ function AddProjectModal({
                   <input
                     type="text"
                     value={formatSizeNumber(draft.size)}
-                    placeholder="e.g. 1,450"
+                    placeholder="e.g. 110"
                     onChange={(e) => {
                       const num = formatSizeNumber(e.target.value);
-                      const unit = detectSizeUnit(draft.size);
-                      patch({ size: buildSizeString(num, unit) });
+                      patch({ size: buildSizeString(num) });
                     }}
                     style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }}
                     onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
                     onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
                   />
-                  <select
-                    value={detectSizeUnit(draft.size)}
-                    onChange={(e) => {
-                      const num = formatSizeNumber(draft.size);
-                      patch({ size: buildSizeString(num, e.target.value as SizeUnit) });
+                  <div
+                    style={{
+                      ...inputStyle,
+                      width: "80px",
+                      flex: "none",
+                      borderTopLeftRadius: 0,
+                      borderBottomLeftRadius: 0,
+                      background: C.cream,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: C.black,
                     }}
-                    style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}
                   >
-                    {SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                    sqm
+                  </div>
                 </div>
               </div>
             </div>
@@ -2066,8 +2062,8 @@ function EditProjectModal({
               <div>
                 <label style={labelStyle}>Area Size <span style={{ color: "#c14" }}>*</span></label>
                 <div className="flex gap-0">
-                  <input type="text" value={formatSizeNumber(draft.size)} placeholder="e.g. 1,450" onChange={(e) => { const num = formatSizeNumber(e.target.value); const unit = detectSizeUnit(draft.size); patch({ size: buildSizeString(num, unit) }); }} style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
-                  <select value={detectSizeUnit(draft.size)} onChange={(e) => { const num = formatSizeNumber(draft.size); patch({ size: buildSizeString(num, e.target.value as SizeUnit) }); }} style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}>{SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}</select>
+                  <input type="text" value={formatSizeNumber(draft.size)} placeholder="e.g. 110" onChange={(e) => { const num = formatSizeNumber(e.target.value); patch({ size: buildSizeString(num) }); }} style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
+                  <div style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, background: C.cream, display: "flex", alignItems: "center", justifyContent: "center", color: C.black }}>sqm</div>
                 </div>
               </div>
             </div>

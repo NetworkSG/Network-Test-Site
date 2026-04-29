@@ -14,8 +14,6 @@ import {
 import { ProjectSubmission, previewDriveFolder } from "./onboardingApi";
 
 const PROPERTY_TYPES = ["HDB", "Condominium", "Landed", "Commercial"];
-const SIZE_UNITS = ["sqft", "sqm", "m²"] as const;
-type SizeUnit = (typeof SIZE_UNITS)[number];
 
 const AVAILABLE_WORKS = [
   { key: "carpentry", icon: Hammer, label: "Carpentry" },
@@ -41,14 +39,9 @@ function formatSizeNumber(raw: string): string {
   if (!digits) return "";
   return Number(digits).toLocaleString("en-US");
 }
-function detectSizeUnit(raw: string): SizeUnit {
-  if (raw.includes("m²")) return "m²";
-  if (raw.toLowerCase().includes("sqm")) return "sqm";
-  return "sqft";
-}
-function buildSizeString(num: string, unit: SizeUnit): string {
-  if (!num) return unit;
-  return `${num} ${unit}`;
+function buildSizeString(num: string): string {
+  if (!num) return "sqm";
+  return `${num} sqm`;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -86,10 +79,8 @@ export function validateProject(p: ProjectSubmission): Record<string, string> {
   const e: Record<string, string> = {};
   if (!p.title.trim()) e.title = "Project title is required";
   if (!p.location.trim()) e.location = "Location is required";
-  if (!p.cost.trim()) e.cost = "Renovation cost is required";
   if (!parseSizeDigits(p.size)) e.size = "Area size is required";
-  if (!p.year.trim() || p.year.length !== 4) e.year = "Enter a 4-digit year";
-  if (!p.propertyType) e.propertyType = "Select a property type";
+  if (p.year.trim() && p.year.length !== 4) e.year = "Enter a 4-digit year";
   if (!p.style.trim()) e.style = "Interior style is required";
   if (!isValidDriveUrl(p.driveUrl))
     e.driveUrl = "Paste a Google Drive, Docs, or Photos share link (must start with https://)";
@@ -190,7 +181,7 @@ export function ProjectStep({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label style={labelStyle}>
-            Renovation Cost <span style={{ color: "#c14" }}>*</span>
+            Renovation Cost
           </label>
           <input
             type="text"
@@ -211,26 +202,31 @@ export function ProjectStep({
             <input
               type="text"
               value={formatSizeNumber(value.size)}
-              placeholder="e.g. 1,450"
+              placeholder="e.g. 110"
               onChange={(e) => {
                 const num = formatSizeNumber(e.target.value);
-                const unit = detectSizeUnit(value.size);
-                patch({ size: buildSizeString(num, unit) });
+                patch({ size: buildSizeString(num) });
               }}
               style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }}
               onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
             />
-            <select
-              value={detectSizeUnit(value.size)}
-              onChange={(e) => {
-                const num = formatSizeNumber(value.size);
-                patch({ size: buildSizeString(num, e.target.value as SizeUnit) });
+            <div
+              style={{
+                ...inputStyle,
+                width: "80px",
+                flex: "none",
+                borderTopLeftRadius: 0,
+                borderBottomLeftRadius: 0,
+                background: C.cream,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: C.black,
               }}
-              style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, cursor: "pointer", background: C.cream }}
             >
-              {SIZE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
+              sqm
+            </div>
           </div>
           {errors.size && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.size}</p>}
         </div>
@@ -240,7 +236,7 @@ export function ProjectStep({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label style={labelStyle}>
-            Property Type <span style={{ color: "#c14" }}>*</span>
+            Property Type
           </label>
           <select
             value={value.propertyType}
@@ -256,7 +252,7 @@ export function ProjectStep({
         </div>
         <div>
           <label style={labelStyle}>
-            Year of Completion <span style={{ color: "#c14" }}>*</span>
+            Year of Completion
           </label>
           <input
             type="number"

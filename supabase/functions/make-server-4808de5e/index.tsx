@@ -3645,7 +3645,6 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
   const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
   if (!apiKey || !placeId) return null;
   try {
-    // Use Places API (New) — requires X-Goog-Api-Key and X-Goog-FieldMask headers
     const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
     const res = await fetch(url, {
       headers: {
@@ -3664,21 +3663,47 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
       return null;
     }
 
-    // Resolve photo URLs from the photos array
-    // The Places Photos API (New) URI: GET /v1/{name}/media?maxHeightPx=400&key=...
-    const photoNames: string[] = (json.photos || []).map((p: any) => p.name).filter(Boolean);
-    const resolvedPhotoUrls: string[] = [];
-    for (const photoName of photoNames.slice(0, 10)) {
+    // Places Photos API (New) URI: GET /v1/{name}/media?maxHeightPx=400&key=...
+    // Returns a 302 redirect to the actual CDN URL — we follow it and capture
+    // the final URL so the client can render directly without re-billing.
+    const resolvePhotoUrl = async (photoName: string): Promise<string | null> => {
       try {
         const photoApiUrl = `https://places.googleapis.com/v1/${photoName}/media?maxHeightPx=400&maxWidthPx=600&key=${apiKey}`;
         const photoRes = await fetch(photoApiUrl, { redirect: "follow" });
-        if (photoRes.ok || photoRes.url) {
-          resolvedPhotoUrls.push(photoRes.url || photoApiUrl);
-        }
+        if (photoRes.ok || photoRes.url) return photoRes.url || photoApiUrl;
       } catch {
-        // Skip failed photo resolution
+        // ignore
       }
-    }
+      return null;
+    };
+
+    const rawReviews: any[] = json.reviews || [];
+
+    // The Places API (New) does not surface photos attached to individual
+    // reviews — `reviews.photos` is consistently empty. As a fallback, we
+    // match each review to the place's general photo gallery by uploader
+    // name: each `Photo` carries `authorAttributions[].displayName`, so when
+    // a reviewer also uploaded their own photo to the firm's gallery, we can
+    // pair them by name. Reviewers whose photo isn't in the gallery → no
+    // image (better than showing the wrong one).
+    const placePhotos: { name: string; authors: string[] }[] = (json.photos || [])
+      .map((p: any) => ({
+        name: p?.name as string,
+        authors: (p?.authorAttributions || [])
+          .map((a: any) => (a?.displayName || "").trim().toLowerCase())
+          .filter(Boolean) as string[],
+      }))
+      .filter((p: any) => p.name);
+
+    const reviewPhotoUrls: (string | null)[] = await Promise.all(
+      rawReviews.map(async (rv: any) => {
+        const reviewer = (rv?.authorAttribution?.displayName || "").trim().toLowerCase();
+        if (!reviewer) return null;
+        const match = placePhotos.find((p) => p.authors.includes(reviewer));
+        if (!match) return null;
+        return await resolvePhotoUrl(match.name);
+      }),
+    );
 
     const now = Date.now();
     return {
@@ -3686,7 +3711,7 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
       placeId,
       rating: typeof json.rating === "number" ? json.rating : 0,
       totalRatings: typeof json.userRatingCount === "number" ? json.userRatingCount : 0,
-      reviews: (json.reviews || []).map((rv: any, idx: number): CachedGoogleReview => {
+      reviews: rawReviews.map((rv: any, idx: number): CachedGoogleReview => {
         const authorName = rv.authorAttribution?.displayName || "Anonymous";
         const reviewText = rv.text?.text || rv.originalText?.text || "";
         const publishTime = rv.publishTime ? new Date(rv.publishTime).getTime() / 1000 : 0;
@@ -3697,7 +3722,7 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
           text: reviewText,
           relativeTime: rv.relativePublishTimeDescription || "",
           profilePhoto: rv.authorAttribution?.photoUri || null,
-          photoUrl: resolvedPhotoUrls[idx] || null,
+          photoUrl: reviewPhotoUrls[idx] || null,
           time: Math.floor(publishTime),
         };
       }),

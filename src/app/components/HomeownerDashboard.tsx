@@ -459,7 +459,7 @@ export function HomeownerDashboard() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[14px] text-[#6A7282]">
               {house.address && <span className="flex items-center gap-1"><MapPin size={13} className="text-[#FFA929]" />{house.address}</span>}
               {house.propertyType && <span className="flex items-center gap-1"><Building2 size={13} className="text-[#FFA929]" />{house.propertyType}</span>}
-              {house.size && <span className="flex items-center gap-1"><Ruler size={13} className="text-[#6A7282]" />{house.size} sqft</span>}
+              {house.size && <span className="flex items-center gap-1"><Ruler size={13} className="text-[#6A7282]" />{house.size} sqm</span>}
               {house.budget && <span className="flex items-center gap-1"><DollarSign size={13} className="text-[#6A7282]" />{house.budget}</span>}
               {house.timeline && <span className="flex items-center gap-1"><Calendar size={13} className="text-[#6A7282]" />{house.timeline}</span>}
             </div>
@@ -577,7 +577,7 @@ function OverviewSection({ data, setTab, refreshData }: { data: any; setTab: (t:
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <OverviewItem label="Location" value={house.address || "Not set"} icon={MapPin} />
             <OverviewItem label="Property Type" value={house.propertyType || "Not set"} icon={Building2} />
-            <OverviewItem label="Estimated Size" value={house.size ? `${house.size} sqft` : "Not set"} icon={Ruler} />
+            <OverviewItem label="Estimated Size" value={house.size ? `${house.size} sqm` : "Not set"} icon={Ruler} />
             <OverviewItem label="Budget Range" value={house.budget || "Not set"} icon={DollarSign} />
             <OverviewItem label="Key Collection" value={readiness} icon={Calendar} />
             <OverviewItem label="Status" value={inquiries.length > 0 || fp3d.length > 0 ? "Actively exploring" : "New"} icon={Activity}
@@ -835,7 +835,7 @@ function RenovationSection({ data, refreshData }: { data: any; refreshData: () =
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <SelectField label="Property Type" value={form.propertyType} onChange={(v: string) => setForm({ ...form, propertyType: v })}
                 options={["HDB", "Condo", "Landed", "Commercial"]} placeholder="Select type" required />
-              <Field label="Size (sqft)" value={form.size} onChange={(v: string) => setForm({ ...form, size: v })} placeholder="1200" icon={Ruler} />
+              <Field label="Size (sqm)" value={form.size} onChange={(v: string) => setForm({ ...form, size: v })} placeholder="110" icon={Ruler} />
               <Field label="Bedrooms" value={form.rooms} onChange={(v: string) => setForm({ ...form, rooms: v })} placeholder="3" icon={BedDouble} />
               <Field label="Bathrooms" value={form.bathrooms} onChange={(v: string) => setForm({ ...form, bathrooms: v })} placeholder="2" icon={Bath} />
               <Field label="Year Built" value={form.yearBuilt} onChange={(v: string) => setForm({ ...form, yearBuilt: v })} placeholder="2010" icon={Calendar} />
@@ -847,7 +847,7 @@ function RenovationSection({ data, refreshData }: { data: any; refreshData: () =
         ) : hasData ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-5 gap-y-4">
             {house.propertyType && <PropItem label="Type" value={house.propertyType} />}
-            {house.size && <PropItem label="Size" value={`${house.size} sqft`} />}
+            {house.size && <PropItem label="Size" value={`${house.size} sqm`} />}
             {house.rooms && <PropItem label="Bedrooms" value={house.rooms} />}
             {house.bathrooms && <PropItem label="Bathrooms" value={house.bathrooms} />}
             {house.yearBuilt && <PropItem label="Year Built" value={house.yearBuilt} />}
