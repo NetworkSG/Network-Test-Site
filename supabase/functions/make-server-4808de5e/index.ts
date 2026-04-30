@@ -8875,49 +8875,55 @@ app.get("/make-server-4808de5e/explore-projects", async (c) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Fetch all designer profiles (top-level keys only)
-    const { data: profileRows } = await supabase
-      .from("kv_store_4808de5e")
-      .select("key, value")
-      .like("key", "designer:%")
-      .not("key", "like", "%:%:%");
+    // Fetch active designers from the canonical `designers` table
+    const { data: designerRows } = await supabase
+      .from("designers")
+      .select("slug, name, data");
 
-    // Fetch all project arrays
-    const { data: projectRows } = await supabase
-      .from("kv_store_4808de5e")
-      .select("key, value")
-      .like("key", "designer:%:projects");
-
-    const profiles: Record<string, any> = {};
-    for (const row of profileRows || []) {
-      const slug = row.key.replace("designer:", "");
-      profiles[slug] = row.value;
+    const activeDesigners: Record<string, any> = {};
+    for (const d of designerRows || []) {
+      const data: any = d.data || {};
+      if (data.deletedAt || data.deleted || data.hidden || data.suspended) continue;
+      // Only include designers explicitly marked active (set via /admin/bulk-set-active)
+      if (data.active !== true) continue;
+      const name = data.name || d.name;
+      if (!name) continue;
+      activeDesigners[d.slug] = {
+        slug: d.slug,
+        name,
+        logo: data.images?.logo || data.logo || data.logoUrl || "",
+        verified: !!data.verified,
+      };
     }
 
+    // Fetch all projects from dedicated row-per-project table
+    const { data: projectRows } = await supabase
+      .from("designer_projects")
+      .select("id, designer_slug, title, cost, year, property_type, style, images")
+      .order("submitted_at", { ascending: false })
+      .limit(500);
+
     const allProjects: any[] = [];
-    for (const row of projectRows || []) {
-      const slug = row.key.replace("designer:", "").replace(":projects", "");
-      const designer = profiles[slug];
+    for (const p of projectRows || []) {
+      const designer = activeDesigners[p.designer_slug];
       if (!designer) continue;
-      const projects = Array.isArray(row.value) ? row.value : [];
-      projects.forEach((proj: any, idx: number) => {
-        if (!proj || !proj.image) return; // skip projects without images
-        // Parse meta string like "HDB · $87,460 · 2024"
-        const metaParts = (proj.meta || "").split("·").map((s: string) => s.trim());
-        allProjects.push({
-          projectId: `${slug}-${idx}`,
-          title: proj.name || "Untitled Project",
-          image: proj.image || "",
-          meta: proj.meta || "",
-          propertyType: metaParts[0] || "",
-          budget: metaParts[1] || "",
-          year: metaParts[2] || "",
-          designerName: designer.name || designer.companyName || slug,
-          designerSlug: slug,
-          designerLogo: designer.logoUrl || "",
-          verified: designer.verified || false,
-          style: designer.coverProject?.style || metaParts[0] || "",
-        });
+      const images = Array.isArray(p.images) ? p.images : [];
+      const image = images.find((u: any) => typeof u === "string" && u.startsWith("http")) || "";
+      if (!image) continue;
+      const meta = [p.property_type, p.cost, p.year].filter(Boolean).join(" · ");
+      allProjects.push({
+        projectId: p.id,
+        title: p.title || "Untitled Project",
+        image,
+        meta,
+        propertyType: p.property_type || "",
+        budget: p.cost || "",
+        year: p.year || "",
+        designerName: designer.name,
+        designerSlug: designer.slug,
+        designerLogo: designer.logo,
+        verified: designer.verified,
+        style: p.style || p.property_type || "",
       });
     }
 

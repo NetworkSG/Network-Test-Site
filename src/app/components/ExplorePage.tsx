@@ -9,8 +9,8 @@ import type { MoodBoard, BoardPin } from "@/app/utils/mood-board-types";
 import { useColorExtractor } from "@/app/hooks/useColorExtractor";
 import { uploadImageFromUrl } from "@/app/utils/mood-board-storage";
 import { supabase } from "@/app/components/supabaseClient";
-import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { Seo } from "./shared/Seo";
+import { HomepageNav } from "./shared/HomepageNav";
 
 /* ═══ Design Tokens (from GUIDELINES.md) ═══ */
 const C = {
@@ -36,34 +36,6 @@ function api(path: string, opts: any = {}) {
   });
 }
 
-// ─── SAMPLE DATA ──────────────────────────────────────────────────
-const SAMPLES = [
-  { projectId: "s1", title: "Modern Minimalist Living", image: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=600&q=80", meta: "HDB · $65,000 · 2024", propertyType: "HDB", budget: "$65,000", style: "Modern", designerName: "Sora Studios", designerSlug: "sora-studios", verified: true },
-  { projectId: "s2", title: "Japandi Bedroom Retreat", image: "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?w=600&q=80", meta: "Condo · $42,000 · 2024", propertyType: "Condo", budget: "$42,000", style: "Japandi", designerName: "Muji Space", designerSlug: "muji-space", verified: true },
-  { projectId: "s3", title: "Scandinavian Open Kitchen", image: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&q=80", meta: "HDB · $38,000 · 2023", propertyType: "HDB", budget: "$38,000", style: "Scandinavian", designerName: "Nordic Haus", designerSlug: "nordic-haus", verified: false },
-  { projectId: "s4", title: "Industrial Loft Conversion", image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&q=80", meta: "Landed · $120,000 · 2024", propertyType: "Landed", budget: "$120,000", style: "Industrial", designerName: "Raw Design Co", designerSlug: "raw-design", verified: true },
-  { projectId: "s5", title: "Cozy Reading Nook", image: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&q=80", meta: "Condo · $28,000 · 2023", propertyType: "Condo", budget: "$28,000", style: "Contemporary", designerName: "Warm Spaces", designerSlug: "warm-spaces", verified: false },
-  { projectId: "s6", title: "Luxury Master Suite", image: "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=600&q=80", meta: "Condo · $95,000 · 2024", propertyType: "Condo", budget: "$95,000", style: "Luxurious", designerName: "Prestige Interiors", designerSlug: "prestige", verified: true },
-  { projectId: "s7", title: "Bright Airy Bathroom", image: "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=600&q=80", meta: "HDB · $18,000 · 2024", propertyType: "HDB", budget: "$18,000", style: "Minimalist", designerName: "Clean Lines", designerSlug: "clean-lines", verified: true },
-  { projectId: "s8", title: "Dark Moody Kitchen", image: "https://images.unsplash.com/photo-1556909114-44e3e70034e2?w=600&q=80", meta: "Landed · $85,000 · 2023", propertyType: "Landed", budget: "$85,000", style: "Contemporary", designerName: "Noir Studio", designerSlug: "noir-studio", verified: false },
-  { projectId: "s9", title: "Coastal Living Room", image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&q=80", meta: "Condo · $55,000 · 2024", propertyType: "Condo", budget: "$55,000", style: "Modern", designerName: "Sora Studios", designerSlug: "sora-studios", verified: true },
-  { projectId: "s10", title: "Warm Wood Dining Area", image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600&q=80", meta: "HDB · $32,000 · 2024", propertyType: "HDB", budget: "$32,000", style: "Japandi", designerName: "Muji Space", designerSlug: "muji-space", verified: true },
-  { projectId: "s11", title: "White Marble Entryway", image: "https://images.unsplash.com/photo-1600607687644-c7171b42498f?w=600&q=80", meta: "Landed · $45,000 · 2023", propertyType: "Landed", budget: "$45,000", style: "Luxurious", designerName: "Prestige Interiors", designerSlug: "prestige", verified: true },
-  { projectId: "s12", title: "Kids Playroom Design", image: "https://images.unsplash.com/photo-1617104678098-de229db51175?w=600&q=80", meta: "HDB · $15,000 · 2024", propertyType: "HDB", budget: "$15,000", style: "Scandinavian", designerName: "Nordic Haus", designerSlug: "nordic-haus", verified: false },
-  { projectId: "s13", title: "Zen Bathroom Oasis", image: "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?w=600&q=80", meta: "Condo · $22,000 · 2024", propertyType: "Condo", budget: "$22,000", style: "Japandi", designerName: "Muji Space", designerSlug: "muji-space", verified: true },
-  { projectId: "s14", title: "Home Office Setup", image: "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=600&q=80", meta: "HDB · $8,000 · 2023", propertyType: "HDB", budget: "$8,000", style: "Modern", designerName: "Clean Lines", designerSlug: "clean-lines", verified: true },
-  { projectId: "s15", title: "Open Concept BTO", image: "https://images.unsplash.com/photo-1600210491892-03d54c0aaf87?w=600&q=80", meta: "HDB · $48,000 · 2024", propertyType: "HDB", budget: "$48,000", style: "Minimalist", designerName: "Sora Studios", designerSlug: "sora-studios", verified: true },
-  { projectId: "s16", title: "Rustic Landed Kitchen", image: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80", meta: "Landed · $72,000 · 2024", propertyType: "Landed", budget: "$72,000", style: "Industrial", designerName: "Raw Design Co", designerSlug: "raw-design", verified: true },
-  { projectId: "s17", title: "Penthouse Living Space", image: "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=600&q=80", meta: "Condo · $150,000 · 2024", propertyType: "Condo", budget: "$150,000", style: "Luxurious", designerName: "Prestige Interiors", designerSlug: "prestige", verified: true },
-  { projectId: "s18", title: "Compact Studio Design", image: "https://images.unsplash.com/photo-1600573472550-8090b5e0745e?w=600&q=80", meta: "Condo · $25,000 · 2023", propertyType: "Condo", budget: "$25,000", style: "Minimalist", designerName: "Warm Spaces", designerSlug: "warm-spaces", verified: false },
-  { projectId: "s19", title: "Outdoor Patio Lounge", image: "https://images.unsplash.com/photo-1600566752355-35792bedcfea?w=600&q=80", meta: "Landed · $35,000 · 2024", propertyType: "Landed", budget: "$35,000", style: "Contemporary", designerName: "Noir Studio", designerSlug: "noir-studio", verified: false },
-  { projectId: "s20", title: "Walk-in Wardrobe", image: "https://images.unsplash.com/photo-1616046229478-9901c5536a45?w=600&q=80", meta: "Condo · $18,000 · 2024", propertyType: "Condo", budget: "$18,000", style: "Modern", designerName: "Clean Lines", designerSlug: "clean-lines", verified: true },
-  { projectId: "s21", title: "Terrazzo Feature Wall", image: "https://images.unsplash.com/photo-1600585154363-67eb9e2e2099?w=600&q=80", meta: "HDB · $12,000 · 2023", propertyType: "HDB", budget: "$12,000", style: "Scandinavian", designerName: "Nordic Haus", designerSlug: "nordic-haus", verified: false },
-  { projectId: "s22", title: "Black & Gold Dining", image: "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&q=80", meta: "Condo · $62,000 · 2024", propertyType: "Condo", budget: "$62,000", style: "Luxurious", designerName: "Prestige Interiors", designerSlug: "prestige", verified: true },
-  { projectId: "s23", title: "Muji-Style Storage", image: "https://images.unsplash.com/photo-1600210491369-e753d80a41f3?w=600&q=80", meta: "HDB · $22,000 · 2024", propertyType: "HDB", budget: "$22,000", style: "Muji", designerName: "Muji Space", designerSlug: "muji-space", verified: true },
-  { projectId: "s24", title: "Concrete & Glass Study", image: "https://images.unsplash.com/photo-1600607688969-a5bfcd646154?w=600&q=80", meta: "Landed · $55,000 · 2023", propertyType: "Landed", budget: "$55,000", style: "Industrial", designerName: "Raw Design Co", designerSlug: "raw-design", verified: true },
-];
-
 const STYLES = ["Modern", "Minimalist", "Scandinavian", "Industrial", "Japandi", "Contemporary", "Luxurious", "Muji"];
 const PROPERTY_TYPES = ["HDB", "Condo", "Landed"];
 const BUDGETS = ["Below $30K", "$30K–$50K", "$50K–$80K", "$80K–$120K", "Above $120K"];
@@ -80,7 +52,8 @@ function hashAspect(id: string, mini?: boolean): number {
 // ─── MAIN ─────────────────────────────────────────────────────────
 export function ExplorePage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<any[]>(SAMPLES);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -97,21 +70,18 @@ export function ExplorePage() {
   const { user, isLoggedIn } = useAuth();
   const hasFilters = activeStyles.size > 0 || activePropTypes.size > 0 || activeBudgets.size > 0 || searchQuery.length > 0;
 
-  // Try loading real data in background (only replace samples if real data has valid images)
+  // Load real projects from active designers
   useEffect(() => {
     (async () => {
       try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 5000);
-        const res = await api("/explore-projects", { signal: ctrl.signal });
-        clearTimeout(t);
+        const res = await api("/explore-projects");
         if (res.ok) {
           const json = await res.json();
-          // Only use real data if it has projects with actual image URLs
           const valid = (json.data || []).filter((p: any) => p.image && p.image.startsWith("http"));
-          if (valid.length > 0) setProjects(valid);
+          setProjects(valid);
         }
       } catch {}
+      setLoading(false);
     })();
   }, []);
 
@@ -138,6 +108,17 @@ export function ExplorePage() {
     const id = proj.projectId;
     const was = savedIds.has(id);
     setSavedIds(prev => { const n = new Set(prev); was ? n.delete(id) : n.add(id); return n; });
+
+    // Mirror to the homeowner dashboard's Inspiration board (localStorage source)
+    try {
+      const raw = localStorage.getItem("saved-inspirations");
+      const list: any[] = raw ? JSON.parse(raw) : [];
+      const next = was
+        ? list.filter(d => d.projectId !== id)
+        : [...list, { projectId: id, imageUrl: proj.image, title: proj.title, designer: proj.designerName, designerSlug: proj.designerSlug, style: proj.style || "", meta: proj.meta || "" }];
+      localStorage.setItem("saved-inspirations", JSON.stringify(next));
+    } catch { /* ignore */ }
+
     try {
       if (was) await api(`/homeowner-saved-projects/${encodeURIComponent(id)}`, { method: "DELETE" });
       else await api("/homeowner-saved-projects", { method: "POST", body: JSON.stringify({ projectId: id, title: proj.title, image: proj.image, designerName: proj.designerName, designerSlug: proj.designerSlug, meta: proj.meta }) });
@@ -238,26 +219,7 @@ export function ExplorePage() {
         canonical="/explore"
       />
       {/* ═══ NAVBAR ═══ */}
-      <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: C.cream }}>
-        <div className="max-w-[1800px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
-          <a href="/" className="cursor-pointer shrink-0 block" style={{
-            width: "110px", height: "23px", background: C.black,
-            maskImage: `url('${logoImg}')`, maskSize: "111.804px 22.909px", maskRepeat: "no-repeat", maskPosition: "0px 0px",
-            WebkitMaskImage: `url('${logoImg}')`, WebkitMaskSize: "111.804px 22.909px", WebkitMaskRepeat: "no-repeat", WebkitMaskPosition: "0px 0px",
-          }} />
-          <div className="hidden md:flex items-center gap-8">
-            <a href="/explore" className="text-[13px] font-medium cursor-pointer" style={{ color: C.black, fontFamily: sans }}>Explore</a>
-            <a href="/interior-designers" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Designers</a>
-            <a href="/floorplan3d" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Layout Planner</a>
-            <a href="/cost-guide" className="text-[13px] font-normal cursor-pointer hover:opacity-60" style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}>Cost Guide</a>
-          </div>
-          <a href="/" className="text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
-            style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>
-            Get matched
-          </a>
-        </div>
-        <div className="h-[1px]" style={{ background: C.creamBorder }} />
-      </nav>
+      <HomepageNav />
 
       {/* HEADER */}
       <div className="max-w-[1800px] mx-auto px-6 md:px-10 pt-[100px] md:pt-[120px]">
@@ -300,11 +262,18 @@ export function ExplorePage() {
 
       {/* MASONRY GRID */}
       <div className="max-w-[1800px] mx-auto px-6 md:px-10 pb-16">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <>
+            <div className="h-[18px] w-[100px] mb-3 rounded" style={{ background: C.creamDark }} />
+            <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6 gap-4">
+              {Array.from({ length: 18 }).map((_, i) => <PinSkeleton key={i} index={i} />)}
+            </div>
+          </>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-20">
             <Search size={40} className="mx-auto mb-3" style={{ color: C.creamBorder }} />
             <p className="text-[20px] font-normal" style={{ fontFamily: serif, color: C.black }}>{hasFilters ? "No projects match your filters" : "No projects yet"}</p>
-            <p className="text-[14px] font-normal mt-2 mb-5" style={{ color: C.grayLight, fontFamily: sans }}>{hasFilters ? "Try adjusting your filters" : "Projects will appear here"}</p>
+            <p className="text-[14px] font-normal mt-2 mb-5" style={{ color: C.grayLight, fontFamily: sans }}>{hasFilters ? "Try adjusting your filters" : "Projects from verified designers will appear here"}</p>
             {hasFilters && <button onClick={clearAll} className="px-6 py-2.5 text-[14px] font-normal cursor-pointer hover:opacity-85"
               style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, transition: "all 0.15s" }}>Clear Filters</button>}
           </div>
@@ -433,6 +402,23 @@ export function ExplorePage() {
 }
 
 // ─── PIN COMPONENT ────────────────────────────────────────────────
+function PinSkeleton({ index }: { index: number }) {
+  const aspect = useMemo(() => hashAspect(`sk-${index}`), [index]);
+  return (
+    <div
+      className="relative overflow-hidden mb-4"
+      style={{
+        paddingBottom: `${aspect}%`,
+        height: 0,
+        background: `linear-gradient(90deg, ${C.creamDark} 25%, ${C.creamBorder} 50%, ${C.creamDark} 75%)`,
+        backgroundSize: "200% 100%",
+        animation: "exploreShimmer 1.5s infinite",
+        borderRadius: "12px",
+      }}
+    />
+  );
+}
+
 function Pin({ project, saved, onSave, onOpen, mini }: { project: any; saved: boolean; onSave: () => void; onOpen: () => void; mini?: boolean }) {
   const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState(false);

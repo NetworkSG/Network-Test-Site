@@ -6410,6 +6410,11 @@ app.put("/make-server-4808de5e/homeowner-profile/:section", async (c) => {
       // Accept data URLs up to ~2MB
       if (avatar.length > 2_800_000) return c.json({ error: "Image too large (max 2MB)" }, 400);
       profile.avatar = avatar;
+    } else if (section === "cover") {
+      const cover = body.cover;
+      if (!cover || typeof cover !== "string") return c.json({ error: "No cover provided" }, 400);
+      if (cover.length > 2_800_000) return c.json({ error: "Image too large (max 2MB)" }, 400);
+      profile.cover = cover;
     } else if (section === "personal") {
       profile.name = sanitizeString(body.name || profile.name || "", 100);
       profile.phone = sanitizeString(body.phone || profile.phone || "", 20);
@@ -6500,9 +6505,13 @@ app.get("/make-server-4808de5e/explore-projects", async (c) => {
       const slug = row.key.replace("designer:", "").replace(":projects", "");
       const designer = profiles[slug];
       if (!designer) continue;
+      // Only include projects from active designers (not soft-deleted/hidden, with an identity)
+      if (designer.deleted || designer.hidden || designer.suspended) continue;
+      if (!(designer.name || designer.companyName)) continue;
       const projects = Array.isArray(row.value) ? row.value : [];
       projects.forEach((proj: any, idx: number) => {
         if (!proj || !proj.image) return; // skip projects without images
+        if (proj.hidden || proj.draft) return; // skip non-published projects
         // Parse meta string like "HDB · $87,460 · 2024"
         const metaParts = (proj.meta || "").split("·").map((s: string) => s.trim());
         allProjects.push({
