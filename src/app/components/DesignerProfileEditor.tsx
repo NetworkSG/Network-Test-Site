@@ -1362,9 +1362,6 @@ function AddProjectModal({
   // Validation
   const errors: Record<string, string> = {};
   if (!draft.title.trim()) errors.title = "Project title is required";
-  if (!draft.cost.trim()) errors.cost = "Renovation cost is required";
-  if (!parseSizeDigits(draft.size)) errors.size = "Area size is required";
-  if (!draft.year.trim()) errors.year = "Year is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
   if (!draft.coverImage) errors.coverImage = "Upload a cover image";
@@ -1522,7 +1519,7 @@ function AddProjectModal({
             {/* Cost + Size */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label style={labelStyle}>Renovation Cost <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Renovation Cost</label>
                 <input
                   type="text"
                   value={draft.cost}
@@ -1534,7 +1531,7 @@ function AddProjectModal({
                 />
               </div>
               <div>
-                <label style={labelStyle}>Area Size <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Area Size</label>
                 <div className="flex gap-0">
                   <input
                     type="text"
@@ -1584,7 +1581,7 @@ function AddProjectModal({
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Year of Completion <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Year of Completion</label>
                 <input
                   type="number"
                   value={draft.year}
@@ -1969,9 +1966,6 @@ function EditProjectModal({
 
   const errors: Record<string, string> = {};
   if (!draft.title.trim()) errors.title = "Project title is required";
-  if (!draft.cost.trim()) errors.cost = "Renovation cost is required";
-  if (!parseSizeDigits(draft.size)) errors.size = "Area size is required";
-  if (!draft.year.trim()) errors.year = "Year is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
   if (!draft.coverImage) errors.coverImage = "Upload a cover image";
@@ -2056,11 +2050,11 @@ function EditProjectModal({
             {/* Cost + Size */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label style={labelStyle}>Renovation Cost <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Renovation Cost</label>
                 <input type="text" value={draft.cost} placeholder="e.g. $120,000" onChange={(e) => patch({ cost: formatCost(e.target.value) })} style={inputStyle} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
               </div>
               <div>
-                <label style={labelStyle}>Area Size <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Area Size</label>
                 <div className="flex gap-0">
                   <input type="text" value={formatSizeNumber(draft.size)} placeholder="e.g. 110" onChange={(e) => { const num = formatSizeNumber(e.target.value); patch({ size: buildSizeString(num) }); }} style={{ ...inputStyle, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none", flex: 1 }} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
                   <div style={{ ...inputStyle, width: "80px", flex: "none", borderTopLeftRadius: 0, borderBottomLeftRadius: 0, background: C.cream, display: "flex", alignItems: "center", justifyContent: "center", color: C.black }}>sqm</div>
@@ -2078,7 +2072,7 @@ function EditProjectModal({
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Year of Completion <span style={{ color: "#c14" }}>*</span></label>
+                <label style={labelStyle}>Year of Completion</label>
                 <input type="number" value={draft.year} placeholder="e.g. 2024" min={1990} max={2100} onChange={(e) => patch({ year: e.target.value })} style={inputStyle} onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }} onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }} />
               </div>
             </div>
