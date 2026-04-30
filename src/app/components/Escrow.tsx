@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { Seo } from "./shared/Seo";
 import { LEAD_PAGE_CSS, LEAD_PAGE_CLASS, LeadPageFonts } from "./shared/leadPageStyles";
+import { trackLead } from "../utils/metaPixel";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -150,6 +151,7 @@ export function Escrow() {
                       // Wipe inputs + radio selections so the form is ready for the
                       // next visitor without a manual page refresh.
                       formEl.reset();
+                      trackLead("escrow-form");
                       setSubmitted(true);
                     } catch (err: any) {
                       setSubmitError(err?.message || "Submission failed. Please try again.");

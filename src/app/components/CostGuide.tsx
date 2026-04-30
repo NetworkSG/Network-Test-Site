@@ -7,6 +7,7 @@ import { C, serif, sans } from "./homepage/v8/primitives";
 import { ChevronDown, Check, Lock, Star, ShieldCheck } from "lucide-react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { Seo } from "./shared/Seo";
+import { trackLead } from "../utils/metaPixel";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -800,6 +801,7 @@ export function CostGuide() {
                 // already generated; fall through so the user isn't stuck.
               }
               setSubmitting(false);
+              trackLead("cost-guide-quote");
               setScreen(6);
             }}
           />
