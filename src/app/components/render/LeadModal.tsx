@@ -9,6 +9,7 @@ import {
   isValidEmail,
   isValidPhone,
 } from "@/app/utils/sanitize";
+import { trackLead } from "@/app/utils/metaPixel";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -107,6 +108,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
           );
         } catch { /* non-fatal */ }
         // Navigate to studio page
+        trackLead("render-tool-gate");
         setSubmitted(true);
         setTimeout(() => navigate("/render-tool/studio"), 800);
       } catch {
@@ -138,6 +140,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
           setSubmitting(false);
           return;
         }
+        trackLead("render-tool-submit");
         setSubmitted(true);
       } catch {
         setError("Network error. Please try again.");

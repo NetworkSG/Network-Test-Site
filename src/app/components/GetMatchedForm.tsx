@@ -1,5 +1,6 @@
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
+import { trackLead } from "../utils/metaPixel";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
@@ -424,6 +425,7 @@ export function GetMatchedForm() {
       setSubmitting(true);
       try {
         await submitQuoteRequest();
+        trackLead("get-matched-quote-request");
         setStep(5);
       } catch (err) {
         console.error("Failed to submit quote request:", err);

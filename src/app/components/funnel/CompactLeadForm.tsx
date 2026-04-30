@@ -6,6 +6,7 @@ import { QUALIFYING_QUESTIONS } from "../homepage/content";
 import { submitHomepageLead } from "../homepage/v8/submitHomepageLead";
 import type { LeadFormData } from "../homepage/types";
 import { FUNNEL_HERO, FUNNEL_COMPLETION } from "./content";
+import { trackLead } from "@/app/utils/metaPixel";
 
 const ANSWER_KEYS = [
   "situation",
@@ -92,6 +93,7 @@ export function CompactLeadForm({ mobileHero }: { mobileHero?: React.ReactNode }
       });
     } finally {
       setSubmitting(false);
+      trackLead("get-matched-quiz");
       goForward(4);
     }
   };

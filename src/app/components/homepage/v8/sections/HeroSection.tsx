@@ -6,6 +6,7 @@ import { useHomeownerCount } from "../useHomeownerCount";
 import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
+import { trackLead } from "@/app/utils/metaPixel";
 
 import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.webp";
 import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.webp";
@@ -355,6 +356,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                 transition={{ duration: 0.3 }} className="flex items-center justify-center min-h-[70vh] py-8">
                 <QualifyingFlow onComplete={(answers) => {
                   setFormState("complete");
+                  trackLead("homepage-hero-lead");
                   heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   // Save lead to Supabase homepage_leads table
                   const sbUrl = `https://${projectId}.supabase.co`;
