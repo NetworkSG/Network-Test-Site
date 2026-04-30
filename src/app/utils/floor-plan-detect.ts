@@ -51,17 +51,29 @@ function classify(url: string): Promise<boolean> {
             if (!ctx) return resolve(false);
             ctx.drawImage(img, 0, 0, w, h);
             const data = ctx.getImageData(0, 0, w, h).data;
-            let lowSat = 0, total = 0;
+            // Floor plans = ink lines on paper. They have THREE features that
+            // interior photos almost never combine:
+            //   1. Near-grayscale (low saturation) almost everywhere.
+            //   2. A large near-white background (the paper).
+            //   3. A small but real share of dark pixels (the line ink).
+            // Bright/airy interior photos pass (1) but fail (3); dark photos
+            // pass (3) but fail (2); coloured photos fail (1).
+            let lowSat = 0, nearWhite = 0, dark = 0, total = 0;
             for (let i = 0; i < data.length; i += 4) {
               const R = data[i], G = data[i + 1], B = data[i + 2];
               const max = Math.max(R, G, B), min = Math.min(R, G, B);
               const sat = max === 0 ? 0 : (max - min) / max;
               if (sat < 0.1) lowSat++;
+              if (R >= 235 && G >= 235 && B >= 235) nearWhite++;
+              if (max < 90) dark++;
               total++;
             }
-            // Floor plans are dominated by near-grayscale pixels (lines on
-            // paper). Real interior photos rarely exceed 80% even in low light.
-            resolve(lowSat / Math.max(1, total) >= 0.92);
+            const t = Math.max(1, total);
+            const isFloorPlan =
+              lowSat / t >= 0.95 &&
+              nearWhite / t >= 0.4 &&
+              dark / t >= 0.005;
+            resolve(isFloorPlan);
           } catch { resolve(false); }
         };
         img.onerror = () => resolve(false);
