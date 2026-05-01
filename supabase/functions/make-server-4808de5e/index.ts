@@ -2521,6 +2521,9 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         }
         if (end > start) {
           try { rscDict[key] = JSON.parse(rsc.slice(start, end)); } catch {}
+          // Advance the regex past this body so we don't re-match `XX:{`
+          // patterns sitting inside a parsed record's string values.
+          refHeadRe.lastIndex = end;
         }
       }
     }
@@ -2568,12 +2571,16 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     // ── Heuristic field extraction from rendered HTML ──
     // Qanvast project pages render labelled stats like "Budget $50,000" or "Size 1,100 sqft".
     const stripTags = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const afterLabel = (label: string): string | undefined => {
-      const re = new RegExp(`${label}\\s*[:\\-–—]?\\s*(?:<[^>]+>\\s*)*([^<\\n\\r|]{2,80})`, "i");
-      const mm = html.match(re);
-      return mm ? stripTags(mm[1]).slice(0, 80) : undefined;
-    };
     const htmlText = stripTags(html);
+    // Match a labelled stat in the *visible* page text (e.g. "Style: Modern", "Completed - 2024").
+    // Match against stripped text only (so "Style" inside `<link rel="stylesheet">` or random JSON
+    // prose doesn't leak through), require a word-boundary on the label, and require an explicit
+    // separator (":", "-", em/en dash) — bare adjacency picks up too many false positives.
+    const afterLabel = (label: string): string | undefined => {
+      const re = new RegExp(`\\b${label}\\b\\s*[:\\-–—]\\s*([^|\\n\\r]{2,80})`, "i");
+      const mm = htmlText.match(re);
+      return mm ? mm[1].trim().slice(0, 80) : undefined;
+    };
     const firstMatch = (re: RegExp) => { const mm = htmlText.match(re); return mm ? mm[0] : undefined; };
     const extractedBudget = firstMatch(/\$[\d,]+(?:\s*[-–]\s*\$[\d,]+)?/);
     const extractedSize = firstMatch(/\b[\d,]{2,6}\s*(?:sqft|sq\.?\s*ft|sqm|m²)\b/i);
@@ -2722,11 +2729,15 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     const ldByType = (t: string) => flatLd.find((x) => (x["@type"] || "").toLowerCase().includes(t.toLowerCase()));
 
     // ── Find the canonical project record inside the RSC dict ──
-    // Heuristic: object with both a numeric `price` and string `yearOfCompletion`.
-    const projectRecord: any = Object.values(rscDict).find((v: any) =>
+    // Real Qanvast project record has: numeric `price`, a 4-digit `yearOfCompletion`,
+    // and a non-HTML title. The shape checks reject malformed sub-records that may
+    // slip through the RSC scanner when string values contain ref-like substrings.
+    const isYearString = (s: any) => typeof s === "string" && /^(19|20)\d{2}$/.test(s.trim());
+    const looksLikeProjectRecord = (v: any) =>
       v && typeof v === "object" && !Array.isArray(v) &&
-      typeof v.price === "number" && typeof v.yearOfCompletion === "string"
-    );
+      typeof v.price === "number" && isYearString(v.yearOfCompletion) &&
+      (typeof v.title !== "string" || !/[<>]/.test(v.title));
+    const projectRecord: any = Object.values(rscDict).find(looksLikeProjectRecord);
     // Firm record: has `companyId`/`companyName`, or a firm-shaped object referenced by the project.
     const firmRecord: any = Object.values(rscDict).find((v: any) =>
       v && typeof v === "object" && !Array.isArray(v) &&

@@ -116,9 +116,7 @@ function Field({
 function SizeField({ size, unit }: { size: string; unit: string }) {
   return (
     <div>
-      <label style={labelStyle}>
-        Area Size <span style={{ color: "#c14" }}>*</span>
-      </label>
+      <label style={labelStyle}>Area Size</label>
       <div style={{ display: "flex", gap: 0 }}>
         <input
           type="text"
@@ -165,9 +163,7 @@ function SizeField({ size, unit }: { size: string; unit: string }) {
 function PropertyTypeField({ value }: { value: string }) {
   return (
     <div>
-      <label style={labelStyle}>
-        Property Type <span style={{ color: "#c14" }}>*</span>
-      </label>
+      <label style={labelStyle}>Property Type</label>
       <div
         style={{
           ...readonlyInputStyle,
@@ -498,13 +494,11 @@ export function QanvastImportTest() {
                 label="Project Title"
                 value={p.title}
                 placeholder="e.g. The Aldrich Residence"
-                required
               />
               <Field
                 label="Location"
                 value={p.location}
                 placeholder="e.g. Orchard Road, Singapore"
-                required
               />
               <div
                 style={{
@@ -517,7 +511,6 @@ export function QanvastImportTest() {
                   label="Renovation Cost"
                   value={p.cost}
                   placeholder="e.g. $120,000"
-                  required
                 />
                 <SizeField size={p.size} unit={p.sizeUnit} />
               </div>
@@ -533,7 +526,6 @@ export function QanvastImportTest() {
                   label="Year of Completion"
                   value={p.year}
                   placeholder="e.g. 2024"
-                  required
                 />
               </div>
               <div
@@ -552,7 +544,6 @@ export function QanvastImportTest() {
                   label="Interior Style"
                   value={p.style}
                   placeholder="e.g. Modern Luxe"
-                  required
                 />
               </div>
 
