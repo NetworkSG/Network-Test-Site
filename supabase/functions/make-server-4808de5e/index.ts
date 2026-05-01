@@ -2729,14 +2729,26 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     const ldByType = (t: string) => flatLd.find((x) => (x["@type"] || "").toLowerCase().includes(t.toLowerCase()));
 
     // ── Find the canonical project record inside the RSC dict ──
-    // Real Qanvast project record has: numeric `price`, a 4-digit `yearOfCompletion`,
-    // and a non-HTML title. The shape checks reject malformed sub-records that may
-    // slip through the RSC scanner when string values contain ref-like substrings.
-    const isYearString = (s: any) => typeof s === "string" && /^(19|20)\d{2}$/.test(s.trim());
-    const looksLikeProjectRecord = (v: any) =>
-      v && typeof v === "object" && !Array.isArray(v) &&
-      typeof v.price === "number" && isYearString(v.yearOfCompletion) &&
-      (typeof v.title !== "string" || !/[<>]/.test(v.title));
+    // As of 2025, Qanvast's project record has: numeric `price`, numeric `size`,
+    // string `areaUnit`, a `styles` ref, plus `commonName` / `noOfBedrooms`.
+    // (Older Qanvast pages also carried `yearOfCompletion`; keep that as a fallback.)
+    // We require ≥3 project-shape keys to win past photo records, which tend to
+    // share `title` / `description` but none of these.
+    const PROJECT_SHAPE_KEYS = [
+      "price", "size", "areaUnit", "styles", "noOfBedrooms", "commonName",
+      "isNewProperty", "otherWorks", "yearOfCompletion",
+    ];
+    const looksLikeProjectRecord = (v: any) => {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+      const keys = Object.keys(v);
+      const hits = PROJECT_SHAPE_KEYS.filter((k) => keys.includes(k));
+      if (hits.length < 3) return false;
+      // Sanity: if `title` is present it shouldn't look like raw HTML.
+      if (typeof v.title === "string" && /[<>]/.test(v.title)) return false;
+      // Sanity: if `price` is present it should be numeric.
+      if ("price" in v && typeof v.price !== "number") return false;
+      return true;
+    };
     const projectRecord: any = Object.values(rscDict).find(looksLikeProjectRecord);
     // Firm record: has `companyId`/`companyName`, or a firm-shaped object referenced by the project.
     const firmRecord: any = Object.values(rscDict).find((v: any) =>
@@ -2788,6 +2800,15 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       const styles = resolveRef(projectRecord.styles);
       const works = resolveRef(projectRecord.otherWorks);
       const unit = projectRecord.areaUnit === "sqm" ? "sqm" : projectRecord.areaUnit === "m²" ? "m²" : "sqft";
+      // Use Qanvast's explicit yearOfCompletion only. If absent, leave blank —
+      // do NOT infer from createdAt/updatedAt (those are upload dates, not project
+      // completion dates).
+      const yearStr = (() => {
+        const y = projectRecord.yearOfCompletion;
+        if (typeof y === "string" && /^(19|20)\d{2}$/.test(y.trim())) return y.trim();
+        if (typeof y === "number" && y >= 1900 && y < 2100) return String(y);
+        return undefined;
+      })();
       projects.length = 0; // prefer the structured record over any fallback
       projects.push({
         title: String(projectRecord.title || ""),
@@ -2795,7 +2816,7 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         homeType: projectRecord.type,
         budget: typeof projectRecord.price === "number" ? `S$${projectRecord.price.toLocaleString()}` : undefined,
         size: typeof projectRecord.size === "number" ? `${projectRecord.size}${unit}` : undefined,
-        year: projectRecord.yearOfCompletion,
+        year: yearStr,
         rooms: typeof projectRecord.noOfBedrooms === "number" ? `${projectRecord.noOfBedrooms}-Bedroom` : undefined,
         style: Array.isArray(styles) ? styles.join(", ") : "",
         images: photoBaseUrls.length ? photoBaseUrls : Array.from(imgSet).slice(0, 30),
@@ -2834,6 +2855,7 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       while ((sm = spanRe.exec(h3Match[1]))) h3Spans.push(sm[1].trim());
     }
     const h3PropertyLabel = h3Spans[0] || ""; // e.g. "New HDB" / "Resale Condo" / "Landed Terrace"
+    const h3StyleLabel = h3Spans[1] || ""; // e.g. "Modern" / "Contemporary" / "Scandinavian"
 
     // Map a Qanvast property label (from h3) onto our { propertyType, propertySubType }.
     const mapQanvastPropertyLabel = (label: string, isNew: boolean | undefined, bedrooms: number | undefined): { propertyType: string; propertySubType: string } => {
@@ -2936,7 +2958,7 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         year: yearMatch ? yearMatch[0] : (p.year || ""),
         propertyType,
         propertySubType,
-        style: p.style || detectStyle(haystack),
+        style: p.style || h3StyleLabel || detectStyle(haystack) || detectStyle(htmlText),
         worksIncluded,
         driveUrl: "",
         images: Array.isArray(p.images) ? p.images : [],
@@ -3010,6 +3032,28 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
             }
             return hits;
           } catch { return [] as string[]; }
+        })(),
+        // Dump shapes of any RSC ref that looks vaguely project-shaped, so we can
+        // see what schema Qanvast is using when our heuristic misses.
+        // Dump shapes of any RSC ref that has at least one project-shape key
+        // (yearOfCompletion / areaUnit / noOfBedrooms / isNewProperty / styles / otherWorks).
+        rscProjectCandidates: (() => {
+          const out: any[] = [];
+          const KEYS = ["yearOfCompletion", "areaUnit", "noOfBedrooms", "isNewProperty", "styles", "otherWorks", "price", "size"];
+          for (const [k, v] of Object.entries(rscDict)) {
+            if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+            const keys = Object.keys(v);
+            const hits = KEYS.filter((kk) => keys.includes(kk));
+            if (hits.length === 0) continue;
+            const shape: Record<string, string> = {};
+            for (const kk of keys.slice(0, 40)) {
+              const vv = (v as any)[kk];
+              shape[kk] = Array.isArray(vv) ? `Array(${vv.length})` : (vv === null ? "null" : typeof vv === "object" ? "object" : `${typeof vv}:${String(vv).slice(0, 60)}`);
+            }
+            out.push({ ref: k, hits, shape });
+            if (out.length >= 6) break;
+          }
+          return out;
         })(),
         htmlCarpentryHit: /Carpentry/i.test(html),
         htmlWorkHits: (() => {
