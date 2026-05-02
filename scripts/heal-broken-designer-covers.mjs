@@ -42,16 +42,23 @@ function pickProjectThumb(p) {
   return "";
 }
 
-const [{ data: designers }, { data: secs }] = await Promise.all([
+const [{ data: rawDesigners }, { data: secs }] = await Promise.all([
   sb.from("designers").select("slug, name, data"),
   sb.from("designer_sections").select("slug, data").eq("section", "projects"),
 ]);
+
+// Same active-filter as the public /designers endpoint:
+// active !== false AND no deletedAt.
+const designers = (rawDesigners || []).filter((d) => {
+  const data = d.data || {};
+  return data.active !== false && !data.deletedAt;
+});
 
 const projectsBySlug = new Map();
 for (const s of secs || []) projectsBySlug.set(s.slug, Array.isArray(s.data) ? s.data : []);
 
 console.log(`Mode: ${APPLY ? "APPLY" : "DRY-RUN"}`);
-console.log(`Designers: ${designers?.length || 0}`);
+console.log(`Active designers: ${designers.length} (filtered from ${rawDesigners?.length || 0} total)`);
 console.log("");
 
 const stats = { ok: 0, missing: 0, healed: 0, failed: 0, written: 0 };
