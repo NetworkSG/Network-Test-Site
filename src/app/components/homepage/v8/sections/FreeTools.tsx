@@ -1,4 +1,4 @@
-import { C, FadeIn, TagLabel } from "../primitives";
+import { C, FadeIn } from "../primitives";
 import { Link } from "react-router";
 
 const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -51,14 +51,16 @@ function ArrowIcon() {
 }
 
 // Optional overrides for callers that want the same dark-card grid but
-// with their own section header / background. /get-matched uses the
-// defaults; /escrow passes its own copy + cream tone.
+// with their own section header / background / theme. /get-matched uses
+// the defaults; /escrow passes its own copy and dark theme to match the
+// lead-page ink/gold treatment of the rest of the page.
 export interface FreeToolsProps {
   eyebrow?: string;
   headingPrimary?: string;
   headingSecondary?: string;
   description?: string;
   background?: string;
+  dark?: boolean;
 }
 
 export function FreeTools({
@@ -66,21 +68,31 @@ export function FreeTools({
   headingPrimary = "Start Planning",
   headingSecondary = "Before You Commit",
   description = "Not ready to meet designers yet? Use our free tools to understand your budget and visualize your space first - at your own pace.",
-  background = C.cream,
+  background,
+  dark = false,
 }: FreeToolsProps = {}) {
+  // Dark-theme palette mirrors the lead-page TOOLS section (--ink + --gold +
+  // white/alpha text). When dark=false we keep the original cream / serif /
+  // gray look used on /get-matched.
+  const sectionBg = background ?? (dark ? "#1A1614" : C.cream);
+  const eyebrowColor = dark ? "#A87C4F" /* --gold */ : C.grayLight;
+  const headingPrimaryColor = dark ? "#FFFFFF" : C.black;
+  const headingSecondaryColor = dark ? "rgba(255, 255, 255, 0.55)" : C.gray;
+  const descriptionColor = dark ? "rgba(255, 255, 255, 0.7)" : C.gray;
+
   return (
-    <section className="px-6 md:px-10 py-[72px] md:py-[100px]" style={{ background }}>
+    <section className="px-6 md:px-10 py-[72px] md:py-[100px]" style={{ background: sectionBg }}>
       <div className="max-w-[1280px] mx-auto">
         <FadeIn className="text-center mb-6">
-          <TagLabel>{eyebrow}</TagLabel>
+          <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: eyebrowColor, fontFamily: sans }}>{eyebrow}</p>
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-4">
-          <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            {headingPrimary}{headingSecondary ? <> <span style={{ color: C.gray }}>{headingSecondary}</span></> : null}
+          <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: headingPrimaryColor, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
+            {headingPrimary}{headingSecondary ? <> <span style={{ color: headingSecondaryColor }}>{headingSecondary}</span></> : null}
           </h2>
         </FadeIn>
         <FadeIn delay={0.08} className="text-center mb-14">
-          <p className="text-[15px] font-normal leading-[1.75] max-w-[560px] mx-auto" style={{ color: C.gray, fontFamily: sans }}>
+          <p className="text-[15px] font-normal leading-[1.75] max-w-[560px] mx-auto" style={{ color: descriptionColor, fontFamily: sans }}>
             {description}
           </p>
         </FadeIn>
