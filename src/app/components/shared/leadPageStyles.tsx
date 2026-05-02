@@ -175,13 +175,14 @@ export const LEAD_PAGE_CSS = `
 @media (min-width: 768px) { .lead-page .why-grid { grid-template-columns: repeat(3, 1fr); } }
 .lead-page .why-card { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 32px; position: relative; transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease; }
 .lead-page .why-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-/* Featured card matches the other two at rest, only flips to the orange
-   accent treatment on hover (icon, tag pill, headline + body, border, bg). */
-.lead-page .why-card.featured:hover { background: var(--accent); border-color: var(--accent); }
-.lead-page .why-card.featured:hover h3,
-.lead-page .why-card.featured:hover p,
-.lead-page .why-card.featured:hover .why-card-tag { color: white; }
-.lead-page .why-card.featured:hover .why-card-tag { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.2); }
+/* All three cards flip to the orange accent treatment on hover (icon, tag
+   pill, headline + body, border, bg). At rest every card sits in the cream/
+   soft-accent style. */
+.lead-page .why-card:hover { background: var(--accent); border-color: var(--accent); }
+.lead-page .why-card:hover h3,
+.lead-page .why-card:hover p,
+.lead-page .why-card:hover .why-card-tag { color: white; }
+.lead-page .why-card:hover .why-card-tag { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.2); }
 .lead-page .why-card-tag {
   display: inline-block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(var(--accent-rgb), 0.18);
@@ -196,7 +197,7 @@ export const LEAD_PAGE_CSS = `
   font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; color: var(--accent);
   transition: color 0.2s ease, background-color 0.2s ease;
 }
-.lead-page .why-card.featured:hover .why-card-icon { background: rgba(255, 255, 255, 0.15); color: white; }
+.lead-page .why-card:hover .why-card-icon { background: rgba(255, 255, 255, 0.15); color: white; }
 
 /* HOW */
 .lead-page .how { padding: 80px 0; }
