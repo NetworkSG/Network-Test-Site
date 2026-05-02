@@ -16,10 +16,34 @@ const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`
  * NOTE: this page intentionally does NOT use the shared HomepageNav / Footer
  * — the brief is a one-off variant for the escrow trust angle.
  */
+// Floor to the nearest 10 with a "+" suffix — keeps the marketing tone
+// ("120+ vetted firms") so the number stays a confidence signal even as the
+// pipeline grows. Falls back to "120+" while the count loads.
+function formatFirmCount(n: number | null): string {
+  if (!n || n < 10) return "120+";
+  return `${Math.floor(n / 10) * 10}+`;
+}
+
 export function Escrow() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [firmCount, setFirmCount] = useState<number | null>(null);
+
+  // Pull the live firm count from the Airtable pipeline once on mount so the
+  // hero stat reflects reality instead of a hardcoded "120+".
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/firm-onboarding/airtable-firms-count`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    })
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && typeof j?.count === "number" && j.count > 0) setFirmCount(j.count); })
+      .catch(() => { /* keep fallback */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const firmCountLabel = formatFirmCount(firmCount);
 
   // Smooth-scroll for in-page anchors that aren't covered by the global router.
   useEffect(() => {
@@ -90,7 +114,7 @@ export function Escrow() {
                 <h1>Your renovation deposit, <em>protected by DBS Bank.</em></h1>
                 <p className="hero-lede">
                   Match with Singapore's most trusted interior designers — within 24 hours.
-                  Free for homeowners. Bank-grade deposit protection. 120+ vetted firms.
+                  Free for homeowners. Bank-grade deposit protection. {firmCountLabel} vetted firms.
                 </p>
                 <div className="hero-stats">
                   <div>
@@ -98,7 +122,7 @@ export function Escrow() {
                     <div className="hero-stat-label">Matched 2026</div>
                   </div>
                   <div>
-                    <div className="hero-stat-num">120+</div>
+                    <div className="hero-stat-num">{firmCountLabel}</div>
                     <div className="hero-stat-label">Verified firms</div>
                   </div>
                   <div>
@@ -345,7 +369,7 @@ export function Escrow() {
                 <div className="why-card-icon">24h</div>
                 <span className="why-card-tag">Concierge</span>
                 <h3>Matched by a person, not a bot</h3>
-                <p>Our concierge reads your brief and handpicks 3 firms from 120+ verified designers. WhatsApp intro within 24 hours.</p>
+                <p>Our concierge reads your brief and handpicks 3 firms from {firmCountLabel} verified designers. WhatsApp intro within 24 hours.</p>
               </div>
             </div>
           </div>

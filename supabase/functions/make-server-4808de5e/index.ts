@@ -2336,6 +2336,28 @@ async function fetchAirtableIdProfiles(fields: string[] = ["Client"]): Promise<a
   return records;
 }
 
+// Lightweight count of firms in our Airtable pipeline — used by the Escrow
+// landing hero ("120+ vetted firms") and similar marketing surfaces so the
+// number stays in sync with reality. Piggybacks on the same in-memory cache
+// as /airtable-firms; on a cold call it fetches the minimum field set.
+app.get("/make-server-4808de5e/firm-onboarding/airtable-firms-count", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ count: 0, error: "Unauthorized" }, 401);
+    const now = Date.now();
+    if (now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
+      return c.json({ count: AIRTABLE_FIRMS_CACHE.data.length, cached: true });
+    }
+    // Cold path: only fetch the Client field so we can count populated firms
+    // cheaply without pulling the heavier sales-rep + linked-record graph.
+    const records = await fetchAirtableIdProfiles(["Client"]);
+    const count = records.filter((r) => String(r.fields?.Client || "").trim()).length;
+    return c.json({ count, cached: false });
+  } catch (err) {
+    console.log("airtable-firms-count error:", err);
+    return c.json({ count: 0, error: "Failed to load firm count" }, 500);
+  }
+});
+
 app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
