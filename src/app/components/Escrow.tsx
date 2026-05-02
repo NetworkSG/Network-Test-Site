@@ -360,10 +360,10 @@ export function Escrow() {
               </div>
 
               <div className="why-card">
-                <div className="why-card-icon">AI</div>
+                <div className="why-card-icon">Σ</div>
                 <span className="why-card-tag">Free Tool</span>
-                <h3>See your space transformed</h3>
-                <p>Upload a photo of your room. Our AI shows it in 6 different styles in 5 minutes. Test before you commit to any designer.</p>
+                <h3>Know your renovation budget</h3>
+                <p>Get an itemised cost breakdown by room, scope, and finish quality in under 2 minutes. Honest numbers, no signup wall — so you walk into every quote already knowing what's fair.</p>
               </div>
 
               <div className="why-card">
