@@ -125,6 +125,45 @@ async function deleteOldFiles(oldUrls) {
   return paths.length;
 }
 
+function normalizeQanvast(u) {
+  if (typeof u !== "string") return "";
+  return u.replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase();
+}
+
+// After re-mirroring designer_projects.images, sync the new URLs into
+// the legacy designer_sections.projects[] row that the live page reads.
+// Match by source URL (designer_sections uses `driveUrl` field) or by title.
+async function syncToDesignerSections(slug, sourceUrl, title, newImages) {
+  const { data: sec } = await sb.from("designer_sections")
+    .select("data").eq("slug", slug).eq("section", "projects").maybeSingle();
+  const list = Array.isArray(sec?.data) ? sec.data : [];
+  if (list.length === 0) return { matched: false };
+
+  const srcKey = normalizeQanvast(sourceUrl);
+  const titleKey = (title || "").toLowerCase().trim();
+  let idx = list.findIndex((p) => srcKey && (
+    normalizeQanvast(p?.driveUrl) === srcKey ||
+    normalizeQanvast(p?.sourceUrl) === srcKey ||
+    normalizeQanvast(p?.source_url) === srcKey
+  ));
+  if (idx === -1 && titleKey) {
+    idx = list.findIndex((p) => (p?.name || p?.title || "").toLowerCase().trim() === titleKey);
+  }
+  if (idx === -1) return { matched: false };
+
+  const updated = [...list];
+  updated[idx] = {
+    ...list[idx],
+    image: newImages[0],
+    gallery: newImages.slice(1).map((src) => ({ src, caption: "" })),
+  };
+  const { error } = await sb.from("designer_sections")
+    .update({ data: updated })
+    .eq("slug", slug).eq("section", "projects");
+  if (error) throw new Error(`designer_sections update: ${error.message}`);
+  return { matched: true };
+}
+
 // ── per-source backfills ────────────────────────────────────────────────
 async function backfillQanvastRow(row) {
   const scrape = await callFn("/qanvast-scrape", { url: row.source_url });
@@ -164,7 +203,7 @@ if (SLUG) q = q.eq("designer_slug", SLUG);
 const { data: rows, error } = await q;
 if (error) { console.error("query error:", error.message); process.exit(1); }
 
-const stats = { total: rows?.length || 0, qanvast: 0, drive: 0, skipped: 0, ok: 0, failed: 0, deletedFiles: 0 };
+const stats = { total: rows?.length || 0, qanvast: 0, drive: 0, skipped: 0, ok: 0, failed: 0, deletedFiles: 0, synced: 0 };
 let processed = 0;
 
 for (const row of rows || []) {
@@ -195,7 +234,17 @@ for (const row of rows || []) {
 
     const oldOurUrls = row.images.filter(isOurStorageUrl);
     const { error: updErr } = await sb.from("designer_projects").update({ images: newImages }).eq("id", row.id);
-    if (updErr) throw new Error(`update row: ${updErr.message}`);
+    if (updErr) throw new Error(`update designer_projects: ${updErr.message}`);
+
+    // Mirror into the legacy designer_sections shape so the live page sees the new URLs.
+    const sourceUrl = row.source_url || row.drive_url;
+    const sync = await syncToDesignerSections(row.designer_slug, sourceUrl, row.title, newImages);
+    if (sync.matched) {
+      console.log(`  synced to designer_sections.projects`);
+      stats.synced++;
+    } else {
+      console.log(`  (no matching designer_sections.projects entry — skipped legacy sync)`);
+    }
 
     if (!KEEP_OLD) {
       const removed = await deleteOldFiles(oldOurUrls);
@@ -217,6 +266,7 @@ console.log(`Processed: ${processed}  (qanvast=${stats.qanvast}, drive=${stats.d
 console.log(`Skipped (no images / unknown source / filter): ${stats.skipped}`);
 if (APPLY) {
   console.log(`OK: ${stats.ok}, FAILED: ${stats.failed}`);
+  console.log(`Synced into designer_sections.projects: ${stats.synced}`);
   if (!KEEP_OLD) console.log(`Old files deleted from storage: ${stats.deletedFiles}`);
 } else {
   console.log("(dry-run — no writes performed; pass --apply to commit)");
