@@ -2551,13 +2551,19 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
     const pageTitle = titleMatch ? titleMatch[1].trim() : "";
 
     // ── Images ──
+    // Upgrade Qanvast Cloudfront URLs (which are served at 720-width / standard /
+    // etc. on the rendered HTML) to the 2048-width variant for higher-res photos.
+    const upgradeQanvastImg = (src: string) =>
+      /d1hy6t2xeg0mdl\.cloudfront\.net\/image\/[^/]+\/[^/]+\/[\w-]+$/.test(src)
+        ? src.replace(/\/[\w-]+$/, "/2048-width")
+        : src;
     const imgSet = new Set<string>();
     const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
     while ((m = imgRe.exec(html))) {
       const src = m[1];
-      if (/cdn\.qanvast|qanvast\.com|cloudfront|images\.qanvast/i.test(src)) imgSet.add(src);
+      if (/cdn\.qanvast|qanvast\.com|cloudfront|images\.qanvast/i.test(src)) imgSet.add(upgradeQanvastImg(src));
     }
-    if (ogTags.image) imgSet.add(ogTags.image);
+    if (ogTags.image) imgSet.add(upgradeQanvastImg(ogTags.image));
 
     // ── Classify kind from URL path (broadened) ──
     const pathname = parsed.pathname.toLowerCase();
@@ -2770,16 +2776,21 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       }
       return !!item.isFloorPlan || !!item.is_floor_plan;
     };
+    // Photo records can be top-level rscDict objects ({baseUrl, ...}) or nested
+    // inside arrays (e.g. project.images = [{baseUrl}, {baseUrl}]). Walk both shapes.
+    const seenBaseUrls = new Set<string>();
+    const collectPhoto = (item: any) => {
+      if (!item || typeof item !== "object" || typeof item.baseUrl !== "string") return;
+      if (!/d1hy6t2xeg0mdl\.cloudfront\.net/.test(item.baseUrl)) return;
+      if (seenBaseUrls.has(item.baseUrl)) return;
+      seenBaseUrls.add(item.baseUrl);
+      const url = item.baseUrl + "/2048-width";
+      if (isFloorPlanItem(item)) floorPlanCandidates.push(url);
+      else photoBaseUrls.push(url);
+    };
     for (const v of Object.values(rscDict)) {
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          if (item && typeof item === "object" && typeof item.baseUrl === "string" && /d1hy6t2xeg0mdl\.cloudfront\.net/.test(item.baseUrl)) {
-            const url = item.baseUrl + "/standard";
-            if (isFloorPlanItem(item)) floorPlanCandidates.push(url);
-            else photoBaseUrls.push(url);
-          }
-        }
-      }
+      if (Array.isArray(v)) v.forEach(collectPhoto);
+      else collectPhoto(v);
     }
     // Direct fields on the project record that may carry a floor plan URL.
     if (projectRecord) {

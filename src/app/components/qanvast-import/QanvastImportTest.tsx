@@ -608,9 +608,9 @@ export function QanvastImportTest() {
                         setSaving(true);
                         setSaveError("");
                         try {
-                          // Prefer the Qanvast 720-width variants; fall back to full list.
-                          const imgs720 = (p.images || []).filter((src) => /\/720-width(?:$|\?)/.test(src));
-                          const baseImages = imgs720.length ? imgs720 : (p.images || []).slice(0, 30);
+                          // Prefer the Qanvast width-variant URLs (e.g. /2048-width); fall back to full list.
+                          const imgsWidth = (p.images || []).filter((src) => /\/\d+-width(?:$|\?)/.test(src));
+                          const baseImages = imgsWidth.length ? imgsWidth : (p.images || []).slice(0, 30);
                           // Auto-detect floor plan client-side and route it out
                           // of the gallery, so the saved record splits photos
                           // and floor plan correctly. Falls back to the
@@ -686,23 +686,23 @@ export function QanvastImportTest() {
 }
 
 function PhotosWithFloorPlan({ images, explicitFloorPlan, labelStyle }: { images: string[]; explicitFloorPlan?: string; labelStyle: React.CSSProperties }) {
-  const imgs720 = useMemo(() => (images || []).filter((src) => /\/720-width(?:$|\?)/.test(src)), [images]);
+  const widthImgs = useMemo(() => (images || []).filter((src) => /\/\d+-width(?:$|\?)/.test(src)), [images]);
   const candidates = useMemo(() => {
     const out: string[] = [];
     if (explicitFloorPlan) out.push(explicitFloorPlan);
-    for (const u of imgs720) out.push(u);
+    for (const u of widthImgs) out.push(u);
     return out;
-  }, [imgs720, explicitFloorPlan]);
+  }, [widthImgs, explicitFloorPlan]);
   const fpSet = useFloorPlanSet(candidates);
   const detectedFloorPlans = useMemo(() => {
     const set = new Set<string>();
     if (explicitFloorPlan) set.add(explicitFloorPlan);
-    for (const u of imgs720) if (fpSet.has(u)) set.add(u);
+    for (const u of widthImgs) if (fpSet.has(u)) set.add(u);
     return Array.from(set);
-  }, [imgs720, fpSet, explicitFloorPlan]);
-  const photoOnly = useMemo(() => imgs720.filter((u) => !detectedFloorPlans.includes(u)), [imgs720, detectedFloorPlans]);
+  }, [widthImgs, fpSet, explicitFloorPlan]);
+  const photoOnly = useMemo(() => widthImgs.filter((u) => !detectedFloorPlans.includes(u)), [widthImgs, detectedFloorPlans]);
 
-  if (imgs720.length === 0 && detectedFloorPlans.length === 0) return null;
+  if (widthImgs.length === 0 && detectedFloorPlans.length === 0) return null;
 
   return (
     <>
