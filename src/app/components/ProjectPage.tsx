@@ -53,16 +53,20 @@ function Lightbox({ images, currentIndex, onClose, onPrev, onNext }: {
     return () => { document.removeEventListener("keydown", handleKeyDown); document.body.style.overflow = ""; };
   }, [handleKeyDown]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,15,13,0.92)" }} onClick={onClose}>
-      <button className="absolute top-5 right-5 z-10 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2" onClick={onClose}><X size={22} /></button>
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-[12px] tracking-[0.12em] uppercase font-medium" style={{ fontFamily: sans }}>{currentIndex + 1} / {images.length}</div>
-      {images.length > 1 && <button className="absolute left-4 top-1/2 -translate-y-1/2 z-10 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-3" onClick={(e) => { e.stopPropagation(); onPrev(); }}><ChevronLeft size={24} /></button>}
-      <div className="relative max-w-5xl max-h-[80vh] mx-16" onClick={(e) => e.stopPropagation()}>
-        <img src={images[currentIndex]} alt="" className="max-w-full max-h-[80vh] object-contain" style={{ borderRadius: "12px" }} />
+  // Render via portal into document.body so position:fixed resolves against
+  // the viewport, not the transformed <main> ancestor (which would otherwise
+  // push the lightbox into an off-screen position).
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ background: "rgba(15,15,13,0.95)" }} onClick={onClose}>
+      <button className="absolute top-5 right-5 z-[110] text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2" onClick={onClose}><X size={22} /></button>
+      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[110] text-white/70 text-[12px] tracking-[0.12em] uppercase font-medium" style={{ fontFamily: sans }}>{currentIndex + 1} / {images.length}</div>
+      {images.length > 1 && <button className="absolute left-4 top-1/2 -translate-y-1/2 z-[110] text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-3" onClick={(e) => { e.stopPropagation(); onPrev(); }}><ChevronLeft size={24} /></button>}
+      <div className="relative max-w-[92vw] max-h-[88vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        <img src={images[currentIndex]} alt="" className="max-w-[92vw] max-h-[88vh] object-contain" style={{ borderRadius: "12px" }} />
       </div>
-      {images.length > 1 && <button className="absolute right-4 top-1/2 -translate-y-1/2 z-10 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-3" onClick={(e) => { e.stopPropagation(); onNext(); }}><ChevronRight size={24} /></button>}
-    </div>
+      {images.length > 1 && <button className="absolute right-4 top-1/2 -translate-y-1/2 z-[110] text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-3" onClick={(e) => { e.stopPropagation(); onNext(); }}><ChevronRight size={24} /></button>}
+    </div>,
+    document.body,
   );
 }
 
