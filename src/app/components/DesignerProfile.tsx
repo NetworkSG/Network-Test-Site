@@ -86,13 +86,22 @@ export function resolveImg(ref: string): string {
   return IMAGE_MAP[ref] || resolveAsset(ref) || ref;
 }
 
-/* Build a CDN-resized + WebP URL for thumbnail-sized renders.
- * Pipes the source through images.weserv.nl (free public proxy) so we don't
- * pay the bandwidth of a 2048px JPEG when the slot is only ~360px wide.
+/* Build a CDN-resized URL for thumbnail-sized renders.
+ *
+ * For URLs on our own Supabase storage, use the native /render/image/ endpoint
+ * (auto-serves WebP via the browser's Accept header). For everything else,
+ * fall back to the free images.weserv.nl public proxy.
+ *
  * Falls through unchanged for non-http URLs (data:, blob:, local assets). */
 export function thumbnailUrl(src: string, width: number, quality = 75): string {
   if (!src || typeof src !== "string") return src;
   if (!/^https?:\/\//i.test(src)) return src;
+  // Prefer Supabase Storage Image Transformations when available — same
+  // origin as the source, no third-party dependency, WebP via Accept header.
+  const supaMatch = src.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/(.+)$/);
+  if (supaMatch) {
+    return `${supaMatch[1]}/storage/v1/render/image/public/${supaMatch[2]}?width=${width}&quality=${quality}`;
+  }
   const stripped = src.replace(/^https?:\/\//i, "");
   return `https://images.weserv.nl/?url=${encodeURIComponent(stripped)}&w=${width}&q=${quality}&output=webp`;
 }
