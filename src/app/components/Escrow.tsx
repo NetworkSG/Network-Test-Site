@@ -404,14 +404,14 @@ export function Escrow() {
         </section>
 
         {/* ── TOOLS — same dark-card visual as /get-matched, but
-              keeps the original /escrow header copy + lead-page bg. */}
+              keeps the original /escrow header copy. Background falls
+              back to FreeTools' default C.cream (#f0ede6). */}
         <div id="tools">
           <FreeTools
             eyebrow="Free for everyone"
             headingPrimary="Plan smart."
             headingSecondary="Match smarter."
             description="Our renovation tools are free, no signup wall. Use them before you decide to engage anyone."
-            background="var(--bg)"
           />
         </div>
 
