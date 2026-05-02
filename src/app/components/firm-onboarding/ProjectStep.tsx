@@ -79,7 +79,6 @@ export function validateProject(p: ProjectSubmission): Record<string, string> {
   const e: Record<string, string> = {};
   if (!p.title.trim()) e.title = "Project title is required";
   if (!p.location.trim()) e.location = "Location is required";
-  if (!parseSizeDigits(p.size)) e.size = "Area size is required";
   if (p.year.trim() && p.year.length !== 4) e.year = "Enter a 4-digit year";
   if (!p.style.trim()) e.style = "Interior style is required";
   if (!isValidDriveUrl(p.driveUrl))
@@ -195,9 +194,7 @@ export function ProjectStep({
           {errors.cost && <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{errors.cost}</p>}
         </div>
         <div>
-          <label style={labelStyle}>
-            Area Size <span style={{ color: "#c14" }}>*</span>
-          </label>
+          <label style={labelStyle}>Area Size</label>
           <div className="flex gap-0">
             <input
               type="text"
