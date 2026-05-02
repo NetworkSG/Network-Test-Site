@@ -133,7 +133,7 @@ function normalizeQanvast(u) {
 // After re-mirroring designer_projects.images, sync the new URLs into
 // the legacy designer_sections.projects[] row that the live page reads.
 // Match by source URL (designer_sections uses `driveUrl` field) or by title.
-async function syncToDesignerSections(slug, sourceUrl, title, newImages) {
+async function syncToDesignerSections(slug, sourceUrl, title, newImages, newFloorPlan) {
   const { data: sec } = await sb.from("designer_sections")
     .select("data").eq("slug", slug).eq("section", "projects").maybeSingle();
   const list = Array.isArray(sec?.data) ? sec.data : [];
@@ -151,11 +151,14 @@ async function syncToDesignerSections(slug, sourceUrl, title, newImages) {
   }
   if (idx === -1) return { matched: false };
 
+  const oldFloorPlan = list[idx]?.floorPlan;
   const updated = [...list];
   updated[idx] = {
     ...list[idx],
     image: newImages[0],
     gallery: newImages.slice(1).map((src) => ({ src, caption: "" })),
+    // Replace floor plan only if we have a new one; else keep whatever is there.
+    ...(newFloorPlan ? { floorPlan: newFloorPlan } : {}),
   };
   const { error } = await sb.from("designer_sections")
     .update({ data: updated })
@@ -174,7 +177,14 @@ async function backfillQanvastRow(row) {
     const m = await downloadAndUpload(u);
     mirrored.push(m);
   }
-  return mirrored;
+  // Floor plan is a separate field; mirror only if Qanvast surfaced one.
+  let mirroredFloorPlan = "";
+  const fpSrc = scrape.imported?.[0]?.floorPlan;
+  if (typeof fpSrc === "string" && fpSrc) {
+    try { mirroredFloorPlan = await downloadAndUpload(fpSrc); }
+    catch (err) { console.log(`  floor-plan mirror failed (will leave existing): ${err.message}`); }
+  }
+  return { images: mirrored, floorPlan: mirroredFloorPlan };
 }
 
 async function backfillDriveRow(row) {
@@ -188,7 +198,7 @@ async function backfillDriveRow(row) {
     if (r.url) mirrored.push(r.url);
   }
   if (mirrored.length === 0) throw new Error("no drive images ingested");
-  return mirrored;
+  return { images: mirrored, floorPlan: "" };
 }
 
 // ── main ─────────────────────────────────────────────────────────────────
@@ -229,8 +239,10 @@ for (const row of rows || []) {
   }
 
   try {
-    const newImages = qanvast ? await backfillQanvastRow(row) : await backfillDriveRow(row);
-    console.log(`  re-mirrored ${newImages.length} images`);
+    const result = qanvast ? await backfillQanvastRow(row) : await backfillDriveRow(row);
+    const newImages = result.images;
+    const newFloorPlan = result.floorPlan;
+    console.log(`  re-mirrored ${newImages.length} images${newFloorPlan ? " + 1 floor plan" : ""}`);
 
     const oldOurUrls = row.images.filter(isOurStorageUrl);
     const { error: updErr } = await sb.from("designer_projects").update({ images: newImages }).eq("id", row.id);
@@ -238,9 +250,9 @@ for (const row of rows || []) {
 
     // Mirror into the legacy designer_sections shape so the live page sees the new URLs.
     const sourceUrl = row.source_url || row.drive_url;
-    const sync = await syncToDesignerSections(row.designer_slug, sourceUrl, row.title, newImages);
+    const sync = await syncToDesignerSections(row.designer_slug, sourceUrl, row.title, newImages, newFloorPlan);
     if (sync.matched) {
-      console.log(`  synced to designer_sections.projects`);
+      console.log(`  synced to designer_sections.projects${newFloorPlan ? " (+ floorPlan)" : ""}`);
       stats.synced++;
     } else {
       console.log(`  (no matching designer_sections.projects entry — skipped legacy sync)`);
