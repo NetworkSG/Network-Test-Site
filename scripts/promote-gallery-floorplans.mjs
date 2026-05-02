@@ -80,11 +80,17 @@ console.log("");
 
 const stats = { scanned: 0, alreadyHasFp: 0, promoted: 0, noCandidate: 0, written: 0 };
 
+const totalDesigners = secs?.length || 0;
+let designerIdx = 0;
 for (const sec of secs || []) {
+  designerIdx++;
   const slug = sec.slug;
   const list = Array.isArray(sec.data) ? sec.data : [];
   let mutated = false;
+  let designerPromoted = 0;
   const newList = [];
+  const designerStart = Date.now();
+  process.stdout.write(`[${designerIdx}/${totalDesigners}] ${slug} (${list.length} projects) ... `);
 
   for (const p of list) {
     stats.scanned++;
@@ -110,11 +116,17 @@ for (const sec of secs || []) {
 
     const fpUrl = gallery[foundIdx].src;
     const newGallery = gallery.filter((_, i) => i !== foundIdx);
-    console.log(`  ✓ [${slug}] ${p.name||p.title}: promote gallery[${foundIdx}]/${gallery.length} → floorPlan`);
+    if (designerPromoted === 0) process.stdout.write("\n");
+    console.log(`    ✓ ${(p.name||p.title||"").slice(0,55)}: gallery[${foundIdx}]/${gallery.length} → floorPlan`);
     newList.push({ ...p, floorPlan: fpUrl, gallery: newGallery });
     stats.promoted++;
+    designerPromoted++;
     mutated = true;
   }
+
+  const elapsed = Math.round((Date.now() - designerStart) / 1000);
+  if (designerPromoted === 0) process.stdout.write(`done in ${elapsed}s, no promotions\n`);
+  else process.stdout.write(`  [done in ${elapsed}s, promoted ${designerPromoted}]\n`);
 
   if (mutated && APPLY) {
     const { error: updErr } = await sb.from("designer_sections").update({ data: newList }).eq("slug", slug).eq("section", "projects");
