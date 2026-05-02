@@ -8,7 +8,6 @@ import { useHomeownerCount } from "../homepage/v8/useHomeownerCount";
 import { useGoogleReviews } from "../useGoogleReviews";
 import { GoogleReviewsLive } from "./GoogleReviewsLive";
 import { SocialProof3 } from "../homepage/v8/sections/SocialProof3";
-import { FreeTools } from "../homepage/v8/sections/FreeTools";
 import { FUNNEL_HERO, FUNNEL_VALUE_PROPS } from "./content";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
@@ -377,8 +376,37 @@ export function FunnelLeadPage() {
           </div>
         </section>
 
-        {/* ── FREE TOOLS (existing component) ── */}
-        <FreeTools />
+        {/* ── TOOLS — same lead-page treatment as /escrow ─────── */}
+        <section className="tools" id="tools">
+          <div className="container">
+            <div className="tools-header">
+              <span className="section-eyebrow">Free for everyone</span>
+              <h2>Plan smart. Match smarter.</h2>
+              <p>Our renovation tools are free, no signup wall. Use them before you decide to engage anyone.</p>
+            </div>
+
+            <div className="tools-grid">
+              <div className="tool-card">
+                <span className="tool-card-tag">AI Render</span>
+                <h3>Room Designer</h3>
+                <p>Upload your room. See it transformed in 6 styles in 5 minutes. No commitment.</p>
+                <a href="/render-tool" className="tool-card-cta">Try Room Designer →</a>
+              </div>
+              <div className="tool-card">
+                <span className="tool-card-tag">Calculator</span>
+                <h3>Cost Guide</h3>
+                <p>Itemised renovation cost breakdown by room, scope, and finish quality. Honest numbers.</p>
+                <a href="/cost-guide" className="tool-card-cta">Calculate budget →</a>
+              </div>
+              <div className="tool-card">
+                <span className="tool-card-tag">3D Planner</span>
+                <h3>Layout Planner</h3>
+                <p>Convert any floor plan to 3D. Drag furniture, test layouts. Plan visually.</p>
+                <a href="/floorplan3d" className="tool-card-cta">Plan layout →</a>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ── FINAL CTA ──────────────────────────────────────── */}
         <section className="final-cta">
