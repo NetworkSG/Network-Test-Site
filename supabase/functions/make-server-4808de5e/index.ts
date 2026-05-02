@@ -9669,16 +9669,23 @@ app.get("/make-server-4808de5e/admin/lead-magnet-metrics", async (c) => {
     // ── 6. Quote Requests ─────────────────────────────────────────────
     // The Quote Request table holds both cost-guide-routed leads and
     // direct quote requests. Count everything here as a single funnel —
-    // it's the canonical lead bucket and matches what Sales sees.
+    // it's the canonical lead bucket and matches what Sales sees. Reads
+    // both the Postgres-managed `created_at` and the Airtable-style
+    // `"Created Date"` payload column so we work regardless of which one
+    // the row was populated with.
     const { data: quoteRows, error: quoteErr } = await supabase
       .from("Quote Request")
-      .select("Created Date")
-      .gte("Created Date", new Date(now - ms30d).toISOString());
+      .select('created_at, "Created Date"')
+      .gte("created_at", new Date(now - ms30d).toISOString());
     const { count: quoteTotal } = await supabase
       .from("Quote Request")
       .select("*", { count: "exact", head: true });
     const quoteTimestamps = (quoteRows || [])
-      .map((r: any) => new Date(r["Created Date"]).getTime())
+      .map((r: any) => {
+        const raw = r?.created_at || r?.["Created Date"];
+        if (!raw) return NaN;
+        return new Date(raw).getTime();
+      })
       .filter((t: number) => Number.isFinite(t));
     const quoteRequests = {
       key: "quote-requests",
