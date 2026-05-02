@@ -5781,20 +5781,93 @@ app.get("/make-server-4808de5e/designers", async (c) => {
       return { filled, total, missing };
     }
 
+    // Coerce a raw cost string ("S$48,000", "48000", "$30K") into a number in
+    // thousands of SGD so we can compute a min/max range across projects.
+    const costToK = (raw: any): number | null => {
+      if (typeof raw === "number") return raw >= 1000 ? raw / 1000 : raw;
+      if (typeof raw !== "string") return null;
+      const m = raw.match(/([\d,.]+)\s*(k)?/i);
+      if (!m) return null;
+      const n = parseFloat(m[1].replace(/,/g, ""));
+      if (!Number.isFinite(n)) return null;
+      return /k$/i.test(m[2] || "") ? n : (n >= 1000 ? n / 1000 : n);
+    };
+
     const allDesigners = (designersRes.data || []).map((d: any) => {
       const designer = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
       const sections = sectionsBySlug[d.slug] || {};
+      const projects: any[] = Array.isArray(sections.projects) ? sections.projects
+        : Array.isArray(designer.projects) ? designer.projects : [];
 
       // Thumbnail fallback: if there's no images.cover, derive one from the
       // first project so the directory card isn't blank.
       if (!designer.images?.cover) {
-        const projects = Array.isArray(sections.projects) ? sections.projects
-          : Array.isArray(designer.projects) ? designer.projects : [];
         for (const p of projects) {
           const thumb = pickProjectThumb(p);
           if (thumb) {
             designer.images = { ...(designer.images || {}), cover: thumb };
             break;
+          }
+        }
+      }
+
+      // ── Aggregate filterable + sortable signals from real project data ──
+      // Without this, designers who never manually filled in their
+      // "Project types" / "Style specialisation" businessInfo rows would
+      // never match the directory's Property/Style filters.
+      if (projects.length > 0) {
+        // (1) totalProjects → drives the "Most Projects" sort and the card pill.
+        designer.totalProjects = projects.length;
+
+        // (2) Property types — collect distinct, normalize to filter labels.
+        const ptypes = new Set<string>();
+        for (const p of projects) {
+          const t = String(p?.propertyType || "").toLowerCase();
+          if (!t) continue;
+          if (/hdb/.test(t)) ptypes.add("HDB");
+          else if (/executive\s*condo|\bec\b/.test(t)) ptypes.add("EC");
+          else if (/condo/.test(t)) ptypes.add("Condo");
+          else if (/landed|terrace|bungalow|semi/.test(t)) ptypes.add("Landed");
+          else if (/commercial|office|retail|f&b|restaurant|cafe/.test(t)) ptypes.add("Commercial");
+        }
+        if (ptypes.size > 0) {
+          // Inject into businessInfo so frontend's existing parser picks it up.
+          // Replace any existing "Project types" entry with the union of
+          // declared + aggregated, so both data sources contribute.
+          const bInfo = Array.isArray(designer.businessInfo) ? [...designer.businessInfo] : [];
+          const existingIdx = bInfo.findIndex((b: any) => b?.label === "Project types");
+          const existing = existingIdx >= 0 ? String(bInfo[existingIdx].value || "") : "";
+          for (const t of existing.split(/\s*·\s*/).map((s: string) => s.trim()).filter(Boolean)) ptypes.add(t);
+          const merged = Array.from(ptypes).join(" · ");
+          if (existingIdx >= 0) bInfo[existingIdx] = { ...bInfo[existingIdx], value: merged };
+          else bInfo.push({ label: "Project types", value: merged });
+          designer.businessInfo = bInfo;
+        }
+
+        // (3) Styles — collect distinct project styles and merge into designStyles.
+        const styles = new Set<string>(Array.isArray(designer.designStyles) ? designer.designStyles : []);
+        for (const p of projects) {
+          const s = String(p?.style || "").trim();
+          if (!s) continue;
+          // Project style fields can be comma-joined ("Vintage, Colourful").
+          for (const piece of s.split(/\s*,\s*/).map((x: string) => x.trim()).filter(Boolean)) styles.add(piece);
+        }
+        if (styles.size > 0) designer.designStyles = Array.from(styles);
+
+        // (4) Budget range — only fill in if not already declared.
+        const declaredBudget = Array.isArray(designer.businessInfo)
+          ? designer.businessInfo.find((b: any) => /budget/i.test(b?.label || ""))?.value
+          : "";
+        if (!declaredBudget) {
+          const ks = projects.map((p: any) => costToK(p?.cost)).filter((n): n is number => n != null && n > 0);
+          if (ks.length >= 2) {
+            const min = Math.min(...ks);
+            const max = Math.max(...ks);
+            const fmt = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}M` : `$${Math.round(n)}K`;
+            const range = min === max ? `From ${fmt(min)}` : `${fmt(min)} – ${fmt(max)}`;
+            const bInfo = Array.isArray(designer.businessInfo) ? [...designer.businessInfo] : [];
+            bInfo.push({ label: "Budget range", value: range });
+            designer.businessInfo = bInfo;
           }
         }
       }
