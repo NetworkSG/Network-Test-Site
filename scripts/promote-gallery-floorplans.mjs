@@ -80,53 +80,89 @@ console.log("");
 
 const stats = { scanned: 0, alreadyHasFp: 0, promoted: 0, noCandidate: 0, written: 0 };
 
+// Process one project: returns the (possibly modified) project + meta about
+// what happened. Pure function — does not write to the DB.
+async function processProject(p) {
+  const gallery = Array.isArray(p?.gallery) ? p.gallery : [];
+
+  if (!OVERWRITE && typeof p?.floorPlan === "string" && p.floorPlan) {
+    if (await head(p.floorPlan)) return { p, status: "alreadyHasFp" };
+  }
+
+  if (gallery.length === 0) return { p, status: "noGallery" };
+
+  // Check images in parallel for speed; pick the LAST true index (closest to
+  // gallery tail, where Qanvast tends to put floor plans).
+  const verdicts = await Promise.all(
+    gallery.map(async (g) => (typeof g?.src === "string" ? await isFloorPlan(g.src) : false)),
+  );
+  let foundIdx = -1;
+  for (let i = verdicts.length - 1; i >= 0; i--) {
+    if (verdicts[i]) { foundIdx = i; break; }
+  }
+
+  if (foundIdx === -1) return { p, status: "noCandidate" };
+
+  const newP = {
+    ...p,
+    floorPlan: gallery[foundIdx].src,
+    gallery: gallery.filter((_, i) => i !== foundIdx),
+  };
+  return { p: newP, status: "promoted", foundIdx, total: gallery.length };
+}
+
+// Bounded-concurrency mapper.
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= items.length) break;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+const PROJECT_CONCURRENCY = 8;
 const totalDesigners = secs?.length || 0;
 let designerIdx = 0;
 for (const sec of secs || []) {
   designerIdx++;
   const slug = sec.slug;
   const list = Array.isArray(sec.data) ? sec.data : [];
-  let mutated = false;
-  let designerPromoted = 0;
-  const newList = [];
   const designerStart = Date.now();
   process.stdout.write(`[${designerIdx}/${totalDesigners}] ${slug} (${list.length} projects) ... `);
 
-  for (const p of list) {
+  const outcomes = await mapWithConcurrency(list, PROJECT_CONCURRENCY, processProject);
+
+  let mutated = false;
+  let designerPromoted = 0;
+  const newList = [];
+  const promoLines = [];
+  for (const o of outcomes) {
     stats.scanned++;
-    const gallery = Array.isArray(p?.gallery) ? p.gallery : [];
-
-    // Skip if floorPlan already set and we're not in --overwrite mode
-    if (!OVERWRITE && typeof p?.floorPlan === "string" && p.floorPlan) {
-      const ok = await head(p.floorPlan);
-      if (ok) { stats.alreadyHasFp++; newList.push(p); continue; }
+    if (o.status === "alreadyHasFp") { stats.alreadyHasFp++; newList.push(o.p); continue; }
+    if (o.status === "noCandidate") { stats.noCandidate++; newList.push(o.p); continue; }
+    if (o.status === "promoted") {
+      promoLines.push(`    ✓ ${(o.p.name||o.p.title||"").slice(0,55)}: gallery[${o.foundIdx}]/${o.total} → floorPlan`);
+      stats.promoted++;
+      designerPromoted++;
+      mutated = true;
     }
-
-    if (gallery.length === 0) { newList.push(p); continue; }
-
-    // Walk from the end backward — floor plans tend to live at the tail.
-    let foundIdx = -1;
-    for (let i = gallery.length - 1; i >= 0; i--) {
-      const src = gallery[i]?.src;
-      if (typeof src !== "string" || !src) continue;
-      if (await isFloorPlan(src)) { foundIdx = i; break; }
-    }
-
-    if (foundIdx === -1) { stats.noCandidate++; newList.push(p); continue; }
-
-    const fpUrl = gallery[foundIdx].src;
-    const newGallery = gallery.filter((_, i) => i !== foundIdx);
-    if (designerPromoted === 0) process.stdout.write("\n");
-    console.log(`    ✓ ${(p.name||p.title||"").slice(0,55)}: gallery[${foundIdx}]/${gallery.length} → floorPlan`);
-    newList.push({ ...p, floorPlan: fpUrl, gallery: newGallery });
-    stats.promoted++;
-    designerPromoted++;
-    mutated = true;
+    newList.push(o.p);
   }
 
   const elapsed = Math.round((Date.now() - designerStart) / 1000);
-  if (designerPromoted === 0) process.stdout.write(`done in ${elapsed}s, no promotions\n`);
-  else process.stdout.write(`  [done in ${elapsed}s, promoted ${designerPromoted}]\n`);
+  if (designerPromoted === 0) {
+    process.stdout.write(`done in ${elapsed}s, no promotions\n`);
+  } else {
+    process.stdout.write("\n");
+    for (const line of promoLines) console.log(line);
+    console.log(`  [done in ${elapsed}s, promoted ${designerPromoted}]`);
+  }
 
   if (mutated && APPLY) {
     const { error: updErr } = await sb.from("designer_sections").update({ data: newList }).eq("slug", slug).eq("section", "projects");
