@@ -136,6 +136,14 @@ const PROPERTY_FILTERS = ["All", "HDB", "Condo", "EC", "Landed", "Commercial"];
 const STYLE_FILTERS = ["All Styles", "Modern", "Contemporary", "Scandinavian", "Industrial", "Japandi", "Minimalist", "Mid-Century", "Luxury/High-End"];
 const BUDGET_FILTERS = ["Any Budget", "Under $30K", "$30K – $60K", "$60K – $120K", "$120K+"];
 const SORT_OPTIONS = ["Most Reviewed", "Highest Rated", "Most Projects", "Newest"];
+// Multi-select license options. Filter tests against d.accreditations[] using
+// a substring/regex match so different stored phrasings ("BCA Registered" vs
+// "BCA Licensed") still match the same option.
+const LICENSE_FILTERS: { label: string; match: RegExp }[] = [
+  { label: "HDB Licensed", match: /\bhdb\b/i },
+  { label: "BCA Licensed", match: /\bbca\b/i },
+  { label: "Landed Eligible", match: /landed/i },
+];
 
 /* ─── PLACEHOLDER LOGO ─── */
 const PLACEHOLDER_LOGO = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Crect fill='%23e8e4db' width='80' height='80' rx='40'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-family='DM Sans,sans-serif' font-size='28' font-weight='500' fill='%239a9790'%3E%3F%3C/text%3E%3C/svg%3E`;
@@ -193,6 +201,96 @@ function FilterDropdown({ options, value, onChange }: { options: string[]; value
                   {opt}
                 </button>
               ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ─── MULTI-SELECT CHECKBOX DROPDOWN ─── */
+function MultiCheckboxDropdown({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onToggle: (opt: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonLabel = selected.size === 0 ? label : `${label} (${selected.size})`;
+  const isActive = selected.size > 0;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 rounded-[100px] px-5 py-[10px] text-[14px] transition-all"
+        style={{
+          background: C.white,
+          border: `1px solid ${C.creamBorder}`,
+          fontFamily: sans,
+          color: isActive ? C.black : C.grayLight,
+          fontWeight: isActive ? 500 : 400,
+        }}
+      >
+        <span>{buttonLabel}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} style={{ color: C.grayLight }} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-full left-0 mt-2 z-40 rounded-[14px] py-2 min-w-[200px]"
+              style={{
+                background: C.white,
+                border: `1px solid ${C.creamBorder}`,
+                boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+              }}
+            >
+              {options.map((opt) => {
+                const checked = selected.has(opt);
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => onToggle(opt)}
+                    className="w-full text-left px-4 py-[10px] text-[14px] transition-colors flex items-center gap-3"
+                    style={{
+                      fontFamily: sans,
+                      color: C.black,
+                      background: "transparent",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = C.cream; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-flex items-center justify-center shrink-0 rounded-[4px]"
+                      style={{
+                        width: 16,
+                        height: 16,
+                        background: checked ? C.black : C.white,
+                        border: `1px solid ${checked ? C.black : C.creamBorder}`,
+                      }}
+                    >
+                      {checked && (
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6.5L4.5 9L10 3" stroke={C.white} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </span>
+                    <span>{opt}</span>
+                  </button>
+                );
+              })}
             </motion.div>
           </>
         )}
@@ -370,12 +468,19 @@ export function DesignersDirectory() {
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [styleFilter, setStyleFilter] = useState("All Styles");
   const [budgetFilter, setBudgetFilter] = useState("Any Budget");
+  const [licenseFilter, setLicenseFilter] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState("Most Reviewed");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [designers, setDesigners] = useState<DesignerCard[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const activeFilterCount = [propertyFilter !== "All", styleFilter !== "All Styles", budgetFilter !== "Any Budget"].filter(Boolean).length;
+  const toggleLicense = (opt: string) => setLicenseFilter((prev) => {
+    const next = new Set(prev);
+    if (next.has(opt)) next.delete(opt); else next.add(opt);
+    return next;
+  });
+
+  const activeFilterCount = [propertyFilter !== "All", styleFilter !== "All Styles", budgetFilter !== "Any Budget", licenseFilter.size > 0].filter(Boolean).length;
 
   const filteredDesigners = useMemo(() => {
     let result = [...designers];
@@ -411,19 +516,28 @@ export function DesignersDirectory() {
       });
     }
 
+    // Multi-license filter — designer must hold ALL selected licenses.
+    if (licenseFilter.size > 0) {
+      const selectedMatchers = LICENSE_FILTERS.filter((l) => licenseFilter.has(l.label));
+      result = result.filter((d) =>
+        selectedMatchers.every((l) => d.accreditations.some((a) => l.match.test(a))),
+      );
+    }
+
     if (sortBy === "Most Reviewed") result.sort((a, b) => b.reviews - a.reviews);
     if (sortBy === "Highest Rated") result.sort((a, b) => b.rating - a.rating);
     if (sortBy === "Most Projects") result.sort((a, b) => b.projects - a.projects);
     if (sortBy === "Newest") result.sort((a, b) => a.yearsActive - b.yearsActive);
 
     return result;
-  }, [search, propertyFilter, styleFilter, budgetFilter, sortBy, designers]);
+  }, [search, propertyFilter, styleFilter, budgetFilter, licenseFilter, sortBy, designers]);
 
   const clearAllFilters = () => {
     setSearch("");
     setPropertyFilter("All");
     setStyleFilter("All Styles");
     setBudgetFilter("Any Budget");
+    setLicenseFilter(new Set());
     setSortBy("Most Reviewed");
   };
 
@@ -548,6 +662,12 @@ export function DesignersDirectory() {
 
                   <FilterDropdown options={STYLE_FILTERS} value={styleFilter} onChange={setStyleFilter} />
                   <FilterDropdown options={BUDGET_FILTERS} value={budgetFilter} onChange={setBudgetFilter} />
+                  <MultiCheckboxDropdown
+                    label="License"
+                    options={LICENSE_FILTERS.map((l) => l.label)}
+                    selected={licenseFilter}
+                    onToggle={toggleLicense}
+                  />
                 </div>
 
                 <div className="flex items-center gap-3">
