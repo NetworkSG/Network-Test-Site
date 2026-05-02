@@ -87,7 +87,9 @@ export function FreeTools({
           <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: eyebrowColor, fontFamily: sans }}>{eyebrow}</p>
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-4">
-          <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: headingPrimaryColor, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
+          {/* margin set inline so it beats lead-page's `:where(h2) { margin: 0 }`
+              when this section is rendered inside a .lead-page wrapper. */}
+          <h2 className="font-normal leading-[1.15] max-w-[700px]" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: headingPrimaryColor, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em", margin: "0 auto" }}>
             {headingPrimary}{headingSecondary ? <> <span style={{ color: headingSecondaryColor }}>{headingSecondary}</span></> : null}
           </h2>
         </FadeIn>
