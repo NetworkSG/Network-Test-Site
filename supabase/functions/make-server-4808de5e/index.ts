@@ -5681,10 +5681,15 @@ app.get("/make-server-4808de5e/designers", async (c) => {
     const sb = getDesignerSupabase();
     const showAll = c.req.query("showAll") === "true";
 
-    // Fetch designers + sections (for completeness calc in admin mode)
+    // Fetch designers + sections. Admin mode pulls all sections (for completeness
+    // calc); public mode pulls only `projects` so we can derive a thumbnail
+    // fallback when images.cover is empty.
+    const sectionsQuery = showAll
+      ? sb.from("designer_sections").select("slug, section, data")
+      : sb.from("designer_sections").select("slug, section, data").eq("section", "projects");
     const [designersRes, sectionsRes] = await Promise.all([
       sb.from("designers").select("slug, name, data"),
-      showAll ? sb.from("designer_sections").select("slug, section, data") : Promise.resolve({ data: [], error: null }),
+      sectionsQuery,
     ]);
 
     if (designersRes.error) {
@@ -5692,14 +5697,29 @@ app.get("/make-server-4808de5e/designers", async (c) => {
       return c.json({ error: `Failed to fetch designers: ${designersRes.error.message}` }, 500);
     }
 
-    // Build sections lookup by slug for completeness check
+    // Build sections lookup by slug. Always populated now so we can derive
+    // a thumbnail fallback from the first project image.
     const sectionsBySlug: Record<string, Record<string, any>> = {};
-    if (showAll && sectionsRes.data) {
+    if (sectionsRes.data) {
       for (const row of sectionsRes.data as any[]) {
         if (!sectionsBySlug[row.slug]) sectionsBySlug[row.slug] = {};
         sectionsBySlug[row.slug][row.section] = row.data;
       }
     }
+
+    // Pick the best thumbnail URL from a project: prefer the legacy `image`
+    // field (the hero), then coverImage / featuredImage, then gallery[0].
+    const pickProjectThumb = (p: any): string => {
+      if (!p || typeof p !== "object") return "";
+      for (const k of ["image", "coverImage", "featuredImage"]) {
+        const v = p[k];
+        if (typeof v === "string" && v) return v;
+      }
+      const g0 = Array.isArray(p.gallery) ? p.gallery[0] : null;
+      if (typeof g0 === "string") return g0;
+      if (g0 && typeof g0 === "object" && typeof g0.src === "string") return g0.src;
+      return "";
+    };
 
     // Profile completeness checker based on required checklist
     const s = (v: any) => typeof v === "string" ? v.trim() : "";
@@ -5763,9 +5783,24 @@ app.get("/make-server-4808de5e/designers", async (c) => {
 
     const allDesigners = (designersRes.data || []).map((d: any) => {
       const designer = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
+      const sections = sectionsBySlug[d.slug] || {};
+
+      // Thumbnail fallback: if there's no images.cover, derive one from the
+      // first project so the directory card isn't blank.
+      if (!designer.images?.cover) {
+        const projects = Array.isArray(sections.projects) ? sections.projects
+          : Array.isArray(designer.projects) ? designer.projects : [];
+        for (const p of projects) {
+          const thumb = pickProjectThumb(p);
+          if (thumb) {
+            designer.images = { ...(designer.images || {}), cover: thumb };
+            break;
+          }
+        }
+      }
+
       if (showAll) {
         try {
-          const sections = sectionsBySlug[d.slug] || {};
           designer.completeness = computeCompleteness(designer, sections);
         } catch (e) {
           console.log(`Completeness calc failed for ${d.slug}:`, e);
