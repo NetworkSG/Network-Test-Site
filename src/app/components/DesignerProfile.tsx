@@ -86,6 +86,17 @@ export function resolveImg(ref: string): string {
   return IMAGE_MAP[ref] || resolveAsset(ref) || ref;
 }
 
+/* Build a CDN-resized + WebP URL for thumbnail-sized renders.
+ * Pipes the source through images.weserv.nl (free public proxy) so we don't
+ * pay the bandwidth of a 2048px JPEG when the slot is only ~360px wide.
+ * Falls through unchanged for non-http URLs (data:, blob:, local assets). */
+export function thumbnailUrl(src: string, width: number, quality = 75): string {
+  if (!src || typeof src !== "string") return src;
+  if (!/^https?:\/\//i.test(src)) return src;
+  const stripped = src.replace(/^https?:\/\//i, "");
+  return `https://images.weserv.nl/?url=${encodeURIComponent(stripped)}&w=${width}&q=${quality}&output=webp`;
+}
+
 /* ─── DESIGNER DATA CONTEXT ─── */
 interface DesignerCtxType {
   teamMembers: any[];
@@ -1715,7 +1726,7 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   onClick={onClose}
                   className="relative rounded-[20px] overflow-hidden h-[220px] group cursor-pointer block"
                 >
-                  <img src={resolveImg(pickCover(p))} alt={p.name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <img src={thumbnailUrl(resolveImg(pickCover(p)), 720)} alt={p.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
                   <div className="absolute bottom-3 left-4 right-4">
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>
