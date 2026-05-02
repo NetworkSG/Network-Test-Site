@@ -1227,8 +1227,15 @@ app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
     } catch (fetchErr: any) {
       errorMsg = String(fetchErr?.message || fetchErr).slice(0, 200);
     }
-    // Log to KV for debug dashboard (fire-and-forget; keys only, not values)
+    // Log to KV for debug dashboard (fire-and-forget; keys only, not values).
+    // We also persist `Source` (a free-text discriminator added by lead-page
+    // forms — e.g. "Escrow Landing" vs "Get Matched Landing") so the admin
+    // Lead Magnets panel can split traffic by funnel even when several pages
+    // share the same Zapier hook.
     const logKey = `zapier-log:${Date.now()}-${crypto.randomUUID().slice(0, 6)}`;
+    const sourceLabel = typeof (sanitizedData as any)?.Source === "string"
+      ? String((sanitizedData as any).Source).slice(0, 80)
+      : undefined;
     kv.set(logKey, {
       hook,
       status,
@@ -1236,6 +1243,7 @@ app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
       latencyMs: Date.now() - t0,
       ts: new Date().toISOString(),
       payloadKeys: Object.keys(sanitizedData),
+      ...(sourceLabel ? { source: sourceLabel } : {}),
       ...(errorMsg ? { error: errorMsg } : {}),
     }).catch(() => {});
     if (!ok) {
@@ -9633,71 +9641,75 @@ app.get("/make-server-4808de5e/admin/lead-magnet-metrics", async (c) => {
     }
     const designerInquiries = { key: "designer-inquiry", name: "Designer Inquiries", source: "designer_sections", ...bucketize(inquiryTimestamps) };
 
-    // ── 4. Firm Onboarding ────────────────────────────────────────────
-    const onboardingEntries: any[] = await kv.getByPrefix("onboarding:submission:");
-    const onboardingTimestamps = onboardingEntries
-      .map(pickTs)
-      .filter((t): t is number => t !== null);
-    const fullOnboardings = onboardingEntries.filter((e) => e?.variant === "full").length;
-    const projectOnly = onboardingEntries.filter((e) => e?.variant === "project-only").length;
-    const firmOnboarding = {
-      key: "firm-onboarding",
-      name: "Firm Onboarding",
-      source: "kv:onboarding:submission:*",
-      details: { full: fullOnboardings, projectOnly },
-      ...bucketize(onboardingTimestamps),
+    // ── 4. Homepage Lead Form ─────────────────────────────────────────
+    // Top-of-funnel "Get Matched" form on the homepage / Floor Plan
+    // landing — writes directly to the homepage_leads Postgres table.
+    async function tableTimestamps(table: string, column = "created_at"): Promise<{ ts: number[]; total: number; err?: string }> {
+      const { count, error: cErr } = await supabase.from(table).select("*", { count: "exact", head: true });
+      if (cErr) return { ts: [], total: 0, err: cErr.message };
+      const { data, error: dErr } = await supabase
+        .from(table)
+        .select(column)
+        .order(column, { ascending: false })
+        .limit(1000);
+      if (dErr) return { ts: [], total: count ?? 0, err: dErr.message };
+      const ts = (data || [])
+        .map((r: any) => new Date(r[column]).getTime())
+        .filter((t: number) => Number.isFinite(t));
+      return { ts, total: count ?? ts.length };
+    }
+
+    const homepageLead = await tableTimestamps("homepage_leads").then((v) => ({
+      key: "homepage-lead",
+      name: "Homepage Lead Form",
+      source: "table:homepage_leads",
+      ...bucketize(v.ts, v.total),
+      ...(v.err ? { error: v.err.slice(0, 120) } : {}),
+    }));
+
+    // ── 5. Escrow + Get-Matched (split via Zapier-log Source field) ───
+    // Both pages POST to the same `concierge-match-lead` hook but tag the
+    // payload with a different Source string. New entries persist that
+    // string on the log; older entries (logged before the source-capture
+    // change) won't, so they're attributed to neither — counts will start
+    // accumulating cleanly from now.
+    const zapierEntries: any[] = await kv.getByPrefix("zapier-log:");
+    function zapierTimestamps(hook: string, sourceMatch: (s: string) => boolean): number[] {
+      return zapierEntries
+        .filter((e) => e?.ok && e?.hook === hook && typeof e?.source === "string" && sourceMatch(e.source))
+        .map((e) => {
+          const t = e?.ts ? new Date(e.ts).getTime() : NaN;
+          return Number.isFinite(t) ? t : NaN;
+        })
+        .filter((t) => Number.isFinite(t));
+    }
+    const escrowTs = zapierTimestamps("concierge-match-lead", (s) => /escrow/i.test(s));
+    const escrowLead = {
+      key: "escrow-lead",
+      name: "Escrow Lead Form",
+      source: "zapier-log:concierge-match-lead (Source: Escrow*)",
+      ...bucketize(escrowTs),
+    };
+    const getMatchedTs = zapierTimestamps("concierge-match-lead", (s) => /get\s*match/i.test(s));
+    const getMatchedLead = {
+      key: "get-matched-lead",
+      name: "Get-Matched Lead Form",
+      source: "zapier-log:concierge-match-lead (Source: Get Matched*)",
+      ...bucketize(getMatchedTs),
     };
 
-    // ── 5. Homeowner Signups ──────────────────────────────────────────
-    // `homeowner:` prefix also matches `homeowner-session:` and
-    // `homeowner-count-cache`. Filter to the actual profile shape (has
-    // userId, no expiresAt).
-    const homeownerEntries: any[] = await kv.getByPrefix("homeowner:");
-    const homeownerProfiles = homeownerEntries.filter(
-      (e) => e && typeof e === "object" && e.userId && !e.expiresAt && !e.cached,
-    );
-    const homeownerTimestamps = homeownerProfiles
-      .map(pickTs)
-      .filter((t): t is number => t !== null);
-    const homeownerSignups = {
-      key: "homeowner-signups",
-      name: "Homeowner Signups",
-      source: "kv:homeowner:*",
-      ...bucketize(homeownerTimestamps),
-    };
-
-    // ── 6. Quote Requests ─────────────────────────────────────────────
-    // The Quote Request table holds both cost-guide-routed leads and
-    // direct quote requests. The actual sortable column is the Airtable-
-    // style "Created Date" (with a space — there's no Postgres-managed
-    // created_at on this table). PostgREST needs the column referenced
-    // verbatim in select() and order(), but doesn't allow filter() on
-    // names with spaces, so we pull the most recent 1000 rows and
-    // bucketize them in JS.
-    const { count: quoteTotal } = await supabase
-      .from("Quote Request")
-      .select("*", { count: "exact", head: true });
-    const { data: quoteRows, error: quoteErr } = await supabase
-      .from("Quote Request")
-      .select('"Created Date"')
-      .order('"Created Date"', { ascending: false })
-      .limit(1000);
-    const quoteTimestamps = (quoteRows || [])
-      .map((r: any) => {
-        const raw = r?.["Created Date"];
-        return raw ? new Date(raw).getTime() : NaN;
-      })
-      .filter((t: number) => Number.isFinite(t));
-    const quoteRequests = {
-      key: "quote-requests",
-      name: "Quote Requests",
-      source: "table:Quote Request",
-      ...bucketize(quoteTimestamps, quoteTotal ?? quoteTimestamps.length),
-      ...(quoteErr ? { error: String(quoteErr.message || quoteErr).slice(0, 120) } : {}),
-    };
+    // ── 6. Handshake Lead Form ────────────────────────────────────────
+    // /handshake landing form — writes directly to handshake_leads.
+    const handshakeLead = await tableTimestamps("handshake_leads").then((v) => ({
+      key: "handshake-lead",
+      name: "Handshake Lead Form",
+      source: "table:handshake_leads",
+      ...bucketize(v.ts, v.total),
+      ...(v.err ? { error: v.err.slice(0, 120) } : {}),
+    }));
 
     const payload = {
-      magnets: [costGuide, renderTool, designerInquiries, firmOnboarding, homeownerSignups, quoteRequests],
+      magnets: [costGuide, renderTool, designerInquiries, homepageLead, escrowLead, getMatchedLead, handshakeLead],
       computedAt: new Date(now).toISOString(),
       cached: false,
     };

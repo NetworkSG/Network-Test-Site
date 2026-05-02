@@ -5,8 +5,6 @@ import {
   FileText,
   Sparkles,
   MessageSquare,
-  Building2,
-  UserPlus,
   Inbox,
   ExternalLink,
   Loader2,
@@ -14,6 +12,10 @@ import {
   TrendingUp,
   TrendingDown,
   Eye,
+  Home,
+  Lock,
+  Handshake,
+  Target,
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
 
@@ -73,23 +75,29 @@ const MAGNET_META: Record<string, { icon: any; color: string; gradient: string; 
     gradient: "rgba(249, 115, 22, 0.18)",
     description: "Inquiries sent through designer profile pages.",
   },
-  "firm-onboarding": {
-    icon: Building2,
+  "homepage-lead": {
+    icon: Home,
     color: "#22c55e",
     gradient: "rgba(34, 197, 94, 0.18)",
-    description: "Firms onboarded + projects added via the firm form.",
+    description: "Top-of-funnel form on the homepage / Floor Plan landing.",
   },
-  "homeowner-signups": {
-    icon: UserPlus,
-    color: "#ec4899",
-    gradient: "rgba(236, 72, 153, 0.18)",
-    description: "Homeowner accounts created across the site.",
-  },
-  "quote-requests": {
-    icon: Inbox,
+  "escrow-lead": {
+    icon: Lock,
     color: "#0ea5e9",
     gradient: "rgba(14, 165, 233, 0.18)",
-    description: "All Quote Request rows — Sales' canonical lead bucket.",
+    description: "Concierge-match form on the /escrow landing page.",
+  },
+  "get-matched-lead": {
+    icon: Target,
+    color: "#ec4899",
+    gradient: "rgba(236, 72, 153, 0.18)",
+    description: "Concierge-match form on the /get-matched funnel page.",
+  },
+  "handshake-lead": {
+    icon: Handshake,
+    color: "#f59e0b",
+    gradient: "rgba(245, 158, 11, 0.18)",
+    description: "Lead form on the /handshake escrow landing.",
   },
 };
 
