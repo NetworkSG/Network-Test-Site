@@ -625,14 +625,14 @@ export const FAQ_ITEMS_V2: FAQItem[] = [
   {
     question: "How do you match us with designers?",
     answer:
-      "Three things drive the match. First, your brief — property type (HDB, condo, landed), size, budget range, timeline, and the style you're drawn to. Second, firm fit — we look at which firms in our network have done strong work on similar properties, in your budget band, and in the style direction you described. Third, current capacity — we only match you with firms that can actually take on your project in your timeline, so you're not chasing a firm that's fully booked. Our team does this manually, not with a generic algorithm. You get 3 firms shortlisted specifically for your project, usually within one business day.",
+      "Three things drive the match. First, your brief: property type (HDB, condo, landed), size, budget range, timeline, and the style you're drawn to. Second, firm fit: we look at which firms in our network have done strong work on similar properties, in your budget band, and in the style direction you described. Third, current capacity: we only match you with firms that can actually take on your project in your timeline, so you're not chasing a firm that's fully booked. Our team does this manually, not with a generic algorithm. You get 3 firms shortlisted specifically for your project, usually within one business day.",
     answerBlocks: [
       "Three things drive the match:",
       {
         ol: [
-          "**Your brief** — property type (HDB, condo, landed), size, budget range, timeline, and the style you're drawn to.",
-          "**Firm fit** — we look at which firms in our network have done strong work on similar properties, in your budget band, and in the style direction you described.",
-          "**Current capacity** — we only match you with firms that can actually take on your project in your timeline, so you're not chasing a firm that's fully booked.",
+          "**Your brief:** property type (HDB, condo, landed), size, budget range, timeline, and the style you're drawn to.",
+          "**Firm fit:** we look at which firms in our network have done strong work on similar properties, in your budget band, and in the style direction you described.",
+          "**Current capacity:** we only match you with firms that can actually take on your project in your timeline, so you're not chasing a firm that's fully booked.",
         ],
       },
       "Our team does this manually, not with a generic algorithm. You get 3 firms shortlisted specifically for your project, usually within one business day.",
