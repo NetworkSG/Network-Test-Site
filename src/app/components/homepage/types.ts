@@ -22,9 +22,18 @@ export interface QualifyingQuestion {
   note?: string;
 }
 
+// One block of a rich FAQ answer. Strings render as paragraphs; objects render
+// as ordered or unordered lists. Items support **bold** segments via simple
+// inline markdown so the data file stays plain JSON-friendly.
+export type FAQAnswerBlock = string | { ol: string[] } | { ul: string[] };
+
 export interface FAQItem {
+  /** Heading shown in the accordion. */
   question: string;
+  /** Flat plain-text answer — used for FAQPage JSON-LD (Google + AI assistants). */
   answer: string;
+  /** Optional rich render — paragraphs + ordered/unordered lists for the visible UI. */
+  answerBlocks?: FAQAnswerBlock[];
 }
 
 export interface TrustStat {
