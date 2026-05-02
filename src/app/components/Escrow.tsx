@@ -352,7 +352,7 @@ export function Escrow() {
 
             <div className="why-grid">
               <div className="why-card featured">
-                <div className="why-card-icon" style={{ color: "white" }}>$</div>
+                <div className="why-card-icon">$</div>
                 <span className="why-card-tag">Exclusive to Network</span>
                 <h3>Handshake Escrow by DBS</h3>
                 <p>Your renovation deposit sits in a MAS-regulated escrow account, held with DBS. Funds release only when you approve milestones. Not an insurance promise — actual bank protection.</p>
