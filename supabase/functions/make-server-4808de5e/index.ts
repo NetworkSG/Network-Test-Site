@@ -2776,8 +2776,9 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       }
       return !!item.isFloorPlan || !!item.is_floor_plan;
     };
-    // Photo records can be top-level rscDict objects ({baseUrl, ...}) or nested
-    // inside arrays (e.g. project.images = [{baseUrl}, {baseUrl}]). Walk both shapes.
+    // Collect ONLY photos linked to this project (via projectRecord.images).
+    // Walking every Cloudfront image in the RSC dict picks up trust badges
+    // (eTrust, SAFE+), other projects' photos, designer profile shots, etc.
     const seenBaseUrls = new Set<string>();
     const collectPhoto = (item: any) => {
       if (!item || typeof item !== "object" || typeof item.baseUrl !== "string") return;
@@ -2788,9 +2789,32 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
       if (isFloorPlanItem(item)) floorPlanCandidates.push(url);
       else photoBaseUrls.push(url);
     };
-    for (const v of Object.values(rscDict)) {
-      if (Array.isArray(v)) v.forEach(collectPhoto);
-      else collectPhoto(v);
+    if (projectRecord) {
+      // projectRecord.images is typically a ref like "$41" → array of refs like
+      // ["$43", "$53", ...] → photo records. Resolve recursively (depth ≤ 4).
+      const visited = new Set<any>();
+      const walk = (v: any, depth: number) => {
+        if (depth > 5 || v == null) return;
+        const resolved = resolveRef(v);
+        if (resolved == null || (resolved === v && typeof v === "string" && v.startsWith("$"))) return;
+        if (typeof resolved !== "object") return;
+        if (visited.has(resolved)) return;
+        visited.add(resolved);
+        if (Array.isArray(resolved)) {
+          for (const item of resolved) walk(item, depth + 1);
+          return;
+        }
+        // Photo record: collect and stop descending — its sibling fields are
+        // metadata (tags, pins, productTags), not more photos.
+        if (typeof (resolved as any).baseUrl === "string") {
+          collectPhoto(resolved);
+          return;
+        }
+        // Container object (e.g. { Gallery: [...], Featurette: [...], Cover: ... }).
+        // Walk every value.
+        for (const val of Object.values(resolved)) walk(val, depth + 1);
+      };
+      walk(projectRecord.images, 0);
     }
     // Direct fields on the project record that may carry a floor plan URL.
     if (projectRecord) {
@@ -3048,6 +3072,20 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
         // see what schema Qanvast is using when our heuristic misses.
         // Dump shapes of any RSC ref that has at least one project-shape key
         // (yearOfCompletion / areaUnit / noOfBedrooms / isNewProperty / styles / otherWorks).
+        // Peek at the project's images ref so we can fix the structured walk.
+        rscProjectImagesPeek: (() => {
+          if (!projectRecord) return null;
+          const raw = (projectRecord as any).images;
+          const resolved = resolveRef(raw);
+          const summary = (v: any): any => {
+            if (v == null) return null;
+            if (typeof v === "string") return `string:${v.slice(0, 60)}`;
+            if (Array.isArray(v)) return { array: v.length, first3: v.slice(0, 3).map((x) => typeof x === "string" ? `str:${x.slice(0,40)}` : (x && typeof x === "object" ? `obj:${Object.keys(x).slice(0,5).join(",")}` : typeof x)) };
+            if (typeof v === "object") return { keys: Object.keys(v).slice(0, 12), baseUrl: v.baseUrl?.slice(0, 60) };
+            return typeof v;
+          };
+          return { rawType: typeof raw, raw: typeof raw === "string" ? raw : "(non-string)", resolvedSummary: summary(resolved) };
+        })(),
         rscProjectCandidates: (() => {
           const out: any[] = [];
           const KEYS = ["yearOfCompletion", "areaUnit", "noOfBedrooms", "isNewProperty", "styles", "otherWorks", "price", "size"];
@@ -5491,7 +5529,7 @@ app.post("/make-server-4808de5e/firm-onboarding/drive-folder-preview", async (c)
 
 // Download one Drive image by file ID and upload it to our Supabase storage,
 // returning the public URL. We fetch Google's pre-sized CDN thumbnail
-// (sz=w1600 JPEG) rather than the full-res original — no WASM decode needed
+// (sz=w2048 JPEG) rather than the full-res original — no WASM decode needed
 // in-function, so each invocation stays well under Deno Deploy's CPU/memory
 // budget even when the client fires several in parallel.
 app.post("/make-server-4808de5e/firm-onboarding/ingest-drive-image", async (c) => {
@@ -5505,7 +5543,7 @@ app.post("/make-server-4808de5e/firm-onboarding/ingest-drive-image", async (c) =
     const fileId = typeof body?.fileId === "string" ? body.fileId.trim() : "";
     if (!/^[a-zA-Z0-9_-]{8,}$/.test(fileId)) return c.json({ ok: false, message: "Invalid fileId" }, 400);
 
-    const cdnUrl = `https://lh3.googleusercontent.com/d/${fileId}=w1600`;
+    const cdnUrl = `https://lh3.googleusercontent.com/d/${fileId}=w2048`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(cdnUrl, { signal: controller.signal, redirect: "follow" });
@@ -5577,7 +5615,7 @@ async function listDriveFolderImageUrls(folderUrl: string): Promise<string[]> {
     // Use Google's photo CDN rather than drive.google.com/thumbnail — the
     // latter redirects to a consent page when hot-linked from another origin,
     // which shows as broken images on the live designer pages.
-    return files.map((f: any) => `https://lh3.googleusercontent.com/d/${f.id}=w1600`);
+    return files.map((f: any) => `https://lh3.googleusercontent.com/d/${f.id}=w2048`);
   } catch (err) {
     console.log("listDriveFolderImageUrls error:", err instanceof Error ? err.message : String(err));
     return [];
