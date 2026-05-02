@@ -9536,6 +9536,174 @@ app.get("/make-server-4808de5e/debug/funnel-metrics", async (c) => {
   }
 });
 
+// --- Admin: per-lead-magnet metrics (counts + 14-day sparkline) ---
+// Backs the "Lead Magnets" tab in the admin dashboard. Aggregates across
+// every place a lead currently lands: KV (cost-guide, render-task,
+// onboarding submissions, homeowner profiles), the Quote Request table,
+// and the inquiries arrays nested in designer_sections. Cached for 60s
+// because KV scans + table counts are expensive.
+const LEAD_MAGNET_METRICS_CACHE: { at: number; data: any } = { at: 0, data: null };
+const LEAD_MAGNET_METRICS_TTL_MS = 60 * 1000;
+
+app.get("/make-server-4808de5e/admin/lead-magnet-metrics", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+
+  try {
+    const now = Date.now();
+    if (LEAD_MAGNET_METRICS_CACHE.data && now - LEAD_MAGNET_METRICS_CACHE.at < LEAD_MAGNET_METRICS_TTL_MS) {
+      return c.json({ ...LEAD_MAGNET_METRICS_CACHE.data, cached: true });
+    }
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const ms24h = 24 * 60 * 60 * 1000;
+    const ms7d = 7 * ms24h;
+    const ms30d = 30 * ms24h;
+    const SPARKLINE_DAYS = 14;
+
+    // Bucket a list of ISO timestamps into 24h/7d/30d counts plus a
+    // 14-entry per-day sparkline, oldest day first.
+    function bucketize(timestamps: number[], total?: number) {
+      const last24h = timestamps.filter((t) => now - t <= ms24h).length;
+      const last7d = timestamps.filter((t) => now - t <= ms7d).length;
+      const last30d = timestamps.filter((t) => now - t <= ms30d).length;
+
+      const sparkline: { date: string; count: number }[] = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (let i = SPARKLINE_DAYS - 1; i >= 0; i--) {
+        const dayStart = today.getTime() - i * ms24h;
+        const dayEnd = dayStart + ms24h;
+        const count = timestamps.filter((t) => t >= dayStart && t < dayEnd).length;
+        const d = new Date(dayStart);
+        sparkline.push({ date: `${d.getMonth() + 1}/${d.getDate()}`, count });
+      }
+
+      return { total: total ?? timestamps.length, last24h, last7d, last30d, sparkline };
+    }
+
+    // Pull a timestamp out of arbitrary KV / row shapes (different magnets
+    // settled on slightly different field names over time).
+    function pickTs(rec: any): number | null {
+      if (!rec || typeof rec !== "object") return null;
+      const raw = rec.createdAt || rec.created_at || rec.ts || rec["Created Date"];
+      if (!raw) return null;
+      const t = new Date(String(raw)).getTime();
+      return Number.isFinite(t) ? t : null;
+    }
+
+    // ── 1. Cost Guide ─────────────────────────────────────────────────
+    // KV: `cost-guide:{id}` (full payload) + `cost-guide:{id}:qrId` (just a
+    // string). Skip the qrId rows by requiring an object with createdAt.
+    const cgEntries: any[] = await kv.getByPrefix("cost-guide:");
+    const cgTimestamps = cgEntries
+      .map(pickTs)
+      .filter((t): t is number => t !== null);
+    const costGuide = { key: "cost-guide", name: "Cost Guide", source: "kv:cost-guide:* + Quote Request", ...bucketize(cgTimestamps) };
+
+    // ── 2. AI Render Tool ─────────────────────────────────────────────
+    const renderEntries: any[] = await kv.getByPrefix("render-task:");
+    const renderTimestamps = renderEntries
+      .map(pickTs)
+      .filter((t): t is number => t !== null);
+    const completedRenderCount = renderEntries.filter((r) => r?.status === "completed" || r?.status === "succeeded").length;
+    const renderTool = {
+      key: "render-tool",
+      name: "AI Render Tool",
+      source: "kv:render-task:*",
+      details: { completed: completedRenderCount },
+      ...bucketize(renderTimestamps),
+    };
+
+    // ── 3. Designer Inquiries ─────────────────────────────────────────
+    // Aggregate every inquiry across all designers. designer_sections.data
+    // for section='inquiries' is an array of inquiry objects with createdAt.
+    const { data: sectionsRaw } = await supabase
+      .from("designer_sections")
+      .select("data")
+      .eq("section", "inquiries");
+    const inquiryTimestamps: number[] = [];
+    for (const row of sectionsRaw || []) {
+      const list = Array.isArray((row as any).data) ? (row as any).data : [];
+      for (const inq of list) {
+        const t = pickTs(inq);
+        if (t !== null) inquiryTimestamps.push(t);
+      }
+    }
+    const designerInquiries = { key: "designer-inquiry", name: "Designer Inquiries", source: "designer_sections", ...bucketize(inquiryTimestamps) };
+
+    // ── 4. Firm Onboarding ────────────────────────────────────────────
+    const onboardingEntries: any[] = await kv.getByPrefix("onboarding:submission:");
+    const onboardingTimestamps = onboardingEntries
+      .map(pickTs)
+      .filter((t): t is number => t !== null);
+    const fullOnboardings = onboardingEntries.filter((e) => e?.variant === "full").length;
+    const projectOnly = onboardingEntries.filter((e) => e?.variant === "project-only").length;
+    const firmOnboarding = {
+      key: "firm-onboarding",
+      name: "Firm Onboarding",
+      source: "kv:onboarding:submission:*",
+      details: { full: fullOnboardings, projectOnly },
+      ...bucketize(onboardingTimestamps),
+    };
+
+    // ── 5. Homeowner Signups ──────────────────────────────────────────
+    // `homeowner:` prefix also matches `homeowner-session:` and
+    // `homeowner-count-cache`. Filter to the actual profile shape (has
+    // userId, no expiresAt).
+    const homeownerEntries: any[] = await kv.getByPrefix("homeowner:");
+    const homeownerProfiles = homeownerEntries.filter(
+      (e) => e && typeof e === "object" && e.userId && !e.expiresAt && !e.cached,
+    );
+    const homeownerTimestamps = homeownerProfiles
+      .map(pickTs)
+      .filter((t): t is number => t !== null);
+    const homeownerSignups = {
+      key: "homeowner-signups",
+      name: "Homeowner Signups",
+      source: "kv:homeowner:*",
+      ...bucketize(homeownerTimestamps),
+    };
+
+    // ── 6. Quote Requests ─────────────────────────────────────────────
+    // The Quote Request table holds both cost-guide-routed leads and
+    // direct quote requests. Count everything here as a single funnel —
+    // it's the canonical lead bucket and matches what Sales sees.
+    const { data: quoteRows, error: quoteErr } = await supabase
+      .from("Quote Request")
+      .select("Created Date")
+      .gte("Created Date", new Date(now - ms30d).toISOString());
+    const { count: quoteTotal } = await supabase
+      .from("Quote Request")
+      .select("*", { count: "exact", head: true });
+    const quoteTimestamps = (quoteRows || [])
+      .map((r: any) => new Date(r["Created Date"]).getTime())
+      .filter((t: number) => Number.isFinite(t));
+    const quoteRequests = {
+      key: "quote-requests",
+      name: "Quote Requests",
+      source: "table:Quote Request",
+      ...bucketize(quoteTimestamps, quoteTotal ?? quoteTimestamps.length),
+      ...(quoteErr ? { error: String(quoteErr.message || quoteErr).slice(0, 120) } : {}),
+    };
+
+    const payload = {
+      magnets: [costGuide, renderTool, designerInquiries, firmOnboarding, homeownerSignups, quoteRequests],
+      computedAt: new Date(now).toISOString(),
+      cached: false,
+    };
+
+    LEAD_MAGNET_METRICS_CACHE.at = now;
+    LEAD_MAGNET_METRICS_CACHE.data = payload;
+
+    return c.json(payload);
+  } catch (err) {
+    console.log("lead-magnet-metrics error:", err);
+    return c.json({ error: "Failed to load lead-magnet metrics: " + String(err).slice(0, 200) }, 500);
+  }
+});
+
 // --- Admin: integration health check (pings each service) ---
 app.get("/make-server-4808de5e/debug/health", async (c) => {
   const auth = await requireDebugAdmin(c);
