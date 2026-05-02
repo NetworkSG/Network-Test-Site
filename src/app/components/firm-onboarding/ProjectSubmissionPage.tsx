@@ -5,6 +5,7 @@ import { ProjectStep, validateProject } from "./ProjectStep";
 import { SuccessScreen } from "./SuccessScreen";
 import { submitOnboarding, ProjectSubmission, previewDriveFolder, ingestDriveImage } from "./onboardingApi";
 import { FirmCombobox } from "./FirmCombobox";
+import { classifyFloorPlan } from "../../utils/floor-plan-detect";
 
 const initialProject: ProjectSubmission = {
   title: "",
@@ -84,9 +85,23 @@ export function ProjectSubmissionPage() {
         }
       }
 
+      // Auto-detect a floor plan amongst the uploaded images and route it
+      // out of the gallery. Walk from end backward — designers usually drop
+      // the floor plan as the last file in the folder.
+      let detectedFloorPlan = "";
+      for (let i = storedImageUrls.length - 1; i >= 0; i--) {
+        if (await classifyFloorPlan(storedImageUrls[i])) {
+          detectedFloorPlan = storedImageUrls[i];
+          break;
+        }
+      }
+      const galleryImages = detectedFloorPlan
+        ? storedImageUrls.filter((u) => u !== detectedFloorPlan)
+        : storedImageUrls;
+
       await submitOnboarding({
         variant: "project-only",
-        project: { ...project, images: storedImageUrls },
+        project: { ...project, images: galleryImages, floorPlan: detectedFloorPlan },
         firmName,
         airtableRecordId: firmRecordId,
         ...(firmEmail ? { contactEmail: firmEmail } : {}),
