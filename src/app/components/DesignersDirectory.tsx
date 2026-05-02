@@ -143,6 +143,9 @@ const LICENSE_FILTERS: { label: string; match: RegExp }[] = [
   { label: "HDB Licensed", match: /\bhdb\b/i },
   { label: "BCA Licensed", match: /\bbca\b/i },
   { label: "Landed Eligible", match: /landed/i },
+  { label: "CaseTrust", match: /case\s*trust/i },
+  { label: "ISO", match: /\biso\b/i },
+  { label: "BizSafe", match: /biz\s*safe/i },
 ];
 
 /* ─── PLACEHOLDER LOGO ─── */
