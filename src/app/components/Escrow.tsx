@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { Seo } from "./shared/Seo";
 import { LEAD_PAGE_CSS, LEAD_PAGE_CLASS, LeadPageFonts } from "./shared/leadPageStyles";
+import { FreeTools } from "./homepage/v8/sections/FreeTools";
 import { trackLead } from "../utils/metaPixel";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
@@ -402,37 +403,13 @@ export function Escrow() {
           </div>
         </section>
 
-        {/* ── TOOLS ──────────────────────────────────────────── */}
-        <section className="tools" id="tools">
-          <div className="container">
-            <div className="tools-header">
-              <span className="section-eyebrow">Free for everyone</span>
-              <h2>Plan smart. Match smarter.</h2>
-              <p>Our renovation tools are free, no signup wall. Use them before you decide to engage anyone.</p>
-            </div>
-
-            <div className="tools-grid">
-              <div className="tool-card">
-                <span className="tool-card-tag">AI Render</span>
-                <h3>Room Designer</h3>
-                <p>Upload your room. See it transformed in 6 styles in 5 minutes. No commitment.</p>
-                <a href="/render-tool" className="tool-card-cta">Try Room Designer →</a>
-              </div>
-              <div className="tool-card">
-                <span className="tool-card-tag">Calculator</span>
-                <h3>Cost Guide</h3>
-                <p>Itemised renovation cost breakdown by room, scope, and finish quality. Honest numbers.</p>
-                <a href="/cost-guide" className="tool-card-cta">Calculate budget →</a>
-              </div>
-              <div className="tool-card">
-                <span className="tool-card-tag">3D Planner</span>
-                <h3>Layout Planner</h3>
-                <p>Convert any floor plan to 3D. Drag furniture, test layouts. Plan visually.</p>
-                <a href="/floorplan3d" className="tool-card-cta">Plan layout →</a>
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* ── TOOLS — same FreeTools section as /get-matched ─── */}
+        {/* Wrapped in a div with id="tools" so the in-page #tools anchor
+            in the nav still scrolls to this section (FreeTools itself
+            doesn't carry the id). */}
+        <div id="tools">
+          <FreeTools />
+        </div>
 
         {/* ── FINAL CTA ──────────────────────────────────────── */}
         <section className="final-cta">
