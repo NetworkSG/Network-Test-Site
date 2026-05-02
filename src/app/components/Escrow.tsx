@@ -403,12 +403,16 @@ export function Escrow() {
           </div>
         </section>
 
-        {/* ── TOOLS — same FreeTools section as /get-matched ─── */}
-        {/* Wrapped in a div with id="tools" so the in-page #tools anchor
-            in the nav still scrolls to this section (FreeTools itself
-            doesn't carry the id). */}
+        {/* ── TOOLS — same dark-card visual as /get-matched, but
+              keeps the original /escrow header copy + lead-page bg. */}
         <div id="tools">
-          <FreeTools />
+          <FreeTools
+            eyebrow="Free for everyone"
+            headingPrimary="Plan smart."
+            headingSecondary="Match smarter."
+            description="Our renovation tools are free, no signup wall. Use them before you decide to engage anyone."
+            background="var(--bg)"
+          />
         </div>
 
         {/* ── FINAL CTA ──────────────────────────────────────── */}

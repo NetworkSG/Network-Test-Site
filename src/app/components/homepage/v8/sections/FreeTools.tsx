@@ -50,21 +50,38 @@ function ArrowIcon() {
   );
 }
 
-export function FreeTools() {
+// Optional overrides for callers that want the same dark-card grid but
+// with their own section header / background. /get-matched uses the
+// defaults; /escrow passes its own copy + cream tone.
+export interface FreeToolsProps {
+  eyebrow?: string;
+  headingPrimary?: string;
+  headingSecondary?: string;
+  description?: string;
+  background?: string;
+}
+
+export function FreeTools({
+  eyebrow = "Free tools",
+  headingPrimary = "Start Planning",
+  headingSecondary = "Before You Commit",
+  description = "Not ready to meet designers yet? Use our free tools to understand your budget and visualize your space first - at your own pace.",
+  background = C.cream,
+}: FreeToolsProps = {}) {
   return (
-    <section className="px-6 md:px-10 py-[72px] md:py-[100px]" style={{ background: C.cream }}>
+    <section className="px-6 md:px-10 py-[72px] md:py-[100px]" style={{ background }}>
       <div className="max-w-[1280px] mx-auto">
         <FadeIn className="text-center mb-6">
-          <TagLabel>Free tools</TagLabel>
+          <TagLabel>{eyebrow}</TagLabel>
         </FadeIn>
         <FadeIn delay={0.05} className="text-center mb-4">
           <h2 className="font-normal leading-[1.15] max-w-[700px] mx-auto" style={{ fontFamily: "'EB Garamond', Georgia, serif", color: C.black, fontSize: "clamp(32px, 3.5vw, 52px)", letterSpacing: "-0.01em" }}>
-            Start Planning <span style={{ color: C.gray }}>Before You Commit</span>
+            {headingPrimary}{headingSecondary ? <> <span style={{ color: C.gray }}>{headingSecondary}</span></> : null}
           </h2>
         </FadeIn>
         <FadeIn delay={0.08} className="text-center mb-14">
           <p className="text-[15px] font-normal leading-[1.75] max-w-[560px] mx-auto" style={{ color: C.gray, fontFamily: sans }}>
-            Not ready to meet designers yet? Use our free tools to understand your budget and visualize your space first - at your own pace.
+            {description}
           </p>
         </FadeIn>
 
