@@ -42,7 +42,9 @@ const SLUG = (process.argv.slice(2).find((a) => a.startsWith("--slug=")) || "").
 const isOurUrl = (u) => typeof u === "string" && u.startsWith(`${SUPABASE_URL}/storage/v1/object/public/`);
 async function head(u) { try { const r = await fetch(u, {method:"HEAD"}); return r.ok; } catch { return false; } }
 
-// Mirror of classifyFloorPlan in src/app/utils/floor-plan-detect.ts.
+// Floor-plan classifier. Same shape as src/app/utils/floor-plan-detect.ts but
+// with a relaxed "ink" test so it catches modern light-gray-line plans, not
+// just black-ink-on-white. Photos still fail on lowSat / nearWhite.
 async function isFloorPlan(url) {
   try {
     const res = await fetch(url);
@@ -51,19 +53,22 @@ async function isFloorPlan(url) {
     const W = 60;
     const meta = await sharp(buf).metadata();
     const H = Math.max(1, Math.round((W * (meta.height || 1)) / Math.max(1, meta.width || 1)));
-    const { data } = await sharp(buf).resize(W, H, { fit: "fill" }).raw().toBuffer({ resolveWithObject: true });
-    let lowSat = 0, nearWhite = 0, dark = 0, total = 0;
-    for (let i = 0; i < data.length; i += meta.channels || 3) {
+    const { data, info } = await sharp(buf).resize(W, H, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const ch = info.channels;
+    let lowSat = 0, nearWhite = 0, ink = 0, total = 0;
+    for (let i = 0; i < data.length; i += ch) {
       const R = data[i], G = data[i + 1], B = data[i + 2];
       const max = Math.max(R, G, B), min = Math.min(R, G, B);
       const sat = max === 0 ? 0 : (max - min) / max;
       if (sat < 0.1) lowSat++;
       if (R >= 235 && G >= 235 && B >= 235) nearWhite++;
-      if (max < 90) dark++;
+      // "ink" = any non-near-white grayscale pixel. Captures both classic
+      // black ink and modern light-gray CAD lines.
+      if (max < 200) ink++;
       total++;
     }
     const t = Math.max(1, total);
-    return lowSat / t >= 0.95 && nearWhite / t >= 0.4 && dark / t >= 0.005;
+    return lowSat / t >= 0.95 && nearWhite / t >= 0.4 && ink / t >= 0.02;
   } catch (err) {
     return false;
   }
