@@ -6,11 +6,13 @@ import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
-// Hero image: a warm-toned interior from a real Qanvast-imported project
-// (Divine & Glitz / Aalto). Served through Supabase's native image transform
-// so the browser gets a right-sized WebP via the Accept header.
+// Hero image: a warm-toned interior from a real Qanvast-imported project.
+// Picked algorithmically by warmth + low center-window across the active
+// designer pool — wood-slatted feature wall with cove lighting, no windows.
+// Served through Supabase's native image transform so the browser gets a
+// right-sized WebP via the Accept header.
 const heroPhoto =
-  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/1c453438-da3c-46ad-a26e-888d43a17880.jpeg?width=1600&quality=80";
+  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/c9fc3c43-921b-43ca-b46e-c6f67f81d9f3.jpeg?width=1600&quality=80";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
