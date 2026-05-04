@@ -5,7 +5,12 @@ import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Lo
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
-import heroPhoto from "figma:asset/51afa0ea316295d8d1d824fcab3b3afbe1092843.webp";
+
+// Hero image: a warm-toned interior from a real Qanvast-imported project
+// (Divine & Glitz / Aalto). Served through Supabase's native image transform
+// so the browser gets a right-sized WebP via the Accept header.
+const heroPhoto =
+  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/1c453438-da3c-46ad-a26e-888d43a17880.jpeg?width=1600&quality=80";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
