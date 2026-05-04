@@ -5,14 +5,6 @@ import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Lo
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
-
-// Hero image: a warm-toned interior from a real Qanvast-imported project.
-// Picked algorithmically by warmth + low center-window across the active
-// designer pool — wood-slatted feature wall with cove lighting, no windows.
-// Served through Supabase's native image transform so the browser gets a
-// right-sized WebP via the Accept header.
-const heroPhoto =
-  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/94ab90d9-21c9-447d-9da2-7f038f55c1bd.jpeg?width=1600&quality=80";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
@@ -532,85 +524,60 @@ export function DesignersDirectory() {
       <div className="min-h-screen relative overflow-x-clip" style={{ background: C.cream }}>
         <HomepageNav />
 
-        {/* ─── HERO PHOTO BAND ─── */}
-        <section className="pt-8 md:pt-12 px-6 md:px-10">
-          <div className="max-w-[1280px] mx-auto">
+        {/* ─── HERO ─── */}
+        <section className="pt-16 md:pt-24 pb-12 md:pb-16 px-6 md:px-10">
+          <div className="max-w-[1280px] mx-auto text-center">
             <FadeIn>
-              <div
-                className="relative overflow-hidden"
-                style={{ borderRadius: 24, height: "clamp(360px, 48vw, 480px)" }}
-              >
-                <img
-                  src={heroPhoto}
-                  alt="Interior design inspiration"
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/35" />
-                <div className="relative h-full flex flex-col items-center justify-center text-center px-6 md:px-10">
-                  <p
-                    className="mb-4"
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.85)",
-                      fontFamily: sans,
-                    }}
-                  >
-                    Interior Designers
-                  </p>
-                  <h1
-                    className="font-normal leading-[1.1] mb-1"
-                    style={{ fontFamily: serif, color: C.white, fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
-                  >
-                    Find Your Designer
-                  </h1>
-                  <p
-                    className="font-normal leading-[1.1] mb-5 md:mb-6"
-                    style={{ fontFamily: serif, color: "rgba(255,255,255,0.85)", fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
-                  >
-                    Browse & Compare
-                  </p>
-                  <p
-                    className="text-[14px] md:text-[16px] max-w-[560px] leading-[1.6]"
-                    style={{ fontFamily: sans, color: "rgba(255,255,255,0.88)" }}
-                  >
-                    Explore our curated directory of verified interior designers. Filter by style, budget, and property type to find your perfect match.
-                  </p>
-                </div>
-              </div>
+              <TagLabel>Interior Designers</TagLabel>
             </FadeIn>
 
-            {/* Floating search card overlapping the photo's bottom edge */}
-            <FadeIn delay={0.1}>
-              <div
-                className="relative z-10 mx-auto"
-                style={{ marginTop: -32, maxWidth: 720 }}
+            <FadeIn delay={0.05}>
+              <h1
+                className="font-normal leading-[1.15] mt-5 mb-2"
+                style={{ fontFamily: serif, color: C.black, fontSize: "clamp(36px, 4vw, 56px)", letterSpacing: "-0.02em" }}
               >
-                <div
-                  className="relative"
-                  style={{
-                    background: C.white,
-                    border: `1px solid ${C.creamBorder}`,
-                    borderRadius: 100,
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: C.grayLight }} />
+                Find Your Designer
+              </h1>
+              <p
+                className="font-normal leading-[1.15] mb-6 md:mb-8"
+                style={{ fontFamily: serif, color: C.gray, fontSize: "clamp(36px, 4vw, 56px)", letterSpacing: "-0.02em" }}
+              >
+                Browse & Compare
+              </p>
+            </FadeIn>
+
+            <FadeIn delay={0.1}>
+              <p
+                className="text-[15px] md:text-[17px] max-w-[520px] mx-auto leading-[1.65] mb-10 md:mb-14"
+                style={{ fontFamily: sans, color: C.gray }}
+              >
+                Explore our curated directory of verified interior designers. Filter by style, budget, and property type to find your perfect match.
+              </p>
+            </FadeIn>
+
+            {/* Search bar */}
+            <FadeIn delay={0.15}>
+              <div className="max-w-[640px] mx-auto">
+                <div className="relative">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: C.grayLight }} />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search by name, style, or location..."
-                    className="w-full h-[60px] rounded-[100px] pl-14 pr-12 text-[15px] focus:outline-none bg-transparent"
+                    className="w-full h-[52px] rounded-[10px] pl-13 pr-5 text-[15px] focus:outline-none transition-colors"
                     style={{
+                      background: C.white,
+                      border: `1px solid ${C.creamBorder}`,
                       fontFamily: sans,
                       color: C.black,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                     }}
+                    onFocus={(e) => { e.target.style.borderColor = C.black; }}
+                    onBlur={(e) => { e.target.style.borderColor = C.creamBorder; }}
                   />
                   {search && (
-                    <button onClick={() => setSearch("")} className="absolute right-6 top-1/2 -translate-y-1/2 cursor-pointer">
+                    <button onClick={() => setSearch("")} className="absolute right-5 top-1/2 -translate-y-1/2 cursor-pointer">
                       <X className="w-4 h-4 transition-colors" style={{ color: C.grayLight }} />
                     </button>
                   )}
@@ -621,13 +588,13 @@ export function DesignersDirectory() {
         </section>
 
         {/* ─── FILTERS + GRID ─── */}
-        <section className="px-6 md:px-10 pt-10 md:pt-14 pb-20 md:pb-28">
+        <section className="px-6 md:px-10 pb-20 md:pb-28">
           <div className="max-w-[1280px] mx-auto">
             {/* Filter bar — Desktop */}
             <FadeIn delay={0.05}>
-              <div className="hidden md:flex items-center justify-between mb-8 flex-wrap gap-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-[6px] mr-2 flex-wrap">
+              <div className="hidden md:flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-[6px] mr-2">
                     {PROPERTY_FILTERS.map((f) => (
                       <button
                         key={f}
