@@ -585,6 +585,10 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
       setError("Please fill in your name and contact number.");
       return;
     }
+    if (!/^\d{8}$/.test(form.phone.trim())) {
+      setError("Contact number must be exactly 8 digits.");
+      return;
+    }
     setError("");
     setStep(2);
   };
