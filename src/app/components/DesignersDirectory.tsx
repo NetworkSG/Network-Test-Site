@@ -12,7 +12,7 @@ import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 // Served through Supabase's native image transform so the browser gets a
 // right-sized WebP via the Accept header.
 const heroPhoto =
-  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/c9fc3c43-921b-43ca-b46e-c6f67f81d9f3.jpeg?width=1600&quality=80";
+  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/94ab90d9-21c9-447d-9da2-7f038f55c1bd.jpeg?width=1600&quality=80";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
