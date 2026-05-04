@@ -7,6 +7,7 @@ import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
 import { trackLead } from "@/app/utils/metaPixel";
+import { isValid8DigitPhone } from "../../../../utils/phone-validation";
 
 import photo1 from "figma:asset/607f6408c4c8fd9005fe7498e2284a7b2995acda.webp";
 import photo2 from "figma:asset/561c829472a0cac14a59bfb33e444dc4e0ed8350.webp";
@@ -286,20 +287,20 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                           <label className="block mb-2" style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: C.grayLight, fontFamily: sans }}>Phone</label>
                           <div className="flex">
                             <span className="inline-flex items-center justify-center h-[48px] px-3.5 text-[14px] font-normal shrink-0"
-                              style={{ background: C.creamDark, borderTop: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : C.creamBorder}`, borderBottom: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : C.creamBorder}`, borderLeft: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : C.creamBorder}`, borderRadius: "10px 0 0 10px", color: C.grayLight, fontFamily: sans }}>+65</span>
+                              style={{ background: C.creamDark, borderTop: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : C.creamBorder}`, borderBottom: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : C.creamBorder}`, borderLeft: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : C.creamBorder}`, borderRadius: "10px 0 0 10px", color: C.grayLight, fontFamily: sans }}>+65</span>
                             <div className="relative flex-1">
                               <input type="tel" required maxLength={8} value={form.phone} onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 8); setForm({ ...form, phone: v }); }}
                                 onBlur={() => setTouched(t => ({ ...t, phone: true }))}
                                 placeholder="9123 4567" autoComplete="tel"
                                 className="w-full h-[48px] px-4 pr-10 text-[14px] font-normal focus-visible:outline-none transition-all"
-                                style={{ background: C.cream, borderTop: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : touched.phone && isValidSGPhone(form.phone) ? C.black : C.creamBorder}`, borderBottom: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : touched.phone && isValidSGPhone(form.phone) ? C.black : C.creamBorder}`, borderRight: `1px solid ${touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) ? "#c14" : touched.phone && isValidSGPhone(form.phone) ? C.black : C.creamBorder}`, borderLeft: "none", borderRadius: "0 10px 10px 0", color: C.black, fontFamily: sans }}
+                                style={{ background: C.cream, borderTop: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : touched.phone && isValid8DigitPhone(form.phone) ? C.black : C.creamBorder}`, borderBottom: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : touched.phone && isValid8DigitPhone(form.phone) ? C.black : C.creamBorder}`, borderRight: `1px solid ${touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) ? "#c14" : touched.phone && isValid8DigitPhone(form.phone) ? C.black : C.creamBorder}`, borderLeft: "none", borderRadius: "0 10px 10px 0", color: C.black, fontFamily: sans }}
                               />
-                              {touched.phone && isValidSGPhone(form.phone) && (
+                              {touched.phone && isValid8DigitPhone(form.phone) && (
                                 <svg className="absolute right-3 top-1/2 -translate-y-1/2" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17L4 12" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                               )}
                             </div>
                           </div>
-                          {touched.phone && form.phone.length > 0 && !isValidSGPhone(form.phone) && (
+                          {touched.phone && form.phone.length > 0 && !isValid8DigitPhone(form.phone) && (
                             <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>
                               Phone number must be exactly 8 digits.
                             </p>
