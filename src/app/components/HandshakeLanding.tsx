@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validation";
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "motion/react";
 import { supabase } from "./supabaseClient";
 import { sendToZapier } from "@/app/utils/zapier";
@@ -877,9 +878,9 @@ function LeadCaptureForm() {
       toast.error("Please fill in all fields before submitting.");
       return;
     }
-    if (form.whatsapp.length !== 8) {
+    if (!isValid8DigitPhone(form.whatsapp)) {
       setWhatsappTouched(true);
-      toast.error("Please enter a valid 8-digit Singapore number.");
+      toast.error(PHONE_ERROR_MESSAGE);
       return;
     }
     setLoading(true);

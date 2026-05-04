@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validation";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
@@ -85,6 +86,7 @@ function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const handleSignup = useCallback(async () => {
     if (!form.name || !form.email || !form.password || !form.contactNumber || !form.keyCollectionPeriod) { setError("All fields are required"); return; }
     if (form.password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (!isValid8DigitPhone(form.contactNumber)) { setError(PHONE_ERROR_MESSAGE); return; }
     setLoading(true); setError("");
     try {
       const sanitizedForm = { ...form, name: sanitizeInput(form.name || "", 100), email: sanitizeEmail(form.email || ""), contactNumber: sanitizeInput(form.contactNumber || "", 20) };

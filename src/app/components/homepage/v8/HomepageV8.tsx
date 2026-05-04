@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../../../utils/phone-validation";
 import { ReactLenis } from "lenis/react";
 import { useInView, motion, AnimatePresence } from "motion/react";
 import { C, sans, Divider } from "./primitives";
@@ -129,6 +130,13 @@ export function HomepageV8() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || isSubmitting) return;
+    if (!isValid8DigitPhone(form.phone)) {
+      // Inline validation in HeroSection shows a tooltip-style error under
+      // the phone input. Just block submission silently here.
+      const phoneInput = (e.currentTarget as HTMLFormElement).querySelector('input[type="tel"]') as HTMLInputElement | null;
+      phoneInput?.focus();
+      return;
+    }
     setIsSubmitting(true);
     setTimeout(() => { setIsSubmitting(false); setFormState("qualifying"); }, 600);
   };

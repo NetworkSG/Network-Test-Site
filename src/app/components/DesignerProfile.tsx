@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, createContext, useContext, useMemo } from "react";
+import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validation";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, Link } from "react-router";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
@@ -585,8 +586,8 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
       setError("Please fill in your name and contact number.");
       return;
     }
-    if (!/^\d{8}$/.test(form.phone.trim())) {
-      setError("Contact number must be exactly 8 digits.");
+    if (!isValid8DigitPhone(form.phone)) {
+      setError(PHONE_ERROR_MESSAGE);
       return;
     }
     setError("");

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validation";
 import { createPortal } from "react-dom";
 import { useParams, useNavigate, Link } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
@@ -756,8 +757,17 @@ function LeadFormCard({ firmName }: { firmName: string }) {
   const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "" });
 
+  const [phoneError, setPhoneError] = useState("");
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValid8DigitPhone(form.phone)) {
+      setPhoneError(PHONE_ERROR_MESSAGE);
+      const phoneInput = (e.currentTarget as HTMLFormElement).querySelector('input[type="tel"]') as HTMLInputElement | null;
+      phoneInput?.focus();
+      return;
+    }
+    setPhoneError("");
     setSubmitted(true);
   };
 
@@ -794,7 +804,12 @@ function LeadFormCard({ firmName }: { firmName: string }) {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-5">
             <LeadField label="Name" type="text" placeholder="Your full name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-            <LeadPhoneField value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
+            <div>
+              <LeadPhoneField value={form.phone} onChange={(v) => { setForm({ ...form, phone: v }); if (phoneError) setPhoneError(""); }} />
+              {phoneError && (
+                <p className="mt-1.5 text-[11px]" style={{ color: "#c14", fontFamily: sans }}>{phoneError}</p>
+              )}
+            </div>
             <LeadField label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={(v) => setForm({ ...form, email: v })} required />
             <div className="grid grid-cols-2 gap-3">
               <LeadSelect label="Property Type" value={form.propertyType} options={["HDB", "Condominium", "Landed", "Commercial"]} onChange={(v) => setForm({ ...form, propertyType: v })} />
