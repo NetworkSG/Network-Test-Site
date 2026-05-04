@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2 } from "lucide-react";
+import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2, Bookmark } from "lucide-react";
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
@@ -313,159 +313,110 @@ function MultiCheckboxDropdown({
 /* ─── DESIGNER CARD ─── */
 function DesignerCardComponent({ designer, index }: { designer: DesignerCard; index: number }) {
   const navigate = useNavigate();
-  const logoSrc = designer.logo ? resolveAsset(designer.logo) : PLACEHOLDER_LOGO;
-  const initial = designer.name?.charAt(0)?.toUpperCase() || "?";
+  const [saved, setSaved] = useState(false);
 
   return (
     <FadeIn delay={index * 0.04}>
       <div
         onClick={() => navigate(`/designer/${designer.slug}`)}
-        className="group cursor-pointer rounded-[16px] overflow-hidden transition-shadow duration-300 hover:shadow-[0_4px_24px_rgba(0,0,0,0.08)]"
-        style={{
-          background: C.white,
-          border: `1px solid ${C.creamBorder}`,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-        }}
+        className="group cursor-pointer transition-all duration-300 hover:-translate-y-1"
       >
         {/* Cover image */}
-        <div className="relative h-[220px] overflow-hidden">
+        <div
+          className="relative h-[240px] overflow-hidden"
+          style={{
+            background: C.cream,
+            border: `1px solid ${C.creamBorder}`,
+            borderRadius: 18,
+          }}
+        >
           <ImageWithFallback
             src={resolveAsset(designer.image)}
             alt={designer.name}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
 
-          {/* Verified badge */}
+          {/* Bookmark — circle on top-right */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setSaved((s) => !s); }}
+            aria-label={saved ? "Remove from saved" : "Save designer"}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/95 backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
+            style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
+          >
+            <Bookmark
+              className="w-[16px] h-[16px]"
+              style={{
+                color: saved ? C.black : C.gray,
+                fill: saved ? C.black : "none",
+              }}
+            />
+          </button>
+
+          {/* Verified badge — top-left */}
           {designer.verified && (
             <div
-              className="absolute top-3 left-3 rounded-[100px] px-3 py-[5px] flex items-center gap-1.5"
-              style={{ background: C.cream, border: `1px solid ${C.creamBorder}` }}
+              className="absolute top-3 left-3 rounded-[100px] px-2.5 py-[4px] flex items-center gap-1"
+              style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
                 <path d="M7 0L8.57 2.52L11.55 1.91L11.09 4.91L13.67 6.36L11.45 8.22L12.33 11.11L9.48 10.16L7.5 12.68L6.22 10L3.33 10.68L3.89 7.69L1.33 6L3.71 4.36L3.12 1.36L5.99 2.27L7 0Z" fill={C.black}/>
               </svg>
-              <span className="text-[11px] font-semibold" style={{ fontFamily: sans, color: C.black }}>Verified</span>
+              <span className="text-[10px] font-semibold" style={{ fontFamily: sans, color: C.black }}>Verified</span>
             </div>
           )}
 
-          {/* Project count pill */}
+          {/* Project count — bottom-left */}
           {designer.projects > 0 && (
-            <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm rounded-[100px] px-3 py-[5px]">
-              <span className="text-[12px] font-medium" style={{ fontFamily: sans, color: C.black }}>
-                {designer.projects} projects
+            <div
+              className="absolute bottom-3 left-3 rounded-[100px] px-2.5 py-[4px]"
+              style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
+            >
+              <span className="text-[11px] font-semibold" style={{ fontFamily: sans, color: C.black }}>
+                {designer.projects} project{designer.projects !== 1 ? "s" : ""}
               </span>
             </div>
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-5 pb-6">
-          {/* Logo + Name + Rating row */}
-          <div className="flex items-start gap-3 mb-2">
-            <img
-              src={logoSrc}
-              alt=""
-              className="size-[36px] rounded-full object-cover shrink-0"
-              style={{ border: `1px solid ${C.creamBorder}` }}
-              onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_LOGO; }}
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h3
-                  className="text-[20px] font-normal leading-[1.2] line-clamp-1"
-                  style={{ fontFamily: serif, color: C.black }}
-                >
-                  {designer.name}
-                </h3>
-                {designer.rating > 0 && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Star className="w-[14px] h-[14px] fill-[#FFA929] text-[#FFA929]" />
-                    <span className="font-medium text-[14px]" style={{ fontFamily: sans, color: C.black }}>{designer.rating}</span>
-                    {designer.reviews > 0 && (
-                      <span className="text-[12px]" style={{ fontFamily: sans, color: C.grayLight }}>({designer.reviews})</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Tagline */}
-          {designer.tagline && (
-            <p
-              className="text-[14px] leading-[1.5] mb-4 line-clamp-2"
-              style={{ fontFamily: sans, color: C.gray }}
+        {/* Compact metadata row beneath the photo */}
+        <div className="flex items-start justify-between gap-3 px-1 pt-3.5">
+          <div className="min-w-0 flex-1">
+            <h3
+              className="text-[16px] font-semibold leading-[1.2] mb-1 line-clamp-1"
+              style={{ fontFamily: sans, color: C.black, letterSpacing: "-0.01em" }}
             >
-              {designer.tagline}
-            </p>
-          )}
-
-          {/* Location */}
-          {designer.location && (
-            <div className="flex items-center gap-1.5 mb-4 min-w-0">
-              <MapPin className="w-[14px] h-[14px] shrink-0" style={{ color: C.grayLight }} />
-              <span
-                className="text-[13px] truncate min-w-0"
-                style={{ fontFamily: sans, color: C.gray }}
-                title={designer.location}
-              >{designer.location}</span>
-              {designer.yearsActive > 0 && (
-                <span className="text-[13px] ml-1 shrink-0" style={{ fontFamily: sans, color: C.grayLight }}>{designer.yearsActive} yrs</span>
-              )}
-            </div>
-          )}
-
-          {/* Accreditations row — show 2 inline, hide the rest behind a +N pill (hover for full list). */}
-          {designer.accreditations.length > 0 && (
-            <div className="flex flex-wrap gap-[6px] mb-5">
-              {designer.accreditations.slice(0, 2).map((a) => (
-                <span
-                  key={a}
-                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium inline-flex items-center gap-1"
-                  style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.black }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#22c55e" }}>
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  {a}
-                </span>
-              ))}
-              {designer.accreditations.length > 2 && (
-                <span
-                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium cursor-help"
-                  style={{ background: C.white, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.gray }}
-                  title={designer.accreditations.slice(2).join(" · ")}
-                >
-                  +{designer.accreditations.length - 2} more
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Budget + CTA row */}
-          <div className="flex items-center justify-between pt-4" style={{ borderTop: `1px solid ${C.creamBorder}` }}>
-            <div>
-              {designer.budget && (
+              {designer.name}
+            </h3>
+            <p
+              className="text-[12px] leading-[1.4] line-clamp-1 truncate"
+              style={{ fontFamily: sans, color: C.grayLight }}
+              title={designer.location}
+            >
+              {designer.location || "Singapore"}
+              {designer.rating > 0 && (
                 <>
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-[0.1em]"
-                    style={{ fontFamily: sans, color: C.grayLight }}
-                  >
-                    Budget range
-                  </span>
-                  <p className="text-[14px] font-medium" style={{ fontFamily: sans, color: C.black }}>{designer.budget}</p>
+                  {" · "}
+                  <span style={{ color: C.gray }}>★ {designer.rating}</span>
+                  {designer.reviews > 0 && (
+                    <span> ({designer.reviews})</span>
+                  )}
                 </>
               )}
-            </div>
-            <button
-              className="flex items-center gap-1.5 px-5 py-[9px] text-[13px] font-medium rounded-[12px] transition-all hover:opacity-85 active:scale-[0.98]"
-              style={{ background: C.black, color: C.white, fontFamily: sans }}
-            >
-              View Profile
-              <ArrowRight className="w-[14px] h-[14px]" />
-            </button>
+            </p>
           </div>
+          {designer.budget && (
+            <div className="text-right shrink-0">
+              <p className="text-[15px] font-semibold leading-[1.2]" style={{ fontFamily: sans, color: C.black }}>
+                {designer.budget}
+              </p>
+              <p
+                className="text-[10px] font-medium uppercase tracking-[0.08em] mt-1"
+                style={{ fontFamily: sans, color: C.grayLight }}
+              >
+                Budget range
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </FadeIn>
