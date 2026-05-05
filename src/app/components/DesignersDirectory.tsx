@@ -313,9 +313,9 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
         onClick={() => navigate(`/designer/${designer.slug}`)}
         className="group cursor-pointer transition-all duration-300 hover:-translate-y-1"
       >
-        {/* Cover image */}
+        {/* Cover image — full card with info card overlay on the right */}
         <div
-          className="relative h-[240px] overflow-hidden"
+          className="relative h-[340px] overflow-hidden"
           style={{
             background: C.cream,
             border: `1px solid ${C.creamBorder}`,
@@ -332,7 +332,7 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
           <button
             onClick={(e) => { e.stopPropagation(); setSaved((s) => !s); }}
             aria-label={saved ? "Remove from saved" : "Save designer"}
-            className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center bg-white/95 backdrop-blur-sm transition-transform hover:scale-105 active:scale-95"
+            className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center bg-white/95 backdrop-blur-sm transition-transform hover:scale-105 active:scale-95 z-10"
             style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
           >
             <Bookmark
@@ -347,7 +347,7 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
           {/* Verified badge — top-left */}
           {designer.verified && (
             <div
-              className="absolute top-3 left-3 rounded-[100px] px-2.5 py-[4px] flex items-center gap-1"
+              className="absolute top-4 left-4 rounded-[100px] px-2.5 py-[4px] flex items-center gap-1"
               style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
             >
               <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
@@ -357,10 +357,10 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
             </div>
           )}
 
-          {/* Project count — bottom-left */}
+          {/* Project count — top-left under verified */}
           {designer.projects > 0 && (
             <div
-              className="absolute bottom-3 left-3 rounded-[100px] px-2.5 py-[4px]"
+              className={`absolute ${designer.verified ? "top-12" : "top-4"} left-4 rounded-[100px] px-2.5 py-[4px]`}
               style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
             >
               <span className="text-[11px] font-semibold" style={{ fontFamily: sans, color: C.black }}>
@@ -368,19 +368,26 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
               </span>
             </div>
           )}
-        </div>
 
-        {/* Compact metadata row beneath the photo */}
-        <div className="flex items-start justify-between gap-3 px-1 pt-3.5">
-          <div className="min-w-0 flex-1">
+          {/* Floating info card pinned to the right of the photo */}
+          <div
+            className="absolute bottom-5 right-5 max-w-[58%] p-4"
+            style={{
+              background: "rgba(255,255,255,0.96)",
+              backdropFilter: "blur(8px)",
+              border: `1px solid rgba(255,255,255,0.6)`,
+              borderRadius: 14,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
+            }}
+          >
             <h3
-              className="text-[16px] font-semibold leading-[1.2] mb-1 line-clamp-1"
+              className="text-[17px] font-semibold leading-[1.2] mb-1 line-clamp-1"
               style={{ fontFamily: sans, color: C.black, letterSpacing: "-0.01em" }}
             >
               {designer.name}
             </h3>
             <p
-              className="text-[12px] leading-[1.4] line-clamp-1 truncate"
+              className="text-[12px] leading-[1.4] line-clamp-1 truncate mb-2"
               style={{ fontFamily: sans, color: C.grayLight }}
               title={designer.location}
             >
@@ -389,26 +396,27 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
                 <>
                   {" · "}
                   <span style={{ color: C.gray }}>★ {designer.rating}</span>
-                  {designer.reviews > 0 && (
-                    <span> ({designer.reviews})</span>
-                  )}
+                  {designer.reviews > 0 && <span> ({designer.reviews})</span>}
                 </>
               )}
             </p>
-          </div>
-          {designer.budget && (
-            <div className="text-right shrink-0">
-              <p className="text-[15px] font-semibold leading-[1.2]" style={{ fontFamily: sans, color: C.black }}>
-                {designer.budget}
-              </p>
-              <p
-                className="text-[10px] font-medium uppercase tracking-[0.08em] mt-1"
-                style={{ fontFamily: sans, color: C.grayLight }}
+            {designer.budget && (
+              <div
+                className="flex items-center justify-between pt-2"
+                style={{ borderTop: `1px solid ${C.creamBorder}` }}
               >
-                Budget range
-              </p>
-            </div>
-          )}
+                <span
+                  className="text-[10px] font-medium uppercase tracking-[0.08em]"
+                  style={{ fontFamily: sans, color: C.grayLight }}
+                >
+                  Budget
+                </span>
+                <span className="text-[14px] font-semibold" style={{ fontFamily: sans, color: C.black }}>
+                  {designer.budget}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </FadeIn>
@@ -809,7 +817,7 @@ export function DesignersDirectory() {
                 </h3>
               </div>
             ) : filteredDesigners.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
                 {filteredDesigners.map((designer, i) => (
                   <DesignerCardComponent key={designer.id} designer={designer} index={i} />
                 ))}
