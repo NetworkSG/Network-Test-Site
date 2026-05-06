@@ -237,7 +237,14 @@ export function ProjectPage() {
   // Rich metadata
   const projectLocation = project?.location || "";
   const projectCost = project?.cost || "";
-  const projectSize = project?.size || "";
+  const rawProjectSize = project?.size || "";
+  // Forme3's data was entered in sqm but the numbers are actually sqft, per
+  // the firm's request. For Forme3 projects only, relabel the unit without
+  // touching the number.
+  const isForme3 = /forme[\s-]?3/i.test(firmSlug) || /forme[\s-]?3/i.test(firmName);
+  const projectSize = isForme3
+    ? rawProjectSize.replace(/\b(sqm|sq\s*m|m²|m2)\b/i, "sqft")
+    : rawProjectSize;
   const projectYear = project?.year || "";
   const projectPropertyType = project?.propertyTypeDisplay || project?.propertyType || "";
   const projectStyle = project?.style || "";
@@ -699,7 +706,7 @@ export function ProjectPage() {
                     </h3>
                     {p.meta && (
                       <p className="text-[12px]" style={{ color: C.gray, fontFamily: sans }}>
-                        {p.meta}
+                        {isForme3 ? p.meta.replace(/\b(sqm|sq\s*m|m²|m2)\b/gi, "sqft") : p.meta}
                       </p>
                     )}
                   </div>

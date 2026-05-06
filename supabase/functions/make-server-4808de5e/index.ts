@@ -200,6 +200,7 @@ const RATE_LIMITS: Record<string, number> = {
   "cost-guide": 5,          // 5 cost guide submissions per minute
   "designer-inquiry": 5,    // 5 designer inquiries per minute
   "zapier-proxy": 5,        // 5 webhook calls per minute
+  "pinterest-fetch": 6,     // 6 Pinterest board fetches per minute
   // --- Auth ---
   "signup": 3,              // 3 signups per minute (anti-bot)
   "login": 10,              // 10 login attempts per minute
@@ -1136,6 +1137,347 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
 
 // Upload a Cost Guide PDF (base64) to public storage, return its URL so the
 // client can forward it to Zapier along with the lead data.
+// Pinterest board fetch — calls Outscraper's Pinterest scraper to pull pin
+// data for a public board URL, then upgrades each image URL to the highest
+// available resolution (Pinterest's `originals/` size segment) so the
+// frontend can offer a high-quality bulk download. Falls back to a direct
+// Pinterest HTML scrape if the Outscraper key isn't configured.
+app.post("/make-server-4808de5e/pinterest-board/fetch", async (c) => {
+  try {
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "pinterest-fetch");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+
+    const body = await c.req.json().catch(() => null);
+    const rawUrl: string = typeof body?.url === "string" ? body.url.trim() : "";
+    const limit: number = Math.max(1, Math.min(500, Number(body?.limit) || 100));
+    if (!rawUrl) return c.json({ error: "Missing url" }, 400);
+
+    // Accept both pinterest.com/<user>/<board>/ and pin.it short links.
+    let boardUrl = rawUrl;
+    if (!/^https?:\/\//i.test(boardUrl)) boardUrl = "https://" + boardUrl;
+    let host = "";
+    try { host = new URL(boardUrl).host.toLowerCase(); }
+    catch { return c.json({ error: "Invalid url" }, 400); }
+    if (!/(^|\.)pinterest\.[a-z.]+$|(^|\.)pin\.it$/i.test(host)) {
+      return c.json({ error: "Not a Pinterest URL" }, 400);
+    }
+
+    // Pinterest serves each image at multiple sizes via i.pinimg.com/<size>/...
+    // Replacing the size segment with `originals` returns the highest-quality
+    // copy. The frontend then targets ~2048px on download.
+    const upgrade = (u: string): string => {
+      if (!u || typeof u !== "string") return u;
+      try {
+        const parsed = new URL(u);
+        if (!parsed.host.includes("pinimg.com")) return u;
+        parsed.pathname = parsed.pathname.replace(
+          /^\/(originals|236x|474x|736x|2048x|orig|\d+x|\d+x\d+)\//,
+          "/originals/",
+        );
+        return parsed.toString();
+      } catch { return u; }
+    };
+
+    let images: { id: string; url: string; alt?: string }[] = [];
+    let boardName = "";
+    let source: "pinterest-api" | "direct" = "direct";
+
+    // Browser-shaped headers — Pinterest serves the embedded JSON state and
+    // the public BoardFeedResource only to clients that look like real
+    // browsers. A generic User-Agent gets a stripped landing page.
+    const browserHeaders: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    };
+
+    // Helper — does this URL look like an actual *pin* image (not an avatar,
+    // store badge, or UI asset)?
+    const isPinUrl = (u: string): boolean => {
+      try {
+        const p = new URL(u);
+        if (!p.host.endsWith("pinimg.com")) return false;
+        const path = p.pathname;
+        if (/^\/(avatars|videos|customer_convo|business|favicons|logos)\//i.test(path)) return false;
+        if (!/[a-f0-9]{24,}\.(?:jpg|jpeg|png|gif|webp)$/i.test(path)) return false;
+        return true;
+      } catch { return false; }
+    };
+
+    // Step 1 — fetch the board HTML once to extract board_id (needed for
+    // the paginated BoardFeedResource calls) and board name.
+    let boardId = "";
+    let initialHtml = "";
+    try {
+      const initial = await fetch(boardUrl, { headers: browserHeaders, redirect: "follow" });
+      if (initial.ok) {
+        initialHtml = await initial.text();
+        const titleMatch = initialHtml.match(/<title>([^<]+)<\/title>/i);
+        if (titleMatch) boardName = titleMatch[1].replace(/\s*\|\s*Pinterest\s*$/i, "").trim();
+        // The board_id is embedded multiple places in the initial JSON.
+        // Match the explicit `"board_id":"123…"` shape and the more general
+        // `"id":"…","type":"board"` shape as a fallback.
+        const idMatch =
+          initialHtml.match(/"board_id"\s*:\s*"(\d{6,})"/) ||
+          initialHtml.match(/"id"\s*:\s*"(\d{6,})"\s*,\s*"type"\s*:\s*"board"/);
+        if (idMatch) boardId = idMatch[1];
+      }
+    } catch (err) {
+      console.log("Pinterest initial HTML fetch error:", String(err));
+    }
+
+    // Step 2 — if we have a board_id, paginate through BoardFeedResource.
+    // Pinterest's own UI uses this exact endpoint; it returns up to 25 pins
+    // per page plus a `bookmark` cursor that gets passed back to fetch the
+    // next batch. `-end-` means we've consumed every pin on the board.
+    if (boardId) {
+      try {
+        // Pinterest expects the URL path component in `source_url` — keep
+        // the URL pathname (e.g. /RNACREATIVECO/384a-yishun-ave-6/) intact.
+        const sourceUrl = (() => {
+          try { return new URL(boardUrl).pathname; } catch { return "/"; }
+        })();
+        let bookmark = "";
+        let safety = 0; // hard cap on pages so a misbehaving cursor can't loop
+        const seen = new Map<string, { id: string; url: string; alt?: string }>();
+        while (safety < 40 && seen.size < limit) {
+          safety++;
+          const dataPayload = {
+            options: {
+              board_id: boardId,
+              board_url: sourceUrl,
+              page_size: 25,
+              ...(bookmark ? { bookmarks: [bookmark] } : {}),
+            },
+            context: {},
+          };
+          const params = new URLSearchParams({
+            source_url: sourceUrl,
+            data: JSON.stringify(dataPayload),
+            _: String(Date.now()),
+          });
+          const feedUrl = `https://www.pinterest.com/resource/BoardFeedResource/get/?${params.toString()}`;
+          const r = await fetch(feedUrl, {
+            headers: {
+              ...browserHeaders,
+              "Accept": "application/json, text/javascript, */*; q=0.01",
+              "X-Requested-With": "XMLHttpRequest",
+              "X-Pinterest-AppState": "active",
+              "X-Pinterest-Source-Url": sourceUrl,
+              "Referer": boardUrl,
+            },
+          });
+          if (!r.ok) {
+            console.log("Pinterest BoardFeedResource HTTP", r.status);
+            break;
+          }
+          const j: any = await r.json().catch(() => null);
+          const pins: any[] = j?.resource_response?.data || [];
+          if (!Array.isArray(pins) || pins.length === 0) break;
+          for (const pin of pins) {
+            const img =
+              pin?.images?.orig?.url ||
+              pin?.images?.["736x"]?.url ||
+              pin?.images?.["474x"]?.url;
+            const id = typeof pin?.id === "string" ? pin.id : "";
+            if (typeof img === "string" && id && isPinUrl(img) && !seen.has(id)) {
+              seen.set(id, {
+                id,
+                url: upgrade(img),
+                alt: typeof pin.grid_title === "string" && pin.grid_title
+                  ? pin.grid_title
+                  : (typeof pin.description === "string" ? pin.description.slice(0, 140) : undefined),
+              });
+            }
+          }
+          const nextBookmark: string =
+            j?.resource_response?.bookmark ||
+            j?.resource?.options?.bookmarks?.[0] ||
+            "";
+          if (!nextBookmark || nextBookmark === "-end-" || nextBookmark === bookmark) break;
+          bookmark = nextBookmark;
+        }
+        for (const v of seen.values()) {
+          if (images.length >= limit) break;
+          images.push(v);
+        }
+        if (images.length > 0) source = "pinterest-api";
+      } catch (err) {
+        console.log("Pinterest BoardFeedResource error:", String(err));
+      }
+    }
+
+    // Fallback / supplement: scrape the public board HTML directly. Pinterest
+    // embeds initial state JSON inside <script id="__PWS_INITIAL_PROPS__">
+    // (and sometimes <script id="initial-state">). Pulling pins from that
+    // JSON is far more reliable than regex'ing every i.pinimg.com URL on the
+    // page — that approach grabs avatars, "More like this" recommendations,
+    // and logos along with the actual board.
+    if (images.length === 0) {
+      try {
+        const res = await fetch(boardUrl, {
+          headers: {
+            // Pinterest serves the embedded pin JSON only to clients it
+            // recognises as a real browser. A generic User-Agent gets a
+            // stripped landing page with no useful data.
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+          redirect: "follow",
+        });
+        if (res.ok) {
+          const html = await res.text();
+          // Title — best effort.
+          const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+          if (titleMatch && !boardName) boardName = titleMatch[1].replace(/\s*\|\s*Pinterest\s*$/i, "").trim();
+
+          // Helper — does this URL look like an actual *pin* image (not an
+          // avatar, store badge, or UI asset)?
+          const isPinUrl = (u: string): boolean => {
+            try {
+              const p = new URL(u);
+              if (!p.host.endsWith("pinimg.com")) return false;
+              const path = p.pathname;
+              // Block known non-pin paths.
+              if (/^\/(avatars|videos|customer_convo|business|favicons|logos)\//i.test(path)) return false;
+              // Pinterest pin filenames are 28+ char hex hashes. UI/branding
+              // assets and avatars don't match this pattern.
+              if (!/[a-f0-9]{24,}\.(?:jpg|jpeg|png|gif|webp)$/i.test(path)) return false;
+              return true;
+            } catch { return false; }
+          };
+
+          // Pass 1 — pull pin objects out of the embedded JSON state. Each
+          // pin entry has the canonical `images.orig.url`, which is exactly
+          // the file we want. We collect by pin id so duplicates from the
+          // multiple JSON blobs Pinterest ships collapse cleanly.
+          const seen = new Map<string, { id: string; url: string; alt?: string }>();
+          const scriptRe = /<script[^>]*(?:id="__PWS_INITIAL_PROPS__"|id="initial-state"|id="__PWS_DATA__"|type="application\/json")[^>]*>([\s\S]*?)<\/script>/gi;
+          let scriptMatch: RegExpExecArray | null;
+          // Walk the scripts, JSON.parse what we can, and collect pin-shaped
+          // objects (any { id, images: { orig: { url } } }). This is loose
+          // intentionally — Pinterest's bundle structure shifts often.
+          const collectPins = (node: any) => {
+            if (!node || typeof node !== "object") return;
+            if (Array.isArray(node)) { for (const v of node) collectPins(v); return; }
+            const orig = node?.images?.orig?.url || node?.images?.["736x"]?.url;
+            const id = node?.id || node?.pin_id;
+            if (typeof orig === "string" && typeof id === "string" && isPinUrl(orig)) {
+              if (!seen.has(id)) {
+                seen.set(id, {
+                  id,
+                  url: upgrade(orig),
+                  alt: typeof node.title === "string" && node.title
+                    ? node.title
+                    : (typeof node.description === "string" ? node.description.slice(0, 140) : undefined),
+                });
+              }
+            }
+            for (const k of Object.keys(node)) collectPins((node as any)[k]);
+          };
+          while ((scriptMatch = scriptRe.exec(html)) !== null) {
+            const raw = scriptMatch[1].trim();
+            if (!raw || raw.length < 200) continue;
+            try {
+              const parsed = JSON.parse(raw);
+              collectPins(parsed);
+            } catch { /* not JSON, skip */ }
+            if (seen.size >= limit) break;
+          }
+
+          // Pass 2 — only if the JSON pass found nothing, fall back to a
+          // strict regex over the whole HTML, still filtered by the pin-URL
+          // shape so we don't grab avatars or related-pin badges.
+          if (seen.size === 0) {
+            const re = /https:\/\/i\.pinimg\.com\/[^\s"'\\]+\.(?:jpg|jpeg|png|gif|webp)/gi;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(html)) !== null && seen.size < limit) {
+              if (!isPinUrl(m[0])) continue;
+              const upgraded = upgrade(m[0]);
+              // Use the file hash as the dedupe key so multiple sizes of the
+              // same pin don't show up twice.
+              const hash = (upgraded.match(/([a-f0-9]{24,})\.(?:jpg|jpeg|png|gif|webp)$/i) || [])[1] || upgraded;
+              if (!seen.has(hash)) seen.set(hash, { id: hash, url: upgraded });
+            }
+          }
+
+          for (const v of seen.values()) {
+            if (images.length >= limit) break;
+            images.push(v);
+          }
+        }
+      } catch (err) {
+        console.log("Pinterest direct scrape error:", String(err));
+      }
+    }
+
+    if (images.length === 0) {
+      return c.json({ error: "No images found. Make sure the board URL is public.", source }, 404);
+    }
+
+    return c.json({
+      board: { url: boardUrl, name: boardName || "Pinterest board", count: images.length },
+      images,
+      source,
+    });
+  } catch (err) {
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Pinterest image proxy — i.pinimg.com responses are not consistently
+// CORS-friendly when fetched directly from the browser, so we proxy them
+// through our function (same-origin) and stream the bytes back. Locked to
+// pinimg.com hosts to prevent the endpoint being used as a generic open
+// proxy.
+app.get("/make-server-4808de5e/pinterest-image-proxy", async (c) => {
+  try {
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "pinterest-fetch");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const target = c.req.query("url");
+    if (!target) return c.json({ error: "Missing url" }, 400);
+    let host = "";
+    try { host = new URL(target).host.toLowerCase(); }
+    catch { return c.json({ error: "Invalid url" }, 400); }
+    if (!host.endsWith("pinimg.com")) {
+      return c.json({ error: "Only pinimg.com URLs allowed" }, 400);
+    }
+
+    const upstream = await fetch(target, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": "https://www.pinterest.com/",
+      },
+      redirect: "follow",
+    });
+    if (!upstream.ok || !upstream.body) {
+      return c.json({ error: `Upstream returned ${upstream.status}` }, 502);
+    }
+    const contentType = upstream.headers.get("content-type") || "image/jpeg";
+    const contentLength = upstream.headers.get("content-length") || "";
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
+        "Cache-Control": "public, max-age=86400",
+        // The function host already sets a permissive ACAO via CORS middleware
+        // — repeating it explicitly here keeps it from being stripped by any
+        // intermediate streaming wrapper.
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  } catch (err) {
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 app.post("/make-server-4808de5e/cost-guide-upload", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
@@ -2067,6 +2409,13 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       // For updates, preserve certain fields from the existing profile
       const existingData = isUpdate ? (existing.data || {}) : {};
 
+      // Resolve a Google Place ID from the pasted Maps URL so the reviews
+      // resolver (which keys off `googlePlaceId`) can fetch via Outscraper.
+      // Falls back to the existing value on update if extraction fails.
+      const resolvedPlaceId = await extractPlaceIdFromMapsUrl(String(studio.googleMapsUrl || ""));
+      const googlePlaceId: string | undefined =
+        resolvedPlaceId || (isUpdate ? existingData.googlePlaceId : undefined);
+
       const profile: any = {
         name: String(studio.firmName || "").slice(0, 120),
         slug,
@@ -2078,6 +2427,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
           ...(isUpdate && existingData.images?.cover ? { cover: existingData.images.cover } : {}),
         },
         googleMapsLink: String(studio.googleMapsUrl || ""),
+        ...(googlePlaceId ? { googlePlaceId } : {}),
         contactEmail: email,
         // Preserve verified/active status for existing firms
         verified: isUpdate ? (existingData.verified ?? false) : false,
@@ -2122,6 +2472,17 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
       ].filter((r) => r.value);
 
       await saveDesignerProfile(slug, profile);
+
+      // Fire-and-forget Google Reviews seed when we have a (new or changed)
+      // place ID. The handler is best-effort — if Outscraper isn't configured
+      // or the call fails, we log and move on so the onboarding response
+      // doesn't get blocked on an external API.
+      if (googlePlaceId && googlePlaceId !== existingData.googlePlaceId) {
+        getOrRefreshGoogleReviews(slug, { forceRefresh: true })
+          .then((data) => console.log(`Seeded Google reviews on onboarding: slug=${slug} source=${data.source} count=${data.reviews.length}`))
+          .catch((e) => console.log(`Failed to seed Google reviews on onboarding for ${slug}:`, e));
+      }
+
       if (hasProject) {
         if (isUpdate) {
           // Append new project to existing projects list
@@ -6014,7 +6375,7 @@ type CachedGoogleReview = {
 };
 
 type CachedGoogleReviews = {
-  source: "google" | "mock" | "empty";
+  source: "outscraper" | "google" | "mock" | "empty";
   placeId: string | null;
   rating: number;
   totalRatings: number;
@@ -6132,6 +6493,141 @@ async function fetchFromGooglePlaces(placeId: string): Promise<CachedGoogleRevie
   }
 }
 
+// Best-effort extract a Google Maps identifier suitable for Outscraper's
+// `query` param. Returns one of (in order of preference):
+//   1. A ChIJ Place ID (cleanest; we store it as `googlePlaceId`)
+//   2. A numeric CID derived from the legacy hex FID (`!1s0x..:0x..`)
+//   3. The resolved final Maps URL (Outscraper also accepts URLs)
+// Handles short links (maps.app.goo.gl) by following one redirect and also
+// scans the response body. Returns null only if nothing usable was found.
+async function extractPlaceIdFromMapsUrl(input: string): Promise<string | null> {
+  const raw = (input || "").trim();
+  if (!raw) return null;
+  if (/^ChIJ[A-Za-z0-9_-]+$/.test(raw)) return raw;
+
+  const tryExtract = (s: string): string | null => {
+    const direct = s.match(/place_id[=:]([A-Za-z0-9_-]+)/i) || s.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
+    if (direct) return direct[1];
+    // Legacy hex FID: !1s0x...:0x<hex>  — convert second half to decimal CID
+    const fid = s.match(/!1s0x[a-f0-9]+:0x([a-f0-9]+)/i);
+    if (fid) {
+      try { return BigInt("0x" + fid[1]).toString(10); } catch { /* fall through */ }
+    }
+    return null;
+  };
+
+  const inline = tryExtract(raw);
+  if (inline) return inline;
+
+  try {
+    const res = await fetch(raw, { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" } });
+    const finalUrl = res.url || raw;
+    const fromUrl = tryExtract(finalUrl);
+    if (fromUrl) return fromUrl;
+    const text = await res.text().catch(() => "");
+    const fromBody = tryExtract(text) ||
+      (text.match(/"(ChIJ[A-Za-z0-9_-]{10,})"/) || [])[1] ||
+      null;
+    if (fromBody) return fromBody;
+    // Last resort: hand the resolved URL to Outscraper directly
+    if (finalUrl && /\/maps\//i.test(finalUrl)) return finalUrl;
+  } catch (e) {
+    console.log("extractPlaceIdFromMapsUrl follow-redirect failed:", e);
+  }
+  return null;
+}
+
+// Outscraper Google Maps Reviews v3 — preferred source.
+// Returns far more reviews than Places (which caps at 5) and uses simple
+// X-API-KEY auth. Sync mode (`async=false`) returns the data inline so we
+// don't need to manage request IDs / webhooks.
+async function fetchFromOutscraper(placeId: string): Promise<CachedGoogleReviews | null> {
+  const apiKey = Deno.env.get("OUTSCRAPER_API_KEY");
+  if (!apiKey || !placeId) return null;
+  try {
+    const params = new URLSearchParams({
+      query: placeId,
+      reviewsLimit: "20",
+      reviewsSort: "newest",
+      language: "en",
+      async: "false",
+    });
+    const url = `https://api.app.outscraper.com/maps/reviews-v3?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: { "X-API-KEY": apiKey },
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.log(`Outscraper fetch failed: HTTP ${res.status}`, errBody);
+      return null;
+    }
+    const json: any = await res.json();
+    if (json?.status && json.status !== "Success") {
+      console.log(`Outscraper API status:`, json.status, json?.error);
+      return null;
+    }
+    // Outscraper Reviews v3 returns `data[0]` as the place object directly
+    // (flat) for single-query requests. Some other endpoints / multi-query
+    // responses use a nested `data[0][0]` shape, so we handle both.
+    const flat = json?.data?.[0];
+    const place: any = flat && typeof flat === "object" && !Array.isArray(flat)
+      ? flat
+      : (Array.isArray(flat) ? flat[0] : null);
+    if (!place) return null;
+
+    const rawReviews: any[] = Array.isArray(place.reviews_data) ? place.reviews_data : [];
+    const now = Date.now();
+
+    const formatRelative = (ts: number): string => {
+      if (!ts || !Number.isFinite(ts)) return "";
+      const diffSec = ts - now / 1000;
+      const absDays = Math.abs(diffSec) / 86400;
+      const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+      if (absDays < 7) return rtf.format(Math.round(diffSec / 86400), "day");
+      if (absDays < 30) return rtf.format(Math.round(diffSec / (86400 * 7)), "week");
+      if (absDays < 365) return rtf.format(Math.round(diffSec / (86400 * 30)), "month");
+      return rtf.format(Math.round(diffSec / (86400 * 365)), "year");
+    };
+
+    return {
+      source: "outscraper",
+      placeId,
+      rating: typeof place.rating === "number" ? place.rating : 0,
+      totalRatings: typeof place.reviews === "number" ? place.reviews : 0,
+      reviews: rawReviews.map((rv: any): CachedGoogleReview => {
+        const authorName: string = rv.author_title || "Anonymous";
+        const ts: number = typeof rv.review_timestamp === "number" ? rv.review_timestamp : 0;
+        // Outscraper exposes review photos under `review_img_urls` (array) and
+        // a single `review_img_url`. Some legacy responses also use
+        // `review_photos`. Try them all so we always pick up the first photo.
+        const photoArr: any[] = Array.isArray(rv.review_img_urls)
+          ? rv.review_img_urls
+          : Array.isArray(rv.review_photos)
+            ? rv.review_photos
+            : [];
+        const firstPhoto: string | null =
+          (typeof photoArr[0] === "string" ? photoArr[0] : null) ||
+          (typeof rv.review_img_url === "string" ? rv.review_img_url : null);
+        return {
+          author: authorName,
+          initial: (authorName.trim().charAt(0) || "?").toUpperCase(),
+          rating: typeof rv.review_rating === "number" ? rv.review_rating : 5,
+          text: rv.review_text || "",
+          relativeTime: formatRelative(ts),
+          profilePhoto: rv.author_image || null,
+          photoUrl: firstPhoto,
+          time: ts,
+        };
+      }),
+      fetchedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + GOOGLE_REVIEWS_TTL_MS).toISOString(),
+    };
+  } catch (e) {
+    console.log("Outscraper fetch error:", e);
+    return null;
+  }
+}
+
 async function getOrRefreshGoogleReviews(
   slug: string,
   opts: { forceRefresh?: boolean } = {},
@@ -6158,7 +6654,10 @@ async function getOrRefreshGoogleReviews(
 
   let fresh: CachedGoogleReviews | null = null;
   if (placeId) {
-    fresh = await fetchFromGooglePlaces(placeId);
+    // Prefer Outscraper (more reviews, simpler auth). Fall back to Google
+    // Places if Outscraper isn't configured or fails to return data.
+    fresh = await fetchFromOutscraper(placeId);
+    if (!fresh) fresh = await fetchFromGooglePlaces(placeId);
   }
 
   if (!fresh) {
@@ -6309,15 +6808,7 @@ app.post("/make-server-4808de5e/google-reviews/:slug/seed", async (c) => {
     let placeId: string | null = (body.placeId || "").trim() || null;
 
     if (!placeId && body.url) {
-      const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
-      if (!apiKey) return c.json({ error: "Google API not configured" }, 500);
-      let finalUrl = body.url;
-      try {
-        const r = await fetch(body.url, { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" } });
-        finalUrl = r.url || body.url;
-      } catch { /* fall through */ }
-      const m = finalUrl.match(/place_id[=:]([A-Za-z0-9_-]+)/i) || finalUrl.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
-      if (m) placeId = m[1];
+      placeId = await extractPlaceIdFromMapsUrl(String(body.url));
     }
 
     if (!placeId) return c.json({ error: "Provide a placeId or a resolvable url" }, 400);
@@ -9068,6 +9559,23 @@ app.put("/make-server-4808de5e/homeowner-profile/:section", async (c) => {
         budget: sanitizeString(body.budget || "", 50),
         timeline: sanitizeString(body.timeline || "", 100),
       };
+    } else if (section === "onboarding") {
+      // Initial new-account onboarding — captures intent + design preferences,
+      // merged into the existing house section so downstream views keep working.
+      const yn = (v: any) => (v === "yes" || v === "no" ? v : "");
+      const styles = Array.isArray(body.designStyles)
+        ? body.designStyles.slice(0, 16).map((s: any) => sanitizeString(String(s || ""), 40)).filter(Boolean)
+        : [];
+      profile.house = {
+        ...(profile.house || {}),
+        propertyType: sanitizeString(body.propertyType || profile.house?.propertyType || "", 50),
+        propertyStatus: sanitizeString(body.propertyStatus || profile.house?.propertyStatus || "", 30),
+        renovating: yn(body.renovating),
+        hasKeys: yn(body.hasKeys),
+        designStyles: styles,
+        budget: sanitizeString(body.budget || profile.house?.budget || "", 50),
+      };
+      profile.onboardedAt = new Date().toISOString();
     } else {
       return c.json({ error: "Invalid section" }, 400);
     }

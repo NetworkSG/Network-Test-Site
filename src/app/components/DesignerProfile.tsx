@@ -87,6 +87,17 @@ export function resolveImg(ref: string): string {
   return IMAGE_MAP[ref] || resolveAsset(ref) || ref;
 }
 
+// Forme3's project data was entered in sqm, but the underlying numbers are
+// actually sqft. For Forme3 only, relabel any "sqm"/"sq m"/"m²" unit token
+// as "sqft" without touching the number. Other firms pass through unchanged.
+export function isForme3Slug(slug: string | undefined | null, name?: string): boolean {
+  return /forme[\s-]?3/i.test(slug || "") || /forme[\s-]?3/i.test(name || "");
+}
+export function relabelSqmToSqft(value: string): string {
+  if (!value) return value;
+  return value.replace(/\b(sqm|sq\s*m|m²|m2)\b/gi, "sqft");
+}
+
 /* Build a CDN-resized URL for thumbnail-sized renders.
  *
  * For URLs on our own Supabase storage, use the native /render/image/ endpoint
@@ -380,6 +391,7 @@ export function HeroSection() {
 
   // Build the list of featured slides (up to 5). Each slide carries an ordered
   // list of candidate images so we can skip floor plans when detected.
+  const isForme3 = isForme3Slug(slug, companyName);
   const baseSlides = useMemo(() => {
     const featured = (ctx?.projects || []).filter((proj: any) => proj.isFeatured).slice(0, 5);
     if (featured.length > 0) {
@@ -389,25 +401,27 @@ export function HeroSection() {
         for (const u of [fp.featuredImage, fp.coverImage, fp.image, ...(Array.isArray(fp.gallery) ? fp.gallery.map((g: any) => g?.src || g) : [])]) {
           if (typeof u === "string" && u && !seen.has(u)) { candidates.push(u); seen.add(u); }
         }
+        const rawArea = fp.size || "";
         return {
           candidates,
           name: fp.name || fp.title || "",
           cost: fp.cost || "",
-          area: fp.size || "",
+          area: isForme3 ? relabelSqmToSqft(rawArea) : rawArea,
           style: fp.style || "",
           href: fp.name ? `/designer/${slug}/project/${encodeURIComponent(fp.name)}` : null,
         };
       });
     }
+    const rawCoverArea = cp?.area || "";
     return [{
       candidates: p?.images?.cover ? [p.images.cover] : [],
       name: cp?.name || "Featured project name",
       cost: cp?.cost || "",
-      area: cp?.area || "",
+      area: isForme3 ? relabelSqmToSqft(rawCoverArea) : rawCoverArea,
       style: cp?.style || "",
       href: null as string | null,
     }];
-  }, [ctx?.projects, p?.images?.cover, cp, slug]);
+  }, [ctx?.projects, p?.images?.cover, cp, slug, isForme3]);
 
   const allCandidates = useMemo(() => baseSlides.flatMap((s) => s.candidates), [baseSlides]);
   const floorPlans = useFloorPlanSet(allCandidates);
@@ -573,7 +587,7 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
   const slug = ctx?.profile?.slug || "";
   const companyName = ctx?.profile?.name || "this designer";
   const logoImg = ctx?.profile?.images?.logo ? resolveImg(ctx.profile.images.logo) : PLACEHOLDER_LOGO;
-  const hasGoogleQ = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const hasGoogleQ = ctx?.googleMeta && ctx.googleMeta.totalRatings > 0;
   const rating = hasGoogleQ ? String(ctx!.googleMeta!.rating) : (ctx?.profile?.stats?.rating || "4.9");
   const [form, setForm] = useState({ name: "", phone: "", email: "", propertyType: "", budget: "", keyCollection: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -851,7 +865,7 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
 export function StatsRow() {
   const ctx = useDesignerCtx();
   const s = ctx?.profile?.stats;
-  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.totalRatings > 0;
   const displayRating = hasGoogle ? String(ctx!.googleMeta!.rating) : (s?.rating || "4.9");
   const displayReviewCount = hasGoogle ? String(ctx!.googleMeta!.totalRatings) : (s?.reviewCount || "0");
   const stats = [
@@ -1600,7 +1614,7 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
         {overlay}
         <div className="absolute bottom-4 left-5 z-[2] pointer-events-none">
           <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
-          <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{p.meta}</p>
+          <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{isForme3Slug(slug) ? relabelSqmToSqft(p.meta || "") : p.meta}</p>
         </div>
         {/* Featured badge */}
         {p.isFeatured && (
@@ -1744,7 +1758,7 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
                   <div className="absolute bottom-3 left-4 right-4">
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>
-                    <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#bab7b3] tracking-[0.08px] mt-0.5">{p.meta}</p>
+                    <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#bab7b3] tracking-[0.08px] mt-0.5">{isForme3Slug(slug) ? relabelSqmToSqft(p.meta || "") : p.meta}</p>
                   </div>
                 </Link>
               ))}
@@ -2644,7 +2658,7 @@ export function HomeownersSay() {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   const rData = ctx?.reviewsData ?? reviewsData;
-  const hasGoogleH = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const hasGoogleH = ctx?.googleMeta && ctx.googleMeta.totalRatings > 0;
   const rating = hasGoogleH ? String(ctx!.googleMeta!.rating) : (ctx?.profile?.stats?.rating || "4.9");
 
   // Hide on live page when no reviews and no Google data exist
@@ -2862,7 +2876,26 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
 
         {/* Divider + Reviewer */}
         <div className="border-t border-[#e4e4e7] pt-3 flex items-center gap-[10px]">
-          <div className={`${review.bgColor} rounded-full size-[36px] flex items-center justify-center shrink-0`}>
+          {review.profilePhoto ? (
+            <img
+              src={review.profilePhoto}
+              alt={review.name}
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              className="rounded-full size-[36px] object-cover shrink-0 bg-[#eee]"
+              onError={(e) => {
+                // Hide broken Google profile photos and let the initial circle render in its place
+                const img = e.currentTarget;
+                img.style.display = "none";
+                const fallback = img.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = "flex";
+              }}
+            />
+          ) : null}
+          <div
+            className={`${review.bgColor} rounded-full size-[36px] flex items-center justify-center shrink-0`}
+            style={review.profilePhoto ? { display: "none" } : undefined}
+          >
             <span className={`font-['DM_Sans',sans-serif] font-semibold text-[14px] ${review.textColor} leading-[20px]`}>
               {review.initial}
             </span>
@@ -2877,7 +2910,192 @@ function ReviewCard({ review, index }: { review: typeof reviews[0]; index: numbe
   );
 }
 
-export function GoogleReviewCards() {
+// Compact single-column review card used in inline (paginated) mode.
+// Layout: text content (header / clamped review / footer) on the left,
+// optional review photo as a big square on the right. The text clamps to
+// 4 lines and reveals fully when "See more" is clicked.
+function ReviewCardInline({ review }: { review: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const [needsTruncation, setNeedsTruncation] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  // While the photo lightbox is open: lock body scroll and let Esc close it.
+  useEffect(() => {
+    if (!photoOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPhotoOpen(false); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [photoOpen]);
+
+  // Detect whether the text actually overflows when clamped — only then do
+  // we render the See more / See less affordance. We re-measure on resize
+  // because column width changes alter how many lines fit.
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => {
+      // Force a measurement against the clamped height (regardless of current expanded state)
+      const wasExpanded = el.classList.contains("review-expanded");
+      el.classList.remove("review-expanded");
+      const overflowing = el.scrollHeight > el.clientHeight + 1;
+      if (wasExpanded) el.classList.add("review-expanded");
+      setNeedsTruncation(overflowing);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [review.fullText, review.text]);
+
+  const ctx = useDesignerCtx();
+  const placeId = ctx?.googleMeta?.placeId;
+  const googleReviewsUrl = placeId
+    ? `https://search.google.com/local/reviews?placeid=${placeId}`
+    : null;
+  const starRating = typeof review.rating === "number" ? review.rating : 5;
+
+  return (
+    <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-5">
+      {/* Header: avatar + name on left, stars on right */}
+      <div className="flex items-center justify-between gap-4 mb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {review.profilePhoto ? (
+            <img
+              src={review.profilePhoto}
+              alt={review.name}
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              className="rounded-full size-[40px] object-cover shrink-0 bg-[#eee]"
+              onError={(e) => {
+                const img = e.currentTarget;
+                img.style.display = "none";
+                const fb = img.nextElementSibling as HTMLElement | null;
+                if (fb) fb.style.display = "flex";
+              }}
+            />
+          ) : null}
+          <div
+            className={`${review.bgColor} rounded-full size-[40px] flex items-center justify-center shrink-0`}
+            style={review.profilePhoto ? { display: "none" } : undefined}
+          >
+            <span className={`font-['DM_Sans',sans-serif] font-semibold text-[15px] ${review.textColor} leading-[20px]`}>
+              {review.initial}
+            </span>
+          </div>
+          <span className="font-['DM_Sans',sans-serif] font-semibold text-[15px] text-[#1f1f1f] leading-[20px] truncate">
+            {review.name}
+          </span>
+        </div>
+        <div className="flex gap-[2px] shrink-0">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <svg key={i} className="size-[16px]" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.167L8.682 4.702L12.6 5.232L9.8 7.955L10.521 11.856L7 10.069L3.479 11.856L4.2 7.955L1.4 5.232L5.318 4.702L7 1.167Z" fill={i < starRating ? "#FFA929" : "#E0DDD7"} />
+            </svg>
+          ))}
+        </div>
+      </div>
+
+      {/* Review text — clamped to 4 lines when collapsed */}
+      <p
+        ref={textRef}
+        className={`font-['DM_Sans',sans-serif] font-normal text-[14px] text-[#4a4a4a] leading-[22px] whitespace-pre-line ${
+          expanded ? "review-expanded" : "line-clamp-4"
+        }`}
+      >
+        {review.fullText || review.text}
+      </p>
+
+      {/* See more / See less */}
+      {(needsTruncation || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="block mt-2 font-['DM_Sans',sans-serif] font-medium text-[13px] text-[#0f0f0d] hover:underline cursor-pointer bg-transparent border-none p-0"
+        >
+          {expanded ? "See less" : "See more"}
+        </button>
+      )}
+
+      {/* Photo thumbnail — opens a lightbox modal on click */}
+      {review.img && (
+        <button
+          type="button"
+          onClick={() => setPhotoOpen(true)}
+          aria-label="View review photo"
+          className="block mt-3 size-[80px] rounded-[8px] overflow-hidden border border-[#e4e4e7] bg-[#eee] hover:opacity-95 transition-opacity cursor-zoom-in p-0"
+        >
+          <img
+            src={resolveImg(review.img)}
+            alt="Review photo"
+            loading="lazy"
+            className="w-full h-full object-cover"
+          />
+        </button>
+      )}
+
+      {/* Footer: date on left, Verified link on right */}
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#e4e4e7]">
+        <p className="font-['DM_Sans',sans-serif] font-normal text-[12px] text-[#9a9a9a]">
+          {review.date}
+        </p>
+        <a
+          href={googleReviewsUrl || "#"}
+          target={googleReviewsUrl ? "_blank" : undefined}
+          rel={googleReviewsUrl ? "noopener noreferrer" : undefined}
+          className="flex items-center gap-1.5 no-underline hover:opacity-80 transition-opacity"
+          onClick={(e) => { if (!googleReviewsUrl) e.preventDefault(); }}
+        >
+          <img src={imgGoogle} alt="Google" className="size-[14px] object-contain" />
+          <span className="font-['DM_Sans',sans-serif] font-medium text-[12px] text-[#34a42f]">Verified</span>
+        </a>
+      </div>
+
+      {/* Lightbox modal — portaled to body so ancestor transforms/filters can't
+          break `position: fixed`. Uses small/dynamic viewport units so the
+          mobile URL bar can't push the image out of view. Click backdrop or
+          Esc to close. */}
+      {photoOpen && review.img && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review photo"
+          onClick={() => setPhotoOpen(false)}
+          className="fixed left-0 top-0 w-screen h-[100svh] z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 md:p-8 cursor-zoom-out"
+          style={{ height: "100dvh" }}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setPhotoOpen(false); }}
+            aria-label="Close"
+            className="absolute top-3 right-3 md:top-4 md:right-4 size-[40px] rounded-full bg-white/95 hover:bg-white text-[#0f0f0d] flex items-center justify-center shadow-lg cursor-pointer p-0 border-none"
+          >
+            <svg className="size-[20px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <img
+            src={resolveImg(review.img)}
+            alt="Review photo"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded-[8px] shadow-2xl cursor-default"
+          />
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+const INLINE_PAGE_SIZE = 3;
+
+export function GoogleReviewCards({ inline = false }: { inline?: boolean } = {}) {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
   // Prefer cached Google Place reviews when the server returned any.
@@ -2888,15 +3106,29 @@ export function GoogleReviewCards() {
   const googlePlaceId = ctx?.googleMeta?.placeId;
   const totalRatings = ctx?.googleMeta?.totalRatings;
   const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
+  const inlineRootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
   const COLLAPSED_HEIGHT = 420;
 
-  // Distribute reviews across 3 columns dynamically (masonry-style)
-  const col1 = rvws.filter((_: any, i: number) => i % 3 === 0);
-  const col2 = rvws.filter((_: any, i: number) => i % 3 === 1);
-  const col3 = rvws.filter((_: any, i: number) => i % 3 === 2);
+  // Inline mode: flat paginated list. Otherwise: legacy masonry grid.
+  const totalPages = Math.max(1, Math.ceil(rvws.length / INLINE_PAGE_SIZE));
+  const pageReviews = inline
+    ? rvws.slice(page * INLINE_PAGE_SIZE, (page + 1) * INLINE_PAGE_SIZE)
+    : rvws;
+  // Guard: if reviews shrink (e.g. data refresh) and page falls off the end,
+  // snap back to a valid page on next render.
+  useEffect(() => {
+    if (page >= totalPages) setPage(0);
+  }, [page, totalPages]);
+
+  // Number of desktop columns for the legacy (non-inline) layout.
+  const numCols = 3;
+  const cols = Array.from({ length: numCols }, (_, ci) =>
+    rvws.filter((_: any, i: number) => i % numCols === ci),
+  );
 
   // Measure the full grid height whenever it renders / resizes / data changes
   useEffect(() => {
@@ -2915,119 +3147,162 @@ export function GoogleReviewCards() {
 
   const toggle = () => {
     if (expanded) {
-      // collapsing — scroll section into view after the animation starts
+      // collapsing — scroll section/root into view after the animation starts
       setExpanded(false);
       setTimeout(() => {
-        sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const target = inline ? inlineRootRef.current : sectionRef.current;
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
     } else {
       setExpanded(true);
     }
   };
 
+  const reviewsBlock = (
+    <>
+      {/* ── Reviews container with animated max-height ── */}
+      <div className="relative">
+        <div
+          ref={gridRef}
+          style={{
+            maxHeight: !showViewMore ? "none" : expanded ? `${contentHeight}px` : `${COLLAPSED_HEIGHT}px`,
+            transition: "max-height 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
+            overflow: showViewMore ? "hidden" : "visible",
+          }}
+        >
+          {/* Desktop: masonry layout — column count adapts to inline mode */}
+          <div className={`hidden md:grid ${inline ? "grid-cols-2" : "grid-cols-3"} gap-5`}>
+            {cols.map((col, ci) => (
+              <div key={`col-${ci}`} className="flex flex-col gap-5">
+                {col.map((review: any, i: number) => (
+                  <ReviewCard key={`col${ci}-${i}`} review={review} index={i * numCols + ci} />
+                ))}
+              </div>
+            ))}
+          </div>
+          {/* Mobile: single column */}
+          <div className="md:hidden flex flex-col gap-5">
+            {rvws.map((review: any, i: number) => (
+              <ReviewCard key={`review-m-${i}`} review={review} index={i} />
+            ))}
+          </div>
+        </div>
+
+        {/* Gradient fade — only show when there are more than 8 reviews */}
+        {showViewMore && (
+          <div
+            className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[2]"
+            style={{
+              background: "linear-gradient(to bottom, rgba(240,237,230,0) 0%, rgba(240,237,230,0.85) 50%, rgba(240,237,230,1) 100%)",
+              opacity: expanded ? 0 : 1,
+              transition: "opacity 0.5s ease",
+            }}
+          />
+        )}
+      </div>
+
+      {/* ── View More / View Less button — only when more than 8 reviews ── */}
+      {showViewMore && (
+        <button
+          onClick={toggle}
+          className="flex flex-col items-center gap-[8px] mx-auto mt-7 cursor-pointer border-none bg-transparent p-2 group"
+        >
+          <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
+            {expanded ? "View Less" : "View More"}
+          </span>
+          <div
+            className="size-[44px] rounded-full border-[1.5px] border-[#ccc] flex items-center justify-center group-hover:border-[#888] group-hover:bg-black/[0.04]"
+            style={{
+              transition: "transform 0.4s ease, border-color 0.3s ease, background 0.3s ease",
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          >
+            <svg className="size-[18px] text-[#555]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
+        </button>
+      )}
+    </>
+  );
+
+  // Inline mode: caller provides the surrounding section + header. We render
+  // a flat paginated list (3 reviews per page) instead of the masonry grid.
+  if (inline) {
+    const goToPage = (next: number) => {
+      const clamped = Math.max(0, Math.min(totalPages - 1, next));
+      if (clamped === page) return;
+      setPage(clamped);
+      // Keep the reviews block top in view so the user doesn't lose their place
+      requestAnimationFrame(() => {
+        inlineRootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+
+    return (
+      <div ref={inlineRootRef} className="flex-1 min-w-0 scroll-mt-[80px]">
+        <div className="flex flex-col gap-4">
+          {pageReviews.map((review: any, i: number) => (
+            <ReviewCardInline key={`page-${page}-${i}`} review={review} />
+          ))}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => goToPage(page - 1)}
+              aria-label="Previous reviews"
+              className="size-[36px] rounded-full border border-[#d8d3c8] bg-white flex items-center justify-center text-[#333] hover:bg-[#fafaf8] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              <svg className="size-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const isActive = i === page;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => goToPage(i)}
+                  aria-label={`Go to page ${i + 1}`}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`min-w-[36px] h-[36px] px-2 rounded-full border font-['DM_Sans',sans-serif] font-medium text-[13px] transition ${
+                    isActive
+                      ? "bg-[#0f0f0d] text-white border-[#0f0f0d]"
+                      : "bg-white text-[#333] border-[#d8d3c8] hover:bg-[#fafaf8]"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              disabled={page === totalPages - 1}
+              onClick={() => goToPage(page + 1)}
+              aria-label="Next reviews"
+              className="size-[36px] rounded-full border border-[#d8d3c8] bg-white flex items-center justify-center text-[#333] hover:bg-[#fafaf8] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              <svg className="size-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <section ref={sectionRef} className="py-[40px] md:py-[64px] px-4 md:px-8 border-b border-[#d8d3c8] scroll-mt-[80px]">
       <div className="max-w-[1280px] mx-auto">
-
         {/* Header lives in <RatingBreakdown /> directly above this section
             (which is now the "HOMEOWNER REVIEWS / What Homeowners Say" header
             for the combined reviews block). No centered header needed here. */}
-
-        {/* ── Reviews container with animated max-height ── */}
-        <div className="relative">
-          <div
-            ref={gridRef}
-            style={{
-              maxHeight: !showViewMore ? "none" : expanded ? `${contentHeight}px` : `${COLLAPSED_HEIGHT}px`,
-              transition: "max-height 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-              overflow: showViewMore ? "hidden" : "visible",
-            }}
-          >
-            {/* Desktop: masonry 3-column layout — dynamically distributes any number of reviews */}
-            <div className="hidden md:grid grid-cols-3 gap-5">
-              {/* Column 1 */}
-              <div className="flex flex-col gap-5">
-                {col1.map((review: any, i: number) => (
-                  <ReviewCard key={`col1-${i}`} review={review} index={i * 3} />
-                ))}
-              </div>
-              {/* Column 2 */}
-              <div className="flex flex-col gap-5">
-                {col2.map((review: any, i: number) => (
-                  <ReviewCard key={`col2-${i}`} review={review} index={i * 3 + 1} />
-                ))}
-              </div>
-              {/* Column 3 */}
-              <div className="flex flex-col gap-5">
-                {col3.map((review: any, i: number) => (
-                  <ReviewCard key={`col3-${i}`} review={review} index={i * 3 + 2} />
-                ))}
-              </div>
-            </div>
-            {/* Mobile: single column */}
-            <div className="md:hidden flex flex-col gap-5">
-              {rvws.map((review: any, i: number) => (
-                <ReviewCard key={`review-m-${i}`} review={review} index={i} />
-              ))}
-            </div>
-          </div>
-
-          {/* Gradient fade — only show when there are more than 8 reviews */}
-          {showViewMore && (
-            <div
-              className="absolute bottom-0 left-0 right-0 h-[200px] pointer-events-none z-[2]"
-              style={{
-                background: "linear-gradient(to bottom, rgba(240,237,230,0) 0%, rgba(240,237,230,0.85) 50%, rgba(240,237,230,1) 100%)",
-                opacity: expanded ? 0 : 1,
-                transition: "opacity 0.5s ease",
-              }}
-            />
-          )}
-        </div>
-
-        {/* ── View More / View Less button — only when more than 8 reviews ── */}
-        {showViewMore && (
-          <button
-            onClick={toggle}
-            className="flex flex-col items-center gap-[8px] mx-auto mt-7 cursor-pointer border-none bg-transparent p-2 group"
-          >
-            <span className="font-['DM_Sans',sans-serif] font-medium text-[15px] text-[#333] leading-[32px] tracking-[0.01em]">
-              {expanded ? "View Less" : "View More"}
-            </span>
-            <div
-              className="size-[44px] rounded-full border-[1.5px] border-[#ccc] flex items-center justify-center group-hover:border-[#888] group-hover:bg-black/[0.04]"
-              style={{
-                transition: "transform 0.4s ease, border-color 0.3s ease, background 0.3s ease",
-                transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-              }}
-            >
-              <svg className="size-[18px] text-[#555]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </div>
-          </button>
-        )}
-
-        {/* ── View all reviews on Google ── */}
-        {googlePlaceId && (
-          <a
-            href={`https://search.google.com/local/reviews?placeid=${googlePlaceId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 mx-auto mt-6 px-6 h-[44px] rounded-full border border-[#d8d3c8] bg-white hover:bg-[#fafaf8] transition no-underline group"
-          >
-            <img src={imgGoogle} alt="Google" className="size-[18px] object-contain" />
-            <span className="font-['DM_Sans',sans-serif] font-medium text-[14px] text-[#333] group-hover:text-[#0f0f0d]">
-              View all {totalRatings ? `${totalRatings} ` : ""}reviews on Google
-            </span>
-            <svg className="size-[14px] text-[#999] group-hover:text-[#555] transition" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-          </a>
-        )}
-
+        {reviewsBlock}
       </div>
     </section>
   );
@@ -3411,7 +3686,7 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
   const budgetVal = editCtx ? budgetRaw : collapseBudgetRange(budgetRaw);
 
   // Prefer Google rating when available
-  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.totalRatings > 0;
   const googleRating = hasGoogle ? ctx!.googleMeta!.rating : null;
 
   type Metric = {
@@ -3533,12 +3808,12 @@ export function KeyMetrics({ cols = 4 }: { cols?: 2 | 4 } = {}) {
 }
 
 /* ─── RATING BREAKDOWN ─── */
-export function RatingBreakdown() {
+export function RatingBreakdown({ inline = false }: { inline?: boolean } = {}) {
   const ctx = useDesignerCtx();
   const editCtx = useContext(ProfileEditContext);
 
   // Prefer Google data when available, fall back to manual stats
-  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.source === "google" && ctx.googleMeta.totalRatings > 0;
+  const hasGoogle = ctx?.googleMeta && ctx.googleMeta.totalRatings > 0;
   const rating = hasGoogle
     ? ctx!.googleMeta!.rating
     : parseFloat(ctx?.profile?.stats?.rating || "4.9");
@@ -3546,6 +3821,29 @@ export function RatingBreakdown() {
   const totalReviews = hasGoogle
     ? ctx!.googleMeta!.totalRatings
     : (ctx?.profile?.stats?.reviewCount || reviewCount || "186");
+
+  // Star distribution from the available review data. When the Google sample
+  // is smaller than the total rating count we scale it up so percentages stay
+  // representative. Source priority: googleReviews → reviewsData → reviews.
+  const distribution = (() => {
+    const counts = [0, 0, 0, 0, 0]; // index 0 = 1★, 4 = 5★
+    const reviewsForDist =
+      (ctx?.googleReviews && ctx.googleReviews.length ? ctx.googleReviews : null) ??
+      (ctx?.reviewsData && ctx.reviewsData.length ? ctx.reviewsData : null) ??
+      (ctx?.reviews && ctx.reviews.length ? ctx.reviews : []);
+    for (const r of reviewsForDist) {
+      const s = typeof r?.rating === "number" ? Math.round(r.rating) : 5;
+      if (s >= 1 && s <= 5) counts[s - 1]++;
+    }
+    const sampled = reviewsForDist.length;
+    if (sampled === 0) return null;
+    const totalNum = typeof totalReviews === "number"
+      ? totalReviews
+      : Number(totalReviews) || sampled;
+    const scale = totalNum > sampled ? totalNum / sampled : 1;
+    return counts.map((c) => Math.round(c * scale));
+  })();
+  const distMax = distribution ? Math.max(...distribution, 1) : 1;
 
   const categories = [
     { label: "Design Quality", score: Math.min(5, rating + 0.05) },
@@ -3556,6 +3854,83 @@ export function RatingBreakdown() {
   ];
 
   if (!editCtx && !reviewCount && !hasGoogle && !ctx?.profile?.stats?.rating) return null;
+
+  // Renders a single category bar — used in both layouts.
+  const renderBar = (cat: { label: string; score: number }) => (
+    <div key={cat.label} className="flex items-center gap-3">
+      <span style={{ fontFamily: sans, color: C.gray }} className="text-[14px] w-[120px] shrink-0">{cat.label}</span>
+      <div className="flex-1 h-[8px] rounded-full overflow-hidden" style={{ background: C.creamBorder }}>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(cat.score / 5) * 100}%`, background: C.black }} />
+      </div>
+      <span style={{ fontFamily: sans, color: C.black }} className="text-[14px] font-medium w-[32px] text-right">{cat.score.toFixed(1)}</span>
+    </div>
+  );
+
+  // Star distribution — 5★ at top down to 1★. Bars are sized relative to the
+  // mode (busiest bucket) so a single 0-count row doesn't squash the rest.
+  const renderDistribution = () => {
+    if (!distribution) return null;
+    return (
+      <div className="flex flex-col gap-2">
+        {[5, 4, 3, 2, 1].map((star) => {
+          const count = distribution[star - 1];
+          const width = distMax > 0 ? (count / distMax) * 100 : 0;
+          return (
+            <div key={star} className="flex items-center gap-3">
+              <span style={{ fontFamily: sans, color: C.gray }} className="text-[13px] w-[44px] shrink-0 flex items-center gap-[3px]">
+                {star}
+                <svg className="size-[12px]" viewBox="0 0 24 24" fill="#FFA929">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              </span>
+              <div className="flex-1 h-[8px] rounded-full overflow-hidden" style={{ background: C.creamBorder }}>
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${width}%`, background: "#FFA929" }} />
+              </div>
+              <span style={{ fontFamily: sans, color: C.black }} className="text-[13px] font-medium w-[32px] text-right tabular-nums">{count}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const overallScore = (
+    <div className="flex flex-col items-center md:items-start shrink-0 md:w-[180px]">
+      <span style={{ fontFamily: serif, color: C.black }} className="text-[56px] md:text-[64px] font-normal leading-none">{rating.toFixed(1)}</span>
+      <div className="flex gap-[2px] mt-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <svg key={i} className="size-[16px]" viewBox="0 0 24 24" fill={i < Math.round(rating) ? "#FFA929" : "#d8d3c8"}>
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+        ))}
+      </div>
+      <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[14px] mt-2">{totalReviews} reviews</p>
+    </div>
+  );
+
+  // Inline mode: a self-contained card laid out vertically (score on top,
+  // bars stacked below). Used in DesignerProfile where it sits beside the
+  // GoogleReviewCards block — no header, no outer section, no FadeIn.
+  if (inline) {
+    return (
+      <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-6 md:p-8 h-fit">
+        <div className="flex flex-col gap-6">
+          {overallScore}
+          {distribution && (
+            <div className="flex flex-col gap-3">
+              <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] uppercase tracking-[0.08em]">Rating distribution</span>
+              {renderDistribution()}
+            </div>
+          )}
+          <div className="flex flex-col gap-3">
+            <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] uppercase tracking-[0.08em]">Category breakdown</span>
+            {categories.map(renderBar)}
+            <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] mt-1">Based on overall rating</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section className="py-[40px] md:py-[64px]">
@@ -3568,31 +3943,17 @@ export function RatingBreakdown() {
         </div>
 
         <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-6 md:p-8">
-          <div className="flex flex-col md:flex-row gap-8 md:gap-12">
-            {/* Left: Overall score */}
-            <div className="flex flex-col items-center md:items-start shrink-0 md:w-[180px]">
-              <span style={{ fontFamily: serif, color: C.black }} className="text-[56px] md:text-[64px] font-normal leading-none">{rating.toFixed(1)}</span>
-              <div className="flex gap-[2px] mt-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <svg key={i} className="size-[16px]" viewBox="0 0 24 24" fill={i < Math.round(rating) ? "#FFA929" : "#d8d3c8"}>
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                ))}
+          <div className="flex flex-col md:flex-row gap-8 md:gap-10">
+            {overallScore}
+            {distribution && (
+              <div className="flex-1 flex flex-col gap-3 min-w-0">
+                <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] uppercase tracking-[0.08em]">Rating distribution</span>
+                {renderDistribution()}
               </div>
-              <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[14px] mt-2">{totalReviews} reviews</p>
-            </div>
-
-            {/* Right: Category bars */}
-            <div className="flex-1 flex flex-col gap-4">
-              {categories.map((cat) => (
-                <div key={cat.label} className="flex items-center gap-3">
-                  <span style={{ fontFamily: sans, color: C.gray }} className="text-[14px] w-[130px] shrink-0">{cat.label}</span>
-                  <div className="flex-1 h-[8px] rounded-full overflow-hidden" style={{ background: C.creamBorder }}>
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(cat.score / 5) * 100}%`, background: C.black }} />
-                  </div>
-                  <span style={{ fontFamily: sans, color: C.black }} className="text-[14px] font-medium w-[32px] text-right">{cat.score.toFixed(1)}</span>
-                </div>
-              ))}
+            )}
+            <div className="flex-1 flex flex-col gap-3 min-w-0">
+              <span style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] uppercase tracking-[0.08em]">Category breakdown</span>
+              {categories.map(renderBar)}
               <p style={{ fontFamily: sans, color: C.grayLight }} className="text-[12px] mt-1">Based on overall rating</p>
             </div>
           </div>
@@ -4503,13 +4864,31 @@ export function DesignerProfile() {
 
             {/* 7. Projects Carousel */}
             <ProjectsSection />
-
-            {/* 8. Rating Breakdown */}
-            <RatingBreakdown />
           </div>
 
-          {/* 9. Homeowner Reviews */}
-          <GoogleReviewCards />
+          {/* 8 + 9. Combined: Rating Breakdown card sits beside the review
+              cards. Header is centered above both blocks. On lg+ we render
+              the rating card as a narrow left column and the review grid
+              (now 2 cols) as the wider right column. Stacks on smaller
+              viewports. */}
+          <section className="py-[40px] md:py-[64px] px-4 md:px-8 border-b border-[#d8d3c8]">
+            <div className="max-w-[1280px] mx-auto">
+              <FadeIn>
+                <div className="flex flex-col items-center text-center mb-8">
+                  <TagLabel>HOMEOWNER REVIEWS</TagLabel>
+                  <h2 style={{ fontFamily: serif, fontSize: "clamp(24px, 3vw, 36px)", color: C.black }} className="font-normal tracking-[-0.03em] mt-3">
+                    What Homeowners Say
+                  </h2>
+                </div>
+              </FadeIn>
+              <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
+                <div className="w-full lg:w-[360px] lg:shrink-0">
+                  <RatingBreakdown inline />
+                </div>
+                <GoogleReviewCards inline />
+              </div>
+            </div>
+          </section>
 
           <div className="max-w-[1280px] mx-auto px-4 md:px-8">
             {/* 10. Trusted Since (timeline) */}

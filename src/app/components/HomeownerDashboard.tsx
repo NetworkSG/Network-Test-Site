@@ -14,6 +14,7 @@ import { HomepageNav } from "./shared/HomepageNav";
 import { supabase } from "./supabaseClient";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { FloorPlanThumbnail } from "./FloorPlan3DDashboard";
+import HomeownerOnboarding from "./HomeownerOnboarding";
 import { C, serif, sans } from "./homepage/v8/primitives";
 
 const authHeroPhoto = "/Rectangle 274.png";
@@ -207,6 +208,115 @@ function AuthField({
   );
 }
 
+// Shared split layout for the auth surface — left hero photo, right form
+// column. Used by AuthScreen for sign-in/sign-up and again for the
+// post-signup onboarding so the user never sees a jarring switch.
+function AuthShellLayout({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen flex" style={{ background: C.cream, fontFamily: sans }}>
+      <div className="hidden lg:block lg:w-[55%] relative overflow-hidden">
+        <img
+          src={authHeroPhoto}
+          alt="Interior design"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(15,15,13,0.55) 0%, rgba(15,15,13,0.10) 45%, rgba(15,15,13,0) 75%)",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(to right, rgba(15,15,13,0.20), rgba(15,15,13,0))",
+          }}
+        />
+        <div className="absolute bottom-12 left-12 right-12">
+          <h2
+            className="leading-[1.1] mb-4"
+            style={{ fontFamily: serif, color: C.white, letterSpacing: "-0.02em" }}
+          >
+            <span className="block font-normal" style={{ fontSize: "clamp(32px, 4vw, 52px)" }}>
+              Your dream home
+            </span>
+            <span
+              className="block font-normal italic"
+              style={{ fontSize: "clamp(32px, 4vw, 52px)", color: "rgba(250,250,248,0.85)" }}
+            >
+              starts here.
+            </span>
+          </h2>
+          <p
+            className="text-[15px] leading-[1.6] max-w-[440px]"
+            style={{ color: "rgba(250,250,248,0.85)", fontFamily: sans }}
+          >
+            Get matched with top designers, plan your layout in 3D, and bring your renovation
+            vision to life.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col min-h-screen" style={{ background: C.white }}>
+        <div className="flex items-center justify-between px-8 md:px-12 pt-8 md:pt-10">
+          <div
+            className="h-[23px] w-[111px] shrink-0 cursor-pointer"
+            onClick={() => navigate("/")}
+            style={{
+              background: C.black,
+              maskImage: `url('${imgNetworkLogo}')`,
+              WebkitMaskImage: `url('${imgNetworkLogo}')`,
+              maskSize: "111px 23px",
+              WebkitMaskSize: "111px 23px",
+              maskRepeat: "no-repeat",
+              WebkitMaskRepeat: "no-repeat",
+            }}
+          />
+          <button
+            onClick={() => navigate("/")}
+            className="w-[36px] h-[36px] rounded-full flex items-center justify-center cursor-pointer transition-colors"
+            style={{ background: C.cream, border: `1px solid ${C.creamBorder}` }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = C.creamDark; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = C.cream; }}
+            aria-label="Close"
+          >
+            <X size={18} style={{ color: C.gray }} />
+          </button>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center px-6 md:px-12 py-10">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+            className="w-full max-w-[520px]"
+          >
+            {children}
+          </motion.div>
+        </div>
+
+        <div className="px-8 md:px-12 pb-8 md:pb-10">
+          <p style={{ fontSize: 12, color: C.grayLight, fontFamily: sans }}>
+            By signing in, you agree to our Terms of Service and{" "}
+            <a
+              href="/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+              style={{ color: C.grayLight }}
+            >
+              Privacy Policy
+            </a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen({ onAuth }: { onAuth: (token: string, userId: string) => void }) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -233,6 +343,13 @@ function AuthScreen({ onAuth }: { onAuth: (token: string, userId: string) => voi
       if (!res.ok) { setError(json.error || "Something went wrong"); setLoading(false); return; }
       localStorage.setItem("homeowner-token", json.token);
       localStorage.setItem("homeowner-userId", json.userId);
+      // Flag a fresh signup so the dashboard knows to surface the onboarding
+      // questions exactly once. Login should skip the onboarding even when the
+      // user hasn't completed it — that's an opt-in flow we don't want to
+      // re-prompt on every sign-in.
+      if (mode === "signup") {
+        try { localStorage.setItem(`homeowner-just-signed-up:${json.userId}`, "1"); } catch {}
+      }
       try { await supabase.auth.signInWithPassword({ email, password }); } catch {}
       try {
         const cached = json.profile
@@ -540,6 +657,33 @@ export function HomeownerDashboard() {
   if (authed === null && !data) return <ProfileSkeleton />;
   if (authed === false) return <AuthScreen onAuth={(t, id) => { setUserId(id); setAuthed(true); }} />;
   if (!data) return <ProfileSkeleton />;
+
+  // First-time onboarding — shown only when AuthScreen flagged this session
+  // as a fresh signup. Returning logins skip onboarding even if they never
+  // finished it (it's opt-in; we don't want to nag on every sign-in). The
+  // flag is consumed when the user finishes or explicitly skips. The shell
+  // mirrors AuthScreen's split layout so signup flows straight into these
+  // questions in the same right-column space.
+  const justSignedUpKey = userId ? `homeowner-just-signed-up:${userId}` : "";
+  const justSignedUp = !!justSignedUpKey && localStorage.getItem(justSignedUpKey) === "1";
+  if (justSignedUp && !data.onboardedAt) {
+    return (
+      <AuthShellLayout>
+        <HomeownerOnboarding
+          userName={data.name || ""}
+          initialPhone={data.phone || ""}
+          onComplete={() => {
+            try { localStorage.removeItem(justSignedUpKey); } catch {}
+            fetchData();
+          }}
+          onSkip={() => {
+            try { localStorage.removeItem(justSignedUpKey); } catch {}
+            fetchData();
+          }}
+        />
+      </AuthShellLayout>
+    );
+  }
 
   const userName = data?.name || "Homeowner";
   const userEmail = data?.email || "";

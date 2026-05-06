@@ -19,7 +19,7 @@ export type CachedGoogleReview = {
 };
 
 export type CachedGoogleReviewsPayload = {
-  source: "google" | "mock" | "empty";
+  source: "outscraper" | "google" | "mock" | "empty";
   placeId: string | null;
   rating: number;
   totalRatings: number;
@@ -39,6 +39,7 @@ export type UiReview = {
   initial: string;
   bgColor: string;
   textColor: string;
+  profilePhoto?: string | null;
   // Content
   title: string;
   text: string;
@@ -81,6 +82,7 @@ export function transformGoogleReviewsToUi(payload: CachedGoogleReviewsPayload |
       initial: (r.initial || (r.author || "?").charAt(0) || "?").toUpperCase(),
       bgColor: palette.bg,
       textColor: palette.text,
+      profilePhoto: r.profilePhoto || null,
       title: deriveTitle(r.text),
       text: r.text || "",
       fullText: r.text || "",

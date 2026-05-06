@@ -1,10 +1,18 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2, Bookmark } from "lucide-react";
+import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2 } from "lucide-react";
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+
+// Hero image: a warm-toned interior from a real Qanvast-imported project.
+// Picked algorithmically by warmth + low center-window across the active
+// designer pool — wood-slatted feature wall with cove lighting, no windows.
+// Served through Supabase's native image transform so the browser gets a
+// right-sized WebP via the Accept header.
+const heroPhoto =
+  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/94ab90d9-21c9-447d-9da2-7f038f55c1bd.jpeg?width=1600&quality=80";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
@@ -305,117 +313,158 @@ function MultiCheckboxDropdown({
 /* ─── DESIGNER CARD ─── */
 function DesignerCardComponent({ designer, index }: { designer: DesignerCard; index: number }) {
   const navigate = useNavigate();
-  const [saved, setSaved] = useState(false);
+  const logoSrc = designer.logo ? resolveAsset(designer.logo) : PLACEHOLDER_LOGO;
+  const initial = designer.name?.charAt(0)?.toUpperCase() || "?";
 
   return (
     <FadeIn delay={index * 0.04}>
       <div
         onClick={() => navigate(`/designer/${designer.slug}`)}
-        className="group cursor-pointer transition-all duration-300 hover:-translate-y-1"
+        className="group cursor-pointer rounded-[16px] overflow-hidden transition-shadow duration-300 hover:shadow-[0_4px_24px_rgba(0,0,0,0.08)]"
+        style={{
+          background: C.white,
+          border: `1px solid ${C.creamBorder}`,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
       >
-        {/* Cover image — full card with info card overlay on the right */}
-        <div
-          className="relative h-[340px] overflow-hidden"
-          style={{
-            background: C.cream,
-            border: `1px solid ${C.creamBorder}`,
-            borderRadius: 18,
-          }}
-        >
+        {/* Cover image */}
+        <div className="relative h-[220px] overflow-hidden">
           <ImageWithFallback
             src={resolveAsset(designer.image)}
             alt={designer.name}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
 
-          {/* Bookmark — circle on top-right */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setSaved((s) => !s); }}
-            aria-label={saved ? "Remove from saved" : "Save designer"}
-            className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center bg-white/95 backdrop-blur-sm transition-transform hover:scale-105 active:scale-95 z-10"
-            style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
-          >
-            <Bookmark
-              className="w-[16px] h-[16px]"
-              style={{
-                color: saved ? C.black : C.gray,
-                fill: saved ? C.black : "none",
-              }}
-            />
-          </button>
-
-          {/* Verified badge — top-left */}
+          {/* Verified badge */}
           {designer.verified && (
             <div
-              className="absolute top-4 left-4 rounded-[100px] px-2.5 py-[4px] flex items-center gap-1"
-              style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
+              className="absolute top-3 left-3 rounded-[100px] px-3 py-[5px] flex items-center gap-1.5"
+              style={{ background: C.cream, border: `1px solid ${C.creamBorder}` }}
             >
-              <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 0L8.57 2.52L11.55 1.91L11.09 4.91L13.67 6.36L11.45 8.22L12.33 11.11L9.48 10.16L7.5 12.68L6.22 10L3.33 10.68L3.89 7.69L1.33 6L3.71 4.36L3.12 1.36L5.99 2.27L7 0Z" fill={C.black}/>
               </svg>
-              <span className="text-[10px] font-semibold" style={{ fontFamily: sans, color: C.black }}>Verified</span>
+              <span className="text-[11px] font-semibold" style={{ fontFamily: sans, color: C.black }}>Verified</span>
             </div>
           )}
 
-          {/* Project count — top-left under verified */}
+          {/* Project count pill */}
           {designer.projects > 0 && (
-            <div
-              className={`absolute ${designer.verified ? "top-12" : "top-4"} left-4 rounded-[100px] px-2.5 py-[4px]`}
-              style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(4px)" }}
-            >
-              <span className="text-[11px] font-semibold" style={{ fontFamily: sans, color: C.black }}>
-                {designer.projects} project{designer.projects !== 1 ? "s" : ""}
+            <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm rounded-[100px] px-3 py-[5px]">
+              <span className="text-[12px] font-medium" style={{ fontFamily: sans, color: C.black }}>
+                {designer.projects} projects
               </span>
             </div>
           )}
+        </div>
 
-          {/* Floating info card pinned to the right of the photo */}
-          <div
-            className="absolute bottom-5 right-5 max-w-[58%] p-4"
-            style={{
-              background: "rgba(255,255,255,0.96)",
-              backdropFilter: "blur(8px)",
-              border: `1px solid rgba(255,255,255,0.6)`,
-              borderRadius: 14,
-              boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
-            }}
-          >
-            <h3
-              className="text-[17px] font-semibold leading-[1.2] mb-1 line-clamp-1"
-              style={{ fontFamily: sans, color: C.black, letterSpacing: "-0.01em" }}
-            >
-              {designer.name}
-            </h3>
+        {/* Content */}
+        <div className="p-5 pb-6">
+          {/* Logo + Name + Rating row */}
+          <div className="flex items-start gap-3 mb-2">
+            <img
+              src={logoSrc}
+              alt=""
+              className="size-[36px] rounded-full object-cover shrink-0"
+              style={{ border: `1px solid ${C.creamBorder}` }}
+              onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_LOGO; }}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h3
+                  className="text-[20px] font-normal leading-[1.2] line-clamp-1"
+                  style={{ fontFamily: serif, color: C.black }}
+                >
+                  {designer.name}
+                </h3>
+                {designer.rating > 0 && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Star className="w-[14px] h-[14px] fill-[#FFA929] text-[#FFA929]" />
+                    <span className="font-medium text-[14px]" style={{ fontFamily: sans, color: C.black }}>{designer.rating}</span>
+                    {designer.reviews > 0 && (
+                      <span className="text-[12px]" style={{ fontFamily: sans, color: C.grayLight }}>({designer.reviews})</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Tagline */}
+          {designer.tagline && (
             <p
-              className="text-[12px] leading-[1.4] line-clamp-1 truncate mb-2"
-              style={{ fontFamily: sans, color: C.grayLight }}
-              title={designer.location}
+              className="text-[14px] leading-[1.5] mb-4 line-clamp-2"
+              style={{ fontFamily: sans, color: C.gray }}
             >
-              {designer.location || "Singapore"}
-              {designer.rating > 0 && (
+              {designer.tagline}
+            </p>
+          )}
+
+          {/* Location */}
+          {designer.location && (
+            <div className="flex items-center gap-1.5 mb-4 min-w-0">
+              <MapPin className="w-[14px] h-[14px] shrink-0" style={{ color: C.grayLight }} />
+              <span
+                className="text-[13px] truncate min-w-0"
+                style={{ fontFamily: sans, color: C.gray }}
+                title={designer.location}
+              >{designer.location}</span>
+              {designer.yearsActive > 0 && (
+                <span className="text-[13px] ml-1 shrink-0" style={{ fontFamily: sans, color: C.grayLight }}>{designer.yearsActive} yrs</span>
+              )}
+            </div>
+          )}
+
+          {/* Accreditations row — show 2 inline, hide the rest behind a +N pill (hover for full list). */}
+          {designer.accreditations.length > 0 && (
+            <div className="flex flex-wrap gap-[6px] mb-5">
+              {designer.accreditations.slice(0, 2).map((a) => (
+                <span
+                  key={a}
+                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium inline-flex items-center gap-1"
+                  style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.black }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#22c55e" }}>
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  {a}
+                </span>
+              ))}
+              {designer.accreditations.length > 2 && (
+                <span
+                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium cursor-help"
+                  style={{ background: C.white, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.gray }}
+                  title={designer.accreditations.slice(2).join(" · ")}
+                >
+                  +{designer.accreditations.length - 2} more
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Budget + CTA row */}
+          <div className="flex items-center justify-between pt-4" style={{ borderTop: `1px solid ${C.creamBorder}` }}>
+            <div>
+              {designer.budget && (
                 <>
-                  {" · "}
-                  <span style={{ color: C.gray }}>★ {designer.rating}</span>
-                  {designer.reviews > 0 && <span> ({designer.reviews})</span>}
+                  <span
+                    className="text-[11px] font-semibold uppercase tracking-[0.1em]"
+                    style={{ fontFamily: sans, color: C.grayLight }}
+                  >
+                    Budget range
+                  </span>
+                  <p className="text-[14px] font-medium" style={{ fontFamily: sans, color: C.black }}>{designer.budget}</p>
                 </>
               )}
-            </p>
-            {designer.budget && (
-              <div
-                className="flex items-center justify-between pt-2"
-                style={{ borderTop: `1px solid ${C.creamBorder}` }}
-              >
-                <span
-                  className="text-[10px] font-medium uppercase tracking-[0.08em]"
-                  style={{ fontFamily: sans, color: C.grayLight }}
-                >
-                  Budget
-                </span>
-                <span className="text-[14px] font-semibold" style={{ fontFamily: sans, color: C.black }}>
-                  {designer.budget}
-                </span>
-              </div>
-            )}
+            </div>
+            <button
+              className="flex items-center gap-1.5 px-5 py-[9px] text-[13px] font-medium rounded-[12px] transition-all hover:opacity-85 active:scale-[0.98]"
+              style={{ background: C.black, color: C.white, fontFamily: sans }}
+            >
+              View Profile
+              <ArrowRight className="w-[14px] h-[14px]" />
+            </button>
           </div>
         </div>
       </div>
@@ -532,60 +581,85 @@ export function DesignersDirectory() {
       <div className="min-h-screen relative overflow-x-clip" style={{ background: C.cream }}>
         <HomepageNav />
 
-        {/* ─── HERO ─── */}
-        <section className="pt-16 md:pt-24 pb-12 md:pb-16 px-6 md:px-10">
-          <div className="max-w-[1280px] mx-auto text-center">
+        {/* ─── HERO PHOTO BAND ─── */}
+        <section className="pt-8 md:pt-12 px-6 md:px-10">
+          <div className="max-w-[1280px] mx-auto">
             <FadeIn>
-              <TagLabel>Interior Designers</TagLabel>
+              <div
+                className="relative overflow-hidden"
+                style={{ borderRadius: 24, height: "clamp(360px, 48vw, 480px)" }}
+              >
+                <img
+                  src={heroPhoto}
+                  alt="Interior design inspiration"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/35" />
+                <div className="relative h-full flex flex-col items-center justify-center text-center px-6 md:px-10">
+                  <p
+                    className="mb-4"
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: "rgba(255,255,255,0.85)",
+                      fontFamily: sans,
+                    }}
+                  >
+                    Interior Designers
+                  </p>
+                  <h1
+                    className="font-normal leading-[1.1] mb-1"
+                    style={{ fontFamily: serif, color: C.white, fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
+                  >
+                    Find Your Designer
+                  </h1>
+                  <p
+                    className="font-normal leading-[1.1] mb-5 md:mb-6"
+                    style={{ fontFamily: serif, color: "rgba(255,255,255,0.85)", fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
+                  >
+                    Browse & Compare
+                  </p>
+                  <p
+                    className="text-[14px] md:text-[16px] max-w-[560px] leading-[1.6]"
+                    style={{ fontFamily: sans, color: "rgba(255,255,255,0.88)" }}
+                  >
+                    Explore our curated directory of verified interior designers. Filter by style, budget, and property type to find your perfect match.
+                  </p>
+                </div>
+              </div>
             </FadeIn>
 
-            <FadeIn delay={0.05}>
-              <h1
-                className="font-normal leading-[1.15] mt-5 mb-2"
-                style={{ fontFamily: serif, color: C.black, fontSize: "clamp(36px, 4vw, 56px)", letterSpacing: "-0.02em" }}
-              >
-                Find Your Designer
-              </h1>
-              <p
-                className="font-normal leading-[1.15] mb-6 md:mb-8"
-                style={{ fontFamily: serif, color: C.gray, fontSize: "clamp(36px, 4vw, 56px)", letterSpacing: "-0.02em" }}
-              >
-                Browse & Compare
-              </p>
-            </FadeIn>
-
+            {/* Floating search card overlapping the photo's bottom edge */}
             <FadeIn delay={0.1}>
-              <p
-                className="text-[15px] md:text-[17px] max-w-[520px] mx-auto leading-[1.65] mb-10 md:mb-14"
-                style={{ fontFamily: sans, color: C.gray }}
+              <div
+                className="relative z-10 mx-auto"
+                style={{ marginTop: -32, maxWidth: 720 }}
               >
-                Explore our curated directory of verified interior designers. Filter by style, budget, and property type to find your perfect match.
-              </p>
-            </FadeIn>
-
-            {/* Search bar */}
-            <FadeIn delay={0.15}>
-              <div className="max-w-[640px] mx-auto">
-                <div className="relative">
-                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: C.grayLight }} />
+                <div
+                  className="relative"
+                  style={{
+                    background: C.white,
+                    border: `1px solid ${C.creamBorder}`,
+                    borderRadius: 100,
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.10)",
+                  }}
+                >
+                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: C.grayLight }} />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search by name, style, or location..."
-                    className="w-full h-[52px] rounded-[10px] pl-13 pr-5 text-[15px] focus:outline-none transition-colors"
+                    className="w-full h-[60px] rounded-[100px] pl-14 pr-12 text-[15px] focus:outline-none bg-transparent"
                     style={{
-                      background: C.white,
-                      border: `1px solid ${C.creamBorder}`,
                       fontFamily: sans,
                       color: C.black,
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = C.black; }}
-                    onBlur={(e) => { e.target.style.borderColor = C.creamBorder; }}
                   />
                   {search && (
-                    <button onClick={() => setSearch("")} className="absolute right-5 top-1/2 -translate-y-1/2 cursor-pointer">
+                    <button onClick={() => setSearch("")} className="absolute right-6 top-1/2 -translate-y-1/2 cursor-pointer">
                       <X className="w-4 h-4 transition-colors" style={{ color: C.grayLight }} />
                     </button>
                   )}
@@ -596,13 +670,13 @@ export function DesignersDirectory() {
         </section>
 
         {/* ─── FILTERS + GRID ─── */}
-        <section className="px-6 md:px-10 pb-20 md:pb-28">
+        <section className="px-6 md:px-10 pt-10 md:pt-14 pb-20 md:pb-28">
           <div className="max-w-[1280px] mx-auto">
             {/* Filter bar — Desktop */}
             <FadeIn delay={0.05}>
-              <div className="hidden md:flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-[6px] mr-2">
+              <div className="hidden md:flex items-center justify-between mb-8 flex-wrap gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-[6px] mr-2 flex-wrap">
                     {PROPERTY_FILTERS.map((f) => (
                       <button
                         key={f}
@@ -817,7 +891,7 @@ export function DesignersDirectory() {
                 </h3>
               </div>
             ) : filteredDesigners.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                 {filteredDesigners.map((designer, i) => (
                   <DesignerCardComponent key={designer.id} designer={designer} index={i} />
                 ))}

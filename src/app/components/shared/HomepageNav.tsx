@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
+import { HomeownerSheet } from "./HomeownerSheet";
 
 const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const serif = "'EB Garamond', Georgia, serif";
 
 const C = {
   cream: "#f0ede6",
@@ -30,6 +32,33 @@ interface HomepageNavProps {
   ctaLabel?: string;
 }
 
+type AuthSnapshot = { signedIn: boolean; name: string; avatar: string };
+
+function readAuthSnapshot(): AuthSnapshot {
+  const signedIn = !!(typeof window !== "undefined" && localStorage.getItem("homeowner-token"));
+  let name = "";
+  let avatar = "";
+  try {
+    const lite = localStorage.getItem("homeowner-profile-cache");
+    if (lite) {
+      const p = JSON.parse(lite);
+      name = p.name || "";
+      avatar = p.avatar || "";
+    }
+  } catch {}
+  return { signedIn, name, avatar };
+}
+
+function initialsFor(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "·";
+}
+
 /**
  * The single nav used across the homepage and every in-nav landing page
  * (Interior Designers, Room Designer, Layout Planner, Cost Guide). Mirrors
@@ -39,6 +68,20 @@ interface HomepageNavProps {
 export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNavProps = {}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
+  const [auth, setAuth] = useState<AuthSnapshot>(() => (typeof window === "undefined" ? { signedIn: false, name: "", avatar: "" } : readAuthSnapshot()));
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Keep the avatar in sync with login/logout from anywhere in the app.
+  useEffect(() => {
+    const sync = () => setAuth(readAuthSnapshot());
+    sync();
+    window.addEventListener("homeowner-auth-changed", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("homeowner-auth-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   useEffect(() => {
     let lastY = window.scrollY || 0;
@@ -66,7 +109,35 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
     else window.location.href = "/get-matched";
   };
 
+  // Avatar trigger — minimal-footprint button that opens the side sheet.
+  // Sized to match the existing CTA pill height so the right edge of the
+  // nav stays visually aligned.
+  const renderAvatarTrigger = () => (
+    <button
+      type="button"
+      onClick={() => setSheetOpen(true)}
+      aria-label="Open your account"
+      className="hidden md:flex items-center justify-center cursor-pointer transition-transform hover:scale-[1.04] active:scale-[0.96]"
+      style={{
+        width: 36, height: 36, borderRadius: 999,
+        background: auth.avatar ? "transparent" : C.black,
+        border: `1px solid ${C.creamBorder}`,
+        overflow: "hidden",
+        padding: 0,
+      }}
+    >
+      {auth.avatar ? (
+        <img src={auth.avatar} alt={auth.name || "You"} className="w-full h-full object-cover" />
+      ) : (
+        <span style={{ color: C.white, fontFamily: serif, fontSize: 14, lineHeight: 1 }}>
+          {initialsFor(auth.name)}
+        </span>
+      )}
+    </button>
+  );
+
   return (
+    <>
     <nav
       className="sticky top-0 z-50"
       style={{
@@ -90,11 +161,14 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
             >{l.label}</a>
           ))}
         </div>
-        {/* Desktop CTA */}
-        <button onClick={handleCta}
-          className="hidden md:block text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
-          style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, border: "none", transition: "all 0.15s" }}
-        >{ctaLabel}</button>
+        {/* Desktop right cluster — avatar (when signed in) + CTA */}
+        <div className="hidden md:flex items-center gap-3">
+          {auth.signedIn && renderAvatarTrigger()}
+          <button onClick={handleCta}
+            className="text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
+            style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, border: "none", transition: "all 0.15s" }}
+          >{ctaLabel}</button>
+        </div>
         {/* Mobile hamburger */}
         <button
           className="md:hidden w-10 h-10 flex items-center justify-center cursor-pointer"
@@ -127,6 +201,32 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
             }}
           >
             <div className="px-6 py-4 flex flex-col gap-1">
+              {auth.signedIn && (
+                <button
+                  onClick={() => { setMobileMenuOpen(false); setSheetOpen(true); }}
+                  className="flex items-center gap-3 py-3 text-left cursor-pointer"
+                  style={{ background: "transparent", border: "none", padding: "12px 0" }}
+                >
+                  {auth.avatar ? (
+                    <img src={auth.avatar} alt={auth.name || "You"} className="size-[36px] rounded-full object-cover" />
+                  ) : (
+                    <span
+                      className="size-[36px] rounded-full flex items-center justify-center"
+                      style={{ background: C.black, color: C.white, fontFamily: serif, fontSize: 14 }}
+                    >
+                      {initialsFor(auth.name)}
+                    </span>
+                  )}
+                  <span className="flex-1">
+                    <span className="block text-[15px] font-medium" style={{ color: C.black, fontFamily: sans }}>
+                      {auth.name || "Your account"}
+                    </span>
+                    <span className="block text-[12px]" style={{ color: C.gray, fontFamily: sans }}>
+                      Tap to open your dashboard
+                    </span>
+                  </span>
+                </button>
+              )}
               {NAV_LINKS.map((l) => (
                 <a key={l.href} href={l.href}
                   className="py-3 text-[15px] font-normal cursor-pointer"
@@ -143,5 +243,7 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
         )}
       </AnimatePresence>
     </nav>
+    <HomeownerSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+    </>
   );
 }

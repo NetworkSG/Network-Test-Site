@@ -504,13 +504,14 @@ export function StudioInfoStep({
       <div>
         <label style={labelStyle}>Google Maps Link</label>
         <input
-          type="url" value={value.googleMapsUrl} placeholder="https://maps.app.goo.gl/…"
+          type="url" value={value.googleMapsUrl}
+          placeholder="https://www.google.com/maps/place/… or https://maps.app.goo.gl/…"
           onChange={(e) => patch({ googleMapsUrl: e.target.value })} style={inputStyle}
           onFocus={(e) => { e.currentTarget.style.borderColor = C.black; }}
           onBlur={(e) => { e.currentTarget.style.borderColor = C.creamBorder; }}
         />
         <p className="mt-1 text-[11px]" style={{ color: C.grayLight, fontFamily: sans }}>
-          We use this to pull your Google reviews into your profile.
+          Search your firm on Google Maps, click <strong>Share</strong>, then copy either the short link or the full address-bar URL. We&rsquo;ll auto-detect your business and pull your Google reviews into your profile.
         </p>
         <FieldError msg={errors.googleMapsUrl} />
       </div>
