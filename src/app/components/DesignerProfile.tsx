@@ -10,6 +10,8 @@ import { FOOTER } from "./homepage/content";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { useDesignerData } from "./useDesignerData";
 import { useFloorPlanSet, projectCandidateImages } from "../utils/floor-plan-detect";
+import { SmartImage } from "./shared/SmartImage";
+import { useNetworkProfile } from "./shared/useNetworkProfile";
 import { useGoogleReviews } from "./useGoogleReviews";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
@@ -98,25 +100,10 @@ export function relabelSqmToSqft(value: string): string {
   return value.replace(/\b(sqm|sq\s*m|m²|m2)\b/gi, "sqft");
 }
 
-/* Build a CDN-resized URL for thumbnail-sized renders.
- *
- * For URLs on our own Supabase storage, use the native /render/image/ endpoint
- * (auto-serves WebP via the browser's Accept header). For everything else,
- * fall back to the free images.weserv.nl public proxy.
- *
- * Falls through unchanged for non-http URLs (data:, blob:, local assets). */
-export function thumbnailUrl(src: string, width: number, quality = 75): string {
-  if (!src || typeof src !== "string") return src;
-  if (!/^https?:\/\//i.test(src)) return src;
-  // Prefer Supabase Storage Image Transformations when available — same
-  // origin as the source, no third-party dependency, WebP via Accept header.
-  const supaMatch = src.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/(.+)$/);
-  if (supaMatch) {
-    return `${supaMatch[1]}/storage/v1/render/image/public/${supaMatch[2]}?width=${width}&quality=${quality}`;
-  }
-  const stripped = src.replace(/^https?:\/\//i, "");
-  return `https://images.weserv.nl/?url=${encodeURIComponent(stripped)}&w=${width}&q=${quality}&output=webp`;
-}
+/* Re-export thumbnailUrl from the shared utility module. The implementation
+ * lives in src/app/utils/image-url.ts so SmartImage can import it without a
+ * circular dependency back into DesignerProfile.tsx. */
+export { thumbnailUrl } from "../utils/image-url";
 
 /* ─── DESIGNER DATA CONTEXT ─── */
 interface DesignerCtxType {
@@ -437,15 +424,18 @@ export function HeroSection() {
 
   const [activeIdx, setActiveIdx] = useState(0);
   const [paused, setPaused] = useState(false);
+  const network = useNetworkProfile();
 
-  // Auto-advance every 5s when there are 2+ slides
+  // Auto-advance every 5s when there are 2+ slides. Skipped on slow networks
+  // / Data Saver / prefers-reduced-data so we don't pull every featured
+  // project upfront on a constrained connection.
   useEffect(() => {
-    if (featuredSlides.length < 2 || paused) return;
+    if (featuredSlides.length < 2 || paused || network.reduceMotion) return;
     const t = setInterval(() => {
       setActiveIdx((i) => (i + 1) % featuredSlides.length);
     }, 5000);
     return () => clearInterval(t);
-  }, [featuredSlides.length, paused]);
+  }, [featuredSlides.length, paused, network.reduceMotion]);
 
   // Clamp index when slide list shrinks
   useEffect(() => {
@@ -467,16 +457,23 @@ export function HeroSection() {
         onMouseLeave={() => setPaused(false)}
       >
         <Wrapper {...wrapperProps} className="absolute inset-0 block" aria-label={active?.name ? `View ${active.name}` : undefined}>
-          {/* Crossfade slides */}
-          {featuredSlides.map((s, i) => (
-            <img
-              key={`${s.img}-${i}`}
-              src={s.img ? resolveImg(s.img) : PLACEHOLDER_COVER}
-              alt={`${companyName} project — ${s.name}`}
-              className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out"
-              style={{ opacity: i === activeIdx ? 1 : 0 }}
-            />
-          ))}
+          {/* Crossfade slides. On slow networks we render only the active
+              slide so the browser doesn't try to download four extra
+              hero-sized images upfront. */}
+          {featuredSlides.map((s, i) => {
+            if (network.reduceMotion && i !== activeIdx) return null;
+            return (
+              <SmartImage
+                key={`${s.img}-${i}`}
+                src={s.img ? resolveImg(s.img) : PLACEHOLDER_COVER}
+                alt={`${companyName} project — ${s.name}`}
+                sizes="(max-width: 1024px) 100vw, 1280px"
+                priority={i === 0}
+                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-in-out"
+                style={{ opacity: i === activeIdx ? 1 : 0 }}
+              />
+            );
+          })}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
 
           {/* Project name overlay */}
@@ -1608,7 +1605,12 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
       {/* Card inner */}
       <div className="relative z-10 bg-[#0f0f0d] rounded-[16px] overflow-hidden h-full">
         {/* Image layer — full color, subtle zoom on hover */}
-        <img src={resolveImg(cover)} alt={p.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        <SmartImage
+          src={resolveImg(cover)}
+          alt={p.name}
+          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+        />
         {/* Gradient overlay for caption legibility */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent pointer-events-none" />
         {overlay}
@@ -1754,7 +1756,12 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   onClick={onClose}
                   className="relative rounded-[20px] overflow-hidden h-[220px] group cursor-pointer block"
                 >
-                  <img src={thumbnailUrl(resolveImg(pickCover(p)), 720)} alt={p.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <SmartImage
+                    src={resolveImg(pickCover(p))}
+                    alt={p.name}
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
                   <div className="absolute bottom-3 left-4 right-4">
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>

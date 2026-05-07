@@ -9,11 +9,12 @@ import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 // Hero image: a warm-toned interior from a real Qanvast-imported project.
 // Picked algorithmically by warmth + low center-window across the active
 // designer pool — wood-slatted feature wall with cove lighting, no windows.
-// Served through Supabase's native image transform so the browser gets a
-// right-sized WebP via the Accept header.
+// Public storage URL (the /render/image/ endpoint is disabled on this
+// Supabase tenant). SmartImage routes the resize through weserv.nl.
 const heroPhoto =
-  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/render/image/public/make-4808de5e-designers/imported/94ab90d9-21c9-447d-9da2-7f038f55c1bd.jpeg?width=1600&quality=80";
+  "https://hycxkpassywjvdqduzrx.supabase.co/storage/v1/object/public/make-4808de5e-designers/imported/94ab90d9-21c9-447d-9da2-7f038f55c1bd.jpeg";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { SmartImage } from "./shared/SmartImage";
 import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
@@ -38,9 +39,54 @@ interface DesignerCard {
   propertyTypes: string[];
   styles: string[];
   budget: string;
+  /** Each tier is a [minThousands, maxThousands] range. Multi-tier firms
+   * (e.g. Essential + Full Renovation packages) get one entry per tier so
+   * the budget filter can do precise overlap checks instead of squashing
+   * everything into the displayed floor-to-ceiling string. */
+  budgetTiers: Array<[number, number]>;
   verified: boolean;
   yearsActive: number;
   accreditations: string[];
+}
+
+/** Parse a single token like "$30K", "30K", "30,000", "$30000" into a number
+ * in thousands. Returns null if the token doesn't contain a number. */
+function parseBudgetToken(token: string): number | null {
+  const m = token.match(/(\d[\d,]*(?:\.\d+)?)\s*([Kk])?/);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(n)) return null;
+  if (m[2]) return n;
+  if (n >= 1000) return n / 1000;
+  return n;
+}
+
+/** Parse the raw businessInfo budget string into one or more tiers, each
+ * expressed as [min, max] in thousands. Splits on commas (multi-segment
+ * package strings) and "From" / "Up to" qualifiers. */
+function parseBudgetTiers(raw: string): Array<[number, number]> {
+  if (!raw) return [];
+  const tiers: Array<[number, number]> = [];
+  // Each comma-separated segment is one package/tier (e.g. Essential, Full).
+  for (const segment of raw.split(/,\s*/)) {
+    const cleaned = segment.trim();
+    if (!cleaned) continue;
+    const matches = [...cleaned.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*([Kk])?/g)];
+    if (matches.length === 0) continue;
+    const nums = matches
+      .map((m) => parseBudgetToken(m[0]))
+      .filter((n): n is number => n != null);
+    if (nums.length === 0) continue;
+    if (nums.length === 1) {
+      const n = nums[0];
+      if (/from|starts?\s*at|onwards?/i.test(cleaned)) tiers.push([n, Infinity]);
+      else if (/up\s*to|under|below/i.test(cleaned)) tiers.push([0, n]);
+      else tiers.push([n, n]);
+    } else {
+      tiers.push([Math.min(...nums), Math.max(...nums)]);
+    }
+  }
+  return tiers;
 }
 
 /* ─── MAP API DATA → CARD ─── */
@@ -90,6 +136,7 @@ function mapDesigner(d: any): DesignerCard {
   const budgetEntry = bInfo.find((b: any) => b.label?.toLowerCase().includes("budget"));
   const budgetRaw = budgetEntry?.value || (btoPackage.startingPrice ? `From ${btoPackage.startingPrice}` : "");
   const budget = collapseBudgetRange(budgetRaw);
+  const budgetTiers = parseBudgetTiers(budgetRaw);
 
   // Prefer the firm's own office address over the service-area region list
   // (which on the directory card just looks like "West, East, North, ...").
@@ -127,13 +174,22 @@ function mapDesigner(d: any): DesignerCard {
     tagline: d.tagline || "",
     image: images.cover || "",
     logo: images.logo || "",
-    rating: parseFloat(stats.rating) || 0,
-    reviews: parseInt(stats.reviewCount) || 0,
+    // Prefer the live Google rating + total ratings (Outscraper / Places)
+    // when present, falling back to the manual stats fields. This keeps the
+    // "Highest Rated" / "Most Reviewed" sorts honest instead of ranking by
+    // hand-typed numbers.
+    rating: (typeof d.googleMeta?.rating === "number" && d.googleMeta.rating > 0)
+      ? d.googleMeta.rating
+      : (parseFloat(stats.rating) || 0),
+    reviews: (typeof d.googleMeta?.totalRatings === "number" && d.googleMeta.totalRatings > 0)
+      ? d.googleMeta.totalRatings
+      : (parseInt(stats.reviewCount) || 0),
     projects: d.totalProjects || 0,
     location,
     propertyTypes,
     styles,
     budget,
+    budgetTiers,
     verified: d.verified || false,
     yearsActive,
     accreditations,
@@ -329,9 +385,10 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
       >
         {/* Cover image */}
         <div className="relative h-[220px] overflow-hidden">
-          <ImageWithFallback
+          <SmartImage
             src={resolveAsset(designer.image)}
             alt={designer.name}
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
@@ -516,14 +573,22 @@ export function DesignersDirectory() {
     }
 
     if (budgetFilter !== "Any Budget") {
+      // Match against each designer's parsed budget tiers (one tier per
+      // package they offer) so a multi-segment string like
+      // "$30K-$50K Essential, $80K-$120K Full" only matches the bands its
+      // tiers actually overlap, instead of being squashed into a single
+      // $30K-$120K floor-to-ceiling range.
+      const bands: Record<string, [number, number]> = {
+        "Under $30K": [0, 30],
+        "$30K – $60K": [30, 60],
+        "$60K – $120K": [60, 120],
+        "$120K+": [120, Infinity],
+      };
+      const [bMin, bMax] = bands[budgetFilter] || [0, Infinity];
       result = result.filter((d) => {
-        const min = parseInt(d.budget.replace(/[^0-9]/g, ""));
-        if (isNaN(min)) return true;
-        if (budgetFilter === "Under $30K") return min < 30;
-        if (budgetFilter === "$30K – $60K") return min >= 30 && min <= 60;
-        if (budgetFilter === "$60K – $120K") return min >= 60 && min <= 120;
-        if (budgetFilter === "$120K+") return min >= 120;
-        return true;
+        const tiers = d.budgetTiers || [];
+        if (tiers.length === 0) return true; // no budget data — keep visible
+        return tiers.some(([fMin, fMax]) => fMin < bMax && fMax >= bMin);
       });
     }
 
@@ -535,8 +600,11 @@ export function DesignersDirectory() {
       );
     }
 
-    if (sortBy === "Most Reviewed") result.sort((a, b) => b.reviews - a.reviews);
-    if (sortBy === "Highest Rated") result.sort((a, b) => b.rating - a.rating);
+    // Sorts use review count as a tiebreaker so a firm with 5.0 (2 reviews)
+    // doesn't outrank a firm with 5.0 (200 reviews), and "Most Reviewed" ties
+    // fall back to higher rating.
+    if (sortBy === "Most Reviewed") result.sort((a, b) => (b.reviews - a.reviews) || (b.rating - a.rating));
+    if (sortBy === "Highest Rated") result.sort((a, b) => (b.rating - a.rating) || (b.reviews - a.reviews));
     if (sortBy === "Most Projects") result.sort((a, b) => b.projects - a.projects);
     if (sortBy === "Newest") result.sort((a, b) => a.yearsActive - b.yearsActive);
 
@@ -589,9 +657,11 @@ export function DesignersDirectory() {
                 className="relative overflow-hidden"
                 style={{ borderRadius: 24, height: "clamp(360px, 48vw, 480px)" }}
               >
-                <img
+                <SmartImage
                   src={heroPhoto}
                   alt="Interior design inspiration"
+                  sizes="(max-width: 1280px) 100vw, 1280px"
+                  priority
                   className="absolute inset-0 w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/35" />

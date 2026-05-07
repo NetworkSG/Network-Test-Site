@@ -31,6 +31,22 @@ export function useDesignerData(slug: string | undefined) {
           console.log("Designer API data loaded:", slug, json.data ? "OK" : "EMPTY");
           setData(json.data || null);
           setLoading(false);
+          // Fire-and-forget profile view tracking. Dedupe per browser session
+          // per slug so navigating back to a profile doesn't double-count.
+          // Server also dedupes per IP per day. Skipped on preview / admin
+          // routes — those readers shouldn't pollute the count.
+          if (!preview && typeof window !== "undefined" && !window.location.pathname.startsWith("/admin")) {
+            const sessionKey = `designer-view-tracked:${slug}`;
+            try {
+              if (!sessionStorage.getItem(sessionKey)) {
+                sessionStorage.setItem(sessionKey, "1");
+                fetch(`${API}/designer-views/${encodeURIComponent(slug)}`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${publicAnonKey}` },
+                }).catch(() => {});
+              }
+            } catch {}
+          }
         }
       })
       .catch((err) => {

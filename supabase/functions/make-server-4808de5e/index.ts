@@ -6281,6 +6281,30 @@ app.get("/make-server-4808de5e/designers", async (c) => {
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100); // max 100
     const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
     const designers = activeDesigners.slice(offset, offset + limit);
+
+    // Attach cached Google review summary (rating + total) to each returned
+    // designer so the directory's "Highest Rated" / "Most Reviewed" sorts and
+    // the rating chip on the card use real Google data instead of the manual
+    // stats fields. Reads from KV only — never refreshes here so the listing
+    // stays fast.
+    try {
+      const cached = await Promise.all(
+        designers.map((d: any) => kv.get(`google-reviews:${d.slug}`).catch(() => null)),
+      );
+      designers.forEach((d: any, i: number) => {
+        const c = cached[i] as any;
+        if (c && (c.rating || c.totalRatings)) {
+          d.googleMeta = {
+            rating: typeof c.rating === "number" ? c.rating : 0,
+            totalRatings: typeof c.totalRatings === "number" ? c.totalRatings : 0,
+            source: c.source || "google",
+          };
+        }
+      });
+    } catch (e) {
+      console.log("Failed to attach googleMeta to /designers listing:", e);
+    }
+
     const completeCount = showAll ? allDesigners.filter((d: any) => d.completeness?.missing?.length === 0).length : undefined;
     console.log(`Returning ${designers.length} of ${activeDesigners.length} active designers (${allDesigners.length} total)`);
     return c.json({ count: activeDesigners.length, data: designers, limit, offset, completeCount });
@@ -9141,6 +9165,113 @@ app.get("/make-server-4808de5e/designer-inquiries/:slug", async (c) => {
   } catch (err) {
     console.log("Unexpected error in GET /designer-inquiries:", err);
     return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Designer profile view tracking. Public endpoint — bumps a per-slug counter
+// when someone opens a designer profile. Same-IP visits within a calendar day
+// are deduped so reloads don't inflate the count.
+// KV layout:
+//   designer-views:<slug>     → { total: number, byDay: { "YYYY-MM-DD": n } }
+//   designer-view-dedupe:<slug>:<ip>:<YYYY-MM-DD> → 1
+app.post("/make-server-4808de5e/designer-views/:slug", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "scrape-profile");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+    const slug = sanitizeString(c.req.param("slug"), 100).replace(/[^a-zA-Z0-9_-]/g, "");
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const dedupeKey = `designer-view-dedupe:${slug}:${ip}:${today}`;
+    const seen = await kv.get(dedupeKey);
+    if (seen) return c.json({ success: true, deduped: true });
+
+    const counterKey = `designer-views:${slug}`;
+    const current: { total?: number; byDay?: Record<string, number> } = (await kv.get(counterKey)) || {};
+    const byDay = current.byDay || {};
+    byDay[today] = (byDay[today] || 0) + 1;
+    const total = (current.total || 0) + 1;
+    await kv.set(counterKey, { total, byDay });
+    await kv.set(dedupeKey, 1);
+
+    return c.json({ success: true, total });
+  } catch (err) {
+    console.log("Unexpected error in POST /designer-views:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
+// Admin analytics — visits and lead-form submissions per designer.
+app.get("/make-server-4808de5e/admin/designer-analytics", async (c) => {
+  const auth = await requireDebugAdmin(c);
+  if (!auth.ok) return c.json({ error: auth.msg }, auth.status as any);
+  try {
+    const sb = getDesignerSupabase();
+    const [designersRes, sectionsRes] = await Promise.all([
+      sb.from("designers").select("slug, name, data"),
+      sb.from("designer_sections").select("slug, section, data").eq("section", "inquiries"),
+    ]);
+    if (designersRes.error) return c.json({ error: designersRes.error.message }, 500);
+
+    const inquiriesBySlug = new Map<string, any[]>();
+    for (const row of (sectionsRes.data || []) as any[]) {
+      if (Array.isArray(row.data)) inquiriesBySlug.set(row.slug, row.data);
+    }
+
+    const designers = (designersRes.data || []).filter((d: any) => !d.data?.deletedAt);
+    const today = new Date().toISOString().slice(0, 10);
+    const last7Cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const last30Cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
+    const rows = await Promise.all(designers.map(async (d: any) => {
+      const slug: string = d.slug;
+      const views: { total?: number; byDay?: Record<string, number> } = (await kv.get(`designer-views:${slug}`)) || {};
+      const byDay = views.byDay || {};
+      const totalViews = views.total || 0;
+      let views7 = 0, views30 = 0;
+      for (const [day, n] of Object.entries(byDay)) {
+        if (day >= last7Cutoff) views7 += n;
+        if (day >= last30Cutoff) views30 += n;
+      }
+      const inquiries = inquiriesBySlug.get(slug) || [];
+      const totalInquiries = inquiries.length;
+      let inquiries7 = 0, inquiries30 = 0;
+      for (const i of inquiries) {
+        const day = String(i?.createdAt || "").slice(0, 10);
+        if (!day) continue;
+        if (day >= last7Cutoff) inquiries7++;
+        if (day >= last30Cutoff) inquiries30++;
+      }
+      return {
+        slug,
+        name: d.data?.name || d.name || slug,
+        totalViews,
+        views7,
+        views30,
+        totalInquiries,
+        inquiries7,
+        inquiries30,
+        conversion: totalViews > 0 ? totalInquiries / totalViews : 0,
+      };
+    }));
+
+    rows.sort((a, b) => b.totalViews - a.totalViews);
+
+    const summary = rows.reduce((acc, r) => ({
+      totalViews: acc.totalViews + r.totalViews,
+      totalInquiries: acc.totalInquiries + r.totalInquiries,
+      views7: acc.views7 + r.views7,
+      inquiries7: acc.inquiries7 + r.inquiries7,
+      views30: acc.views30 + r.views30,
+      inquiries30: acc.inquiries30 + r.inquiries30,
+    }), { totalViews: 0, totalInquiries: 0, views7: 0, inquiries7: 0, views30: 0, inquiries30: 0 });
+
+    return c.json({ asOf: today, summary, rows });
+  } catch (err: any) {
+    console.log("Unexpected error in GET /admin/designer-analytics:", err);
+    return c.json({ error: String(err?.message || err).slice(0, 200) }, 500);
   }
 });
 

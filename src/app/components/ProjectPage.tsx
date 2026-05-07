@@ -14,6 +14,7 @@ import { useIsFloorPlan } from "../utils/floor-plan-detect";
 import { SiteNav } from "./SiteNav";
 import { useDesignerData } from "./useDesignerData";
 import { transformApiData } from "./DesignerProfile";
+import { SmartImage } from "./shared/SmartImage";
 import logoMarkImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { Seo } from "./shared/Seo";
 import { projectId as supaProjectId, publicAnonKey } from "/utils/supabase/info";
@@ -140,7 +141,7 @@ function ThumbnailCarousel({
               opacity: i === activeIndex ? 1 : 0.7,
             }}
           >
-            <img src={img} alt="" className="w-full h-full object-cover" />
+            <SmartImage src={img} alt="" sizes="140px" className="w-full h-full object-cover" />
           </button>
         ))}
       </div>
@@ -364,9 +365,11 @@ export function ProjectPage() {
               }}
               onClick={() => setLightboxIndex(activeImage)}
             >
-              <img
+              <SmartImage
                 src={images[activeImage] || projectImage}
                 alt={project.name}
+                sizes="(max-width: 1024px) 100vw, 1280px"
+                priority={activeImage === 0}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
               />
               {galleryCaptions[activeImage - 1] && (
@@ -690,10 +693,10 @@ export function ProjectPage() {
                   }}
                 >
                   <div className="relative overflow-hidden" style={{ aspectRatio: "4/5" }}>
-                    <img
+                    <SmartImage
                       src={resolveImg(p.img || p.image)}
                       alt={p.name}
-                      loading="lazy"
+                      sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                     />
                   </div>

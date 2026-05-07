@@ -45,12 +45,14 @@ import {
   Filter,
   Activity,
   Magnet,
+  BarChart3,
 } from "lucide-react";
 import { AdminFloorPlanTemplates } from "./AdminFloorPlanTemplates";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
 import { AdminOverview } from "./AdminOverview";
 import { AdminDebugPanel } from "./AdminDebugPanel";
 import { AdminLeadMagnets } from "./AdminLeadMagnets";
+import { AdminAnalytics } from "./AdminAnalytics";
 
 const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 const AUTH = { Authorization: `Bearer ${publicAnonKey}` };
@@ -1748,7 +1750,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [designerToggleConfirm, setDesignerToggleConfirm] = useState<{ slug: string; currentlyActive: boolean } | null>(null);
   const [designerDeleteConfirm, setDesignerDeleteConfirm] = useState<{ slug: string; name: string } | null>(null);
   const [deletingDesigner, setDeletingDesigner] = useState<string | null>(null);
-  const [adminSection, setAdminSection] = useState<"overview" | "lead-magnets" | "designers" | "templates" | "template-editor" | "debug" | "deleted">("overview");
+  const [adminSection, setAdminSection] = useState<"overview" | "lead-magnets" | "analytics" | "designers" | "templates" | "template-editor" | "debug" | "deleted">("overview");
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [salesRepFilter, setSalesRepFilter] = useState<string>("all");
@@ -2039,7 +2041,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           </div>
           <div>
             <h1 className="font-bold text-[18px] text-[#101828] leading-tight">Admin Dashboard</h1>
-            <p className="text-[12px] text-[#9ca3af]">{adminSection === "overview" ? "Platform Analytics & Insights" : adminSection === "lead-magnets" ? "Per-magnet conversion data" : adminSection === "designers" ? "Manage Designer Profiles" : adminSection === "templates" ? "Manage Floor Plan Templates" : adminSection === "debug" ? "Debug & Monitoring" : "Create & Edit Floor Plan Templates"}</p>
+            <p className="text-[12px] text-[#9ca3af]">{adminSection === "overview" ? "Platform Analytics & Insights" : adminSection === "lead-magnets" ? "Per-magnet conversion data" : adminSection === "analytics" ? "Designer profile visits & lead-form submissions" : adminSection === "designers" ? "Manage Designer Profiles" : adminSection === "templates" ? "Manage Floor Plan Templates" : adminSection === "debug" ? "Debug & Monitoring" : "Create & Edit Floor Plan Templates"}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -2082,6 +2084,7 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           {([
             { key: "overview" as const, icon: LayoutDashboard, label: "Overview" },
             { key: "lead-magnets" as const, icon: Magnet, label: "Lead Magnets" },
+            { key: "analytics" as const, icon: BarChart3, label: "Designer Analytics" },
             { key: "designers" as const, icon: Users, label: "Designer Profiles" },
             { key: "template-editor" as const, icon: PenLine, label: "Template Editor" },
             ...((adminUser.email || "").toLowerCase() === "raemerdr@gmail.com"
@@ -2112,6 +2115,8 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
           <AdminOverview onNavigate={(section) => setAdminSection(section as any)} />
         ) : adminSection === "lead-magnets" ? (
           <AdminLeadMagnets />
+        ) : adminSection === "analytics" ? (
+          <AdminAnalytics />
         ) : adminSection === "template-editor" ? (
           <AdminTemplateEditorTab />
         ) : adminSection === "debug" ? (
