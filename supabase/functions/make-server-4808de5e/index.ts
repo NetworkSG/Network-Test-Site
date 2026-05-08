@@ -2729,13 +2729,20 @@ app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
     // Pull all fields so we can locate the sales-rep column whatever the exact
     // header reads ("Sales Representatives" / "Sales Rep" / "Sales Representative").
     const records = await fetchAirtableIdProfiles([]);
+    // Airtable omits empty fields per-record, so the sales-rep column may not
+    // appear on the first firm if it has no rep assigned. Scan every record
+    // until we find the column header.
     const findRepFieldKey = (fields: Record<string, any>): string | null => {
       for (const k of Object.keys(fields || {})) {
         if (/sales\s*rep/i.test(k)) return k;
       }
       return null;
     };
-    const repFieldKey = records[0]?.fields ? findRepFieldKey(records[0].fields) : null;
+    let repFieldKey: string | null = null;
+    for (const r of records) {
+      repFieldKey = findRepFieldKey(r?.fields || {});
+      if (repFieldKey) break;
+    }
 
     // Collect every linked rep id across all firms, then resolve them to
     // names in one batch via the linked table (Sales Representative is a
