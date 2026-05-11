@@ -2683,7 +2683,7 @@ async function fetchAirtableIdProfiles(fields: string[] = ["Client"]): Promise<a
   const records: any[] = [];
   let offset: string | undefined;
   const baseQs = `view=${encodeURIComponent("ALL")}&pageSize=100${fields.map((f) => `&fields%5B%5D=${encodeURIComponent(f)}`).join("")}`;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 50; i++) {
     const qs = offset ? `${baseQs}&offset=${encodeURIComponent(offset)}` : baseQs;
     const res = await fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_ID}?${qs}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -3731,7 +3731,14 @@ app.get("/make-server-4808de5e/admin/designers", async (c) => {
       .filter((d: any) => !d.data?.deletedAt) // hide soft-deleted from active list
       .map((d: any) => {
         const merged = { ...(d.data || {}), slug: d.slug, name: d.data?.name || d.name };
-        merged.completeness = completeness(merged, sectionsBySlug[d.slug] || {});
+        const sections = sectionsBySlug[d.slug] || {};
+        merged.completeness = completeness(merged, sections);
+        // Surface the project count so the admin list view can sort by it
+        // without each row having to refetch the projects section.
+        const projectsArr = Array.isArray(sections.projects)
+          ? sections.projects
+          : Array.isArray(merged.projects) ? merged.projects : [];
+        merged.projectCount = projectsArr.length;
         return merged;
       });
     return c.json({ count: designers.length, data: designers });

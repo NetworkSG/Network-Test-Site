@@ -46,6 +46,11 @@ import {
   Activity,
   Magnet,
   BarChart3,
+  LayoutGrid,
+  List as ListIcon,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { AdminFloorPlanTemplates } from "./AdminFloorPlanTemplates";
 import { analyzeFloorPlanAI, storeAIDefs, type ParsedHouseRoomDef } from "./floor-plan-analyzer";
@@ -1754,6 +1759,18 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
   const [designerSearch, setDesignerSearch] = useState("");
   const [designerStatusFilter, setDesignerStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [salesRepFilter, setSalesRepFilter] = useState<string>("all");
+  // List view (sortable table) vs the original card grid. Sort cycles
+  // desc → asc → desc when the user clicks the same column header.
+  const [designerView, setDesignerView] = useState<"grid" | "list">("grid");
+  type DesignerSortKey = "name" | "projectCount" | "active" | "completeness";
+  const [designerSort, setDesignerSort] = useState<{ key: DesignerSortKey; dir: "desc" | "asc" } | null>(null);
+  const cycleDesignerSort = (key: DesignerSortKey) => {
+    setDesignerSort((prev) =>
+      prev?.key === key
+        ? { key, dir: prev.dir === "desc" ? "asc" : "desc" }
+        : { key, dir: "desc" },
+    );
+  };
   // Map: lowercased firm name → primary sales rep, sourced from Airtable
   // (Clients Pipeline → ALL view → Sales Representatives field).
   const [salesRepByFirm, setSalesRepByFirm] = useState<Map<string, string>>(new Map());
@@ -1811,6 +1828,28 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
       return matchesSearch && matchesStatus && matchesRep;
     })
     .sort((a: any, b: any) => {
+      // Explicit column sort (list view) overrides the default active-first order.
+      if (designerSort) {
+        const flip = designerSort.dir === "asc" ? -1 : 1;
+        switch (designerSort.key) {
+          case "projectCount":
+            return ((b.projectCount || 0) - (a.projectCount || 0)) * flip;
+          case "active": {
+            const aA = a.active !== false ? 1 : 0;
+            const bA = b.active !== false ? 1 : 0;
+            return (bA - aA) * flip;
+          }
+          case "completeness": {
+            const aRatio = a.completeness ? a.completeness.filled / a.completeness.total : 0;
+            const bRatio = b.completeness ? b.completeness.filled / b.completeness.total : 0;
+            return (bRatio - aRatio) * flip;
+          }
+          case "name":
+          default:
+            return (b.name || b.slug || "").localeCompare(a.name || a.slug || "") * flip;
+        }
+      }
+      // Default: active firms first, then alphabetical.
       const aActive = a.active !== false ? 0 : 1;
       const bActive = b.active !== false ? 0 : 1;
       if (aActive !== bActive) return aActive - bActive;
@@ -2193,6 +2232,23 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                 ))}
                 <option value="__unassigned">— Unassigned</option>
               </select>
+              {/* Grid / List view toggle */}
+              <div className="flex items-center bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setDesignerView("grid")}
+                  title="Card grid view"
+                  className={`size-[42px] flex items-center justify-center cursor-pointer transition-all border-r border-[#e5e7eb] ${designerView === "grid" ? "bg-[#101828] text-white" : "text-[#6a7282] hover:bg-[#f9fafb]"}`}
+                >
+                  <LayoutGrid className="size-4" strokeWidth={1.75} />
+                </button>
+                <button
+                  onClick={() => setDesignerView("list")}
+                  title="Sortable list view"
+                  className={`size-[42px] flex items-center justify-center cursor-pointer transition-all ${designerView === "list" ? "bg-[#101828] text-white" : "text-[#6a7282] hover:bg-[#f9fafb]"}`}
+                >
+                  <ListIcon className="size-4" strokeWidth={1.75} />
+                </button>
+              </div>
             </div>
 
             {loadingList ? (
@@ -2223,6 +2279,134 @@ function AdminDashboardContent({ adminUser, onLogout }: { adminUser: { userId: s
                 <h3 className="font-semibold text-[18px] text-[#101828] mb-2">No matching designers</h3>
                 <p className="text-[14px] text-[#6a7282] mb-4">Try adjusting your search or filter criteria.</p>
                 <button onClick={() => { setDesignerSearch(""); setDesignerStatusFilter("all"); }} className="text-[14px] font-medium text-[#2b7fff] hover:underline cursor-pointer">Clear filters</button>
+              </div>
+            ) : designerView === "list" ? (
+              /* ──────── LIST VIEW (sortable table) ──────── */
+              <div className="bg-white border border-[#e5e7eb] rounded-2xl overflow-hidden">
+                {(() => {
+                  const SortHeader = ({ k, label, align = "left" }: { k: DesignerSortKey; label: string; align?: "left" | "right" | "center" }) => {
+                    const active = designerSort?.key === k;
+                    const Arrow = active ? (designerSort?.dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
+                    return (
+                      <button
+                        onClick={() => cycleDesignerSort(k)}
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer ${active ? "text-[#101828]" : "text-[#6a7282] hover:text-[#101828]"} ${align === "right" ? "justify-end w-full" : align === "center" ? "justify-center w-full" : ""}`}
+                        title={`Sort by ${label.toLowerCase()}`}
+                      >
+                        {label}
+                        <Arrow className={`size-3 ${active ? "" : "opacity-50"}`} strokeWidth={2} />
+                      </button>
+                    );
+                  };
+                  return (
+                    <>
+                      <div
+                        className="grid items-center gap-4 px-5 py-3 bg-[#f9fafb] border-b border-[#e5e7eb]"
+                        style={{ gridTemplateColumns: "minmax(220px, 2fr) 90px 100px 200px 168px" }}
+                      >
+                        <SortHeader k="name" label="Firm" />
+                        <SortHeader k="projectCount" label="Projects" align="right" />
+                        <SortHeader k="active" label="Status" align="center" />
+                        <SortHeader k="completeness" label="Profile" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6a7282] text-right">Actions</span>
+                      </div>
+                      {filteredDesigners.map((d: any) => {
+                        const ratio = d.completeness ? d.completeness.filled / d.completeness.total : 0;
+                        const completeColor = !d.completeness ? "#9ca3af" : d.completeness.missing.length === 0 ? "#22c55e" : ratio >= 0.7 ? "#f59e0b" : "#ef4444";
+                        return (
+                          <div
+                            key={d.slug}
+                            className={`grid items-center gap-4 px-5 py-3 border-b border-[#f3f4f6] last:border-b-0 hover:bg-[#fafbfc] transition-colors ${d.active === false ? "opacity-60" : ""}`}
+                            style={{ gridTemplateColumns: "minmax(220px, 2fr) 90px 100px 200px 168px" }}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {d.images?.logo ? (
+                                <div className="size-[36px] rounded-full bg-[#f3f4f6] shrink-0 overflow-hidden border border-[#e5e7eb]">
+                                  <img src={resolveAsset(d.images.logo)} alt="" className="size-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                                </div>
+                              ) : (
+                                <div className="size-[36px] rounded-full bg-[#f3f4f6] shrink-0 flex items-center justify-center border border-[#e5e7eb]">
+                                  <Building2 className="size-4 text-[#9ca3af]" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <h3 className="font-semibold text-[14px] text-[#101828] truncate">{d.name || d.slug}</h3>
+                                  {d.verified && (
+                                    <div className="bg-[#2b7fff] rounded-full size-[12px] flex items-center justify-center shrink-0">
+                                      <svg className="size-[7px]" viewBox="0 0 10 7.5" fill="none"><path d="M9 1L3.5 6.5L1 4" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-[#9ca3af] truncate">/{d.slug}</p>
+                              </div>
+                            </div>
+                            <div className="text-[14px] font-semibold text-[#101828] text-right tabular-nums">{d.projectCount || 0}</div>
+                            <div className="flex justify-center">
+                              {d.active === false ? (
+                                <span className="text-[10px] font-medium text-[#f59e0b] bg-[#fffbeb] border border-[#fde68a] rounded-full px-2 py-0.5 leading-none">Inactive</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#22c55e] bg-[#f0fdf4] border border-[#bbf7d0] rounded-full px-2 py-0.5 leading-none">
+                                  <span className="size-[6px] rounded-full bg-[#22c55e] inline-block" />Active
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              {d.completeness ? (
+                                <>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[11px] font-semibold" style={{ color: completeColor }}>
+                                      {d.completeness.filled}/{d.completeness.total}
+                                      {d.completeness.missing.length === 0 && " · Done"}
+                                    </span>
+                                    <span className="text-[10px] text-[#9ca3af] tabular-nums">{Math.round(ratio * 100)}%</span>
+                                  </div>
+                                  <div className="w-full h-[4px] bg-[#f3f4f6] rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full transition-all" style={{ background: completeColor, width: `${Math.round(ratio * 100)}%` }} />
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-[#9ca3af]">—</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <button
+                                onClick={() => navigate(`/edit-profile/${d.slug}`)}
+                                className="size-[30px] flex items-center justify-center bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-[#364153] hover:bg-[#f3f4f6] transition-colors cursor-pointer"
+                                title="Edit"
+                              >
+                                <PenLine className="size-3.5" />
+                              </button>
+                              <button
+                                onClick={() => navigate(`/designer/${d.slug}`)}
+                                className="size-[30px] flex items-center justify-center bg-[#f9fafb] border border-[#e5e7eb] rounded-lg text-[#364153] hover:bg-[#f3f4f6] transition-colors cursor-pointer"
+                                title="View"
+                              >
+                                <Eye className="size-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDesignerToggleConfirm({ slug: d.slug, currentlyActive: d.active !== false })}
+                                disabled={toggling === d.slug}
+                                className={`size-[30px] flex items-center justify-center border rounded-lg transition-all cursor-pointer disabled:opacity-50 ${d.active === false ? "border-[#e5e7eb] text-[#d1d5db] hover:text-[#22c55e] hover:border-[#bbf7d0] hover:bg-[#f0fdf4]" : "border-[#e5e7eb] text-[#d1d5db] hover:text-[#f59e0b] hover:border-[#fde68a] hover:bg-[#fffbeb]"}`}
+                                title={d.active === false ? "Activate" : "Deactivate"}
+                              >
+                                {toggling === d.slug ? <Loader2 className="size-3.5 animate-spin" /> : <Power className="size-3.5" />}
+                              </button>
+                              <button
+                                onClick={() => setDesignerDeleteConfirm({ slug: d.slug, name: d.name || d.slug })}
+                                disabled={deletingDesigner === d.slug}
+                                className="size-[30px] flex items-center justify-center border border-[#e5e7eb] text-[#d1d5db] rounded-lg transition-all cursor-pointer hover:text-[#ef4444] hover:border-[#fecaca] hover:bg-[#fef2f2] disabled:opacity-50"
+                                title="Delete designer"
+                              >
+                                {deletingDesigner === d.slug ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
