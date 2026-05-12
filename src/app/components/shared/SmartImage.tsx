@@ -47,7 +47,11 @@ export function SmartImage({
 }: SmartImageProps) {
   const profile = useNetworkProfile();
   const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
   const mainRef = useRef<HTMLImageElement>(null);
+
+  // Reset error state when the source changes so a fresh URL gets a fresh chance.
+  useEffect(() => { setErrored(false); }, [src]);
 
   // Cached-image race: when an <img> is already cached, the browser may have
   // finished loading it before React attached the onLoad listener, so onLoad
@@ -96,6 +100,34 @@ export function SmartImage({
     opacity: showBlur && !loaded ? 0 : style?.opacity ?? 1,
   };
 
+  // Graceful fallback when the network/CDN returns an error: render a neutral
+  // tile in place of the broken <img> so layouts don't collapse to a black void
+  // (or show a UA-default broken-image glyph). Uses the same className/style so
+  // object-fit, positioning, and intrinsic sizing carry over.
+  if (errored) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        className={className}
+        style={{
+          ...style,
+          background:
+            "linear-gradient(135deg, #1a1916 0%, #2a2724 50%, #1a1916 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(255,255,255,0.25)" }} aria-hidden>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="9" cy="9" r="2" />
+          <path d="m21 15-5-5L5 21" />
+        </svg>
+      </div>
+    );
+  }
+
   const imgEl = (
     <img
       src={mainSrc}
@@ -112,6 +144,7 @@ export function SmartImage({
       decoding="async"
       referrerPolicy={referrerPolicy}
       onLoad={(e) => { setLoaded(true); onLoad?.(e); }}
+      onError={() => setErrored(true)}
       className={className}
       style={imgStyle}
     />
@@ -149,6 +182,7 @@ export function SmartImage({
         decoding="async"
         referrerPolicy={referrerPolicy}
         onLoad={(e) => { setLoaded(true); onLoad?.(e); }}
+        onError={() => setErrored(true)}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ transition: "opacity 300ms ease", opacity: loaded ? 1 : 0 }}
       />
