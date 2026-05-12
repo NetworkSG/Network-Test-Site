@@ -4233,6 +4233,7 @@ function EditorView({ slug }: { slug: string }) {
       caseStudies: rawData?.caseStudies || [],
       reviews: rawData?.reviews || [],
       latestReviews: rawData?.latestReviews || [],
+      hiddenGoogleReviews: rawData?.hiddenGoogleReviews || [],
       serviceArea: rawData?.serviceArea || {},
       businessInfo: rawData?.businessInfo || [],
     };

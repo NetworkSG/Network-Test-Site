@@ -2799,18 +2799,69 @@ export function HomeownersSay() {
 }
 
 /* ─── GOOGLE REVIEW CARDS (with images) ─── */
+
+// Stable identifier for a Google review. Google's payload doesn't include an
+// `id`, so we derive a composite key from author + the first 200 chars of text
+// — stable enough across data refreshes that a "hidden review" list saved on
+// the designer's profile keeps targeting the same review.
+export function reviewKey(r: any): string {
+  const name = String(r?.name || r?.author || "").trim().toLowerCase();
+  const text = String(r?.fullText || r?.text || "").trim().slice(0, 200);
+  return `${name}||${text}`;
+}
+
+// Edit-mode-only toggle that hides/unhides a Google review from the public
+// profile. Persists the composite key list under `hiddenGoogleReviews` on the
+// designer's profile data (saved via ProfileEditContext.save).
+function HideReviewToggle({ review }: { review: any }) {
+  const editCtx = useContext(ProfileEditContext);
+  const ctx = useDesignerCtx();
+  if (!editCtx) return null;
+  const current = ((ctx?.profile?.hiddenGoogleReviews as string[]) ?? []);
+  const key = reviewKey(review);
+  const isHidden = current.includes(key);
+  const onClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = isHidden ? current.filter((k) => k !== key) : [...current, key];
+    editCtx.save("hiddenGoogleReviews", next);
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute top-2 right-2 z-[5] px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider cursor-pointer transition-colors"
+      style={{
+        background: isHidden ? "#0f0f0d" : "rgba(255,255,255,0.95)",
+        color: isHidden ? "#fff" : "#0f0f0d",
+        border: `1px solid ${isHidden ? "#0f0f0d" : "#d8d3c8"}`,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+        fontFamily: sans,
+      }}
+      title={isHidden ? "Click to unhide this review from the public profile" : "Hide this review from the public profile"}
+    >
+      {isHidden ? "Hidden — click to show" : "Hide"}
+    </button>
+  );
+}
+
 function ReviewCard({ review, index }: { review: typeof reviews[0]; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const ctx = useDesignerCtx();
+  const editCtx = useContext(ProfileEditContext);
   const placeId = ctx?.googleMeta?.placeId;
   const googleReviewsUrl = placeId
     ? `https://search.google.com/local/reviews?placeid=${placeId}`
     : null;
   const starRating = typeof review.rating === "number" ? review.rating : 5;
+  const isHidden = editCtx
+    ? ((ctx?.profile?.hiddenGoogleReviews as string[]) ?? []).includes(reviewKey(review))
+    : false;
 
   return (
-    <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] overflow-hidden">
+    <div className="relative bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] overflow-hidden" style={{ opacity: isHidden ? 0.5 : 1 }}>
+      <HideReviewToggle review={review} />
       {/* Image — only render when the review has one (Google Place reviews don't supply images) */}
       {review.img && (
         <div className={`relative w-full overflow-hidden ${review.hasVideo ? "h-[253px]" : "h-[160px]"}`}>
@@ -2926,6 +2977,11 @@ function ReviewCardInline({ review }: { review: any }) {
   const [needsTruncation, setNeedsTruncation] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
+  const editCtxForHide = useContext(ProfileEditContext);
+  const ctxForHide = useDesignerCtx();
+  const isHidden = editCtxForHide
+    ? ((ctxForHide?.profile?.hiddenGoogleReviews as string[]) ?? []).includes(reviewKey(review))
+    : false;
 
   // While the photo lightbox is open: lock body scroll and let Esc close it.
   useEffect(() => {
@@ -2968,7 +3024,8 @@ function ReviewCardInline({ review }: { review: any }) {
   const starRating = typeof review.rating === "number" ? review.rating : 5;
 
   return (
-    <div className="bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-5">
+    <div className="relative bg-[#fafaf8] border border-[#d8d3c8] rounded-[12px] p-5" style={{ opacity: isHidden ? 0.5 : 1 }}>
+      <HideReviewToggle review={review} />
       {/* Header: avatar + name on left, stars on right */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -3109,7 +3166,17 @@ export function GoogleReviewCards({ inline = false }: { inline?: boolean } = {})
   // Fall back to the designer-authored `reviews` array (or the empty
   // module-level fallback) so the section still renders during dev.
   const googleRvws = ctx?.googleReviews ?? [];
-  const rvws = googleRvws.length > 0 ? googleRvws : (ctx?.reviews ?? reviews);
+  const sourceRvws = googleRvws.length > 0 ? googleRvws : (ctx?.reviews ?? reviews);
+  // Hidden reviews are persisted as composite keys on the designer profile.
+  // In view mode we filter them out; in edit mode we keep them so the firm can
+  // unhide. See HideReviewToggle for the persistence call.
+  const hiddenKeys = useMemo(
+    () => new Set<string>(((ctx?.profile?.hiddenGoogleReviews as string[]) ?? [])),
+    [ctx?.profile?.hiddenGoogleReviews]
+  );
+  const rvws = editCtx
+    ? sourceRvws
+    : sourceRvws.filter((r: any) => !hiddenKeys.has(reviewKey(r)));
   const googlePlaceId = ctx?.googleMeta?.placeId;
   const totalRatings = ctx?.googleMeta?.totalRatings;
   const [expanded, setExpanded] = useState(false);
