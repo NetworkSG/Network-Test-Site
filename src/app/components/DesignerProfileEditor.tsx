@@ -1349,6 +1349,20 @@ function AddProjectModal({
   const removeGalleryImage = (i: number) => {
     setDraft((d) => ({ ...d, gallery: d.gallery.filter((_, j) => j !== i) }));
   };
+  // Promote a gallery image to be the project cover. The current cover (if any)
+  // takes the gallery slot it just vacated so nothing is lost.
+  const setAsCover = (i: number) => {
+    setDraft((d) => {
+      const promoted = d.gallery[i]?.src;
+      if (!promoted || promoted === d.coverImage) return d;
+      const prevCover = d.coverImage;
+      const nextGallery = d.gallery.map((g, j) =>
+        j === i ? { src: prevCover || "", caption: g.caption } : g
+      );
+      const cleaned = prevCover ? nextGallery : nextGallery.filter((g) => g.src);
+      return { ...d, coverImage: promoted, gallery: cleaned };
+    });
+  };
 
   const toggleWork = (key: string) => {
     setDraft((d) => ({
@@ -1666,29 +1680,47 @@ function AddProjectModal({
               <label style={labelStyle}>Gallery Images</label>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {draft.gallery.map((img, i) => (
-                  <div
-                    key={i}
-                    className="relative overflow-hidden"
-                    style={{
-                      aspectRatio: "1/1",
-                      background: C.cream,
-                      border: `1px solid ${C.creamBorder}`,
-                      borderRadius: "10px",
-                    }}
-                  >
-                    <img src={img.src} alt="" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeGalleryImage(i)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer"
-                      style={{ background: "rgba(15,15,13,0.7)", color: C.white }}
-                      aria-label="Remove image"
+                {draft.gallery.map((img, i) => {
+                  const isCover = img.src === draft.coverImage;
+                  return (
+                    <div
+                      key={i}
+                      className="relative overflow-hidden"
+                      style={{
+                        aspectRatio: "1/1",
+                        background: C.cream,
+                        border: `1px solid ${isCover ? "#f59e0b" : C.creamBorder}`,
+                        borderRadius: "10px",
+                      }}
                     >
-                      <X size={11} />
+                      <img src={img.src} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setAsCover(i)}
+                        className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer"
+                        style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }}
+                        aria-label={isCover ? "Current cover image" : "Set as cover image"}
+                        title={isCover ? "Current cover" : "Set as cover"}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(i)}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer"
+                        style={{ background: "rgba(15,15,13,0.7)", color: C.white }}
+                        aria-label="Remove image"
+                      >
+                        <X size={11} />
                     </button>
-                  </div>
-                ))}
+                    {isCover && (
+                      <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>
+                    )}
+                    </div>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => !uploadingGallery && galleryRef.current?.click()}
@@ -1954,6 +1986,23 @@ function EditProjectModal({
   const removeGalleryImage = (i: number) => {
     setDraft((d) => ({ ...d, gallery: d.gallery.filter((_, j) => j !== i) }));
   };
+  // Promote a gallery image to be the project cover. The current cover (if any)
+  // takes the gallery slot it just vacated so nothing is lost. Caption preserved
+  // on the demoted image; the promoted image's caption is dropped since covers
+  // don't render captions.
+  const setAsCover = (i: number) => {
+    setDraft((d) => {
+      const promoted = d.gallery[i]?.src;
+      if (!promoted || promoted === d.coverImage) return d;
+      const prevCover = d.coverImage;
+      const nextGallery = d.gallery.map((g, j) =>
+        j === i ? { src: prevCover || "", caption: g.caption } : g
+      );
+      // If there was no previous cover, drop the now-empty slot we created.
+      const cleaned = prevCover ? nextGallery : nextGallery.filter((g) => g.src);
+      return { ...d, coverImage: promoted, gallery: cleaned };
+    });
+  };
 
   const toggleWork = (key: string) => {
     setDraft((d) => ({
@@ -2118,12 +2167,19 @@ function EditProjectModal({
               <label style={labelStyle}>Gallery Images</label>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {draft.gallery.map((img, i) => (
-                  <div key={i} className="relative overflow-hidden" style={{ aspectRatio: "1/1", background: C.cream, border: `1px solid ${C.creamBorder}`, borderRadius: "10px" }}>
-                    <img src={img.src} alt="" className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
-                  </div>
-                ))}
+                {draft.gallery.map((img, i) => {
+                  const isCover = img.src === draft.coverImage;
+                  return (
+                    <div key={i} className="relative overflow-hidden" style={{ aspectRatio: "1/1", background: C.cream, border: `1px solid ${isCover ? "#f59e0b" : C.creamBorder}`, borderRadius: "10px" }}>
+                      <img src={img.src} alt="" className="w-full h-full object-cover" />
+                      <button type="button" onClick={() => setAsCover(i)} className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }} aria-label={isCover ? "Current cover image" : "Set as cover image"} title={isCover ? "Current cover" : "Set as cover"}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                      </button>
+                      <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
+                      {isCover && <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>}
+                    </div>
+                  );
+                })}
                 <button type="button" onClick={() => !uploadingGallery && galleryRef.current?.click()} disabled={uploadingGallery} className="flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:opacity-80" style={{ aspectRatio: "1/1", background: C.cream, border: `2px dashed ${C.creamBorder}`, borderRadius: "10px" }}>
                   {uploadingGallery ? <Loader2 size={18} className="animate-spin" style={{ color: C.gray }} /> : (<><Plus size={18} style={{ color: C.gray }} /><span className="text-[10px]" style={{ color: C.gray }}>Add</span></>)}
                 </button>
