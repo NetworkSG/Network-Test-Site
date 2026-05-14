@@ -1672,10 +1672,10 @@ function AddProjectModal({
                     <div
                       key={i}
                       draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragIdx(i); }}
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragIdx(i); }}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
                       onDragLeave={() => { if (overIdx === i) setOverIdx(null); }}
-                      onDrop={(e) => { e.preventDefault(); if (dragIdx !== null) reorderGallery(dragIdx, i); setDragIdx(null); setOverIdx(null); }}
+                      onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(from) && from !== i) reorderGallery(from, i); setDragIdx(null); setOverIdx(null); }}
                       onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
                       className="relative overflow-hidden"
                       style={{
@@ -1993,6 +1993,17 @@ function EditProjectModal({
       return { ...d, gallery: next, coverImage: promoted.src };
     });
   };
+  // Reorder via drag-and-drop. Splice the dragged tile out of its old slot and
+  // insert at the drop target's index, then re-sync coverImage to gallery[0].
+  const reorderGallery = (from: number, to: number) => {
+    setDraft((d) => {
+      if (from === to || from < 0 || to < 0 || from >= d.gallery.length || to >= d.gallery.length) return d;
+      const next = [...d.gallery];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return { ...d, gallery: next, coverImage: next[0]?.src || "" };
+    });
+  };
 
   const toggleWork = (key: string) => {
     setDraft((d) => ({
@@ -2146,10 +2157,10 @@ function EditProjectModal({
                     <div
                       key={i}
                       draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragIdx(i); }}
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragIdx(i); }}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
                       onDragLeave={() => { if (overIdx === i) setOverIdx(null); }}
-                      onDrop={(e) => { e.preventDefault(); if (dragIdx !== null) reorderGallery(dragIdx, i); setDragIdx(null); setOverIdx(null); }}
+                      onDrop={(e) => { e.preventDefault(); const from = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(from) && from !== i) reorderGallery(from, i); setDragIdx(null); setOverIdx(null); }}
                       onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
                       className="relative overflow-hidden"
                       style={{
