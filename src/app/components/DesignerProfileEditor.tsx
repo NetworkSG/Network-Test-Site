@@ -1232,6 +1232,25 @@ function buildSizeString(num: string): string {
   return `${num} sqm`;
 }
 
+/** Unify cover and gallery into a single ordered list where gallery[0] is the
+ *  cover. Cover is still surfaced as a separate `coverImage` field for the
+ *  data model, but the modal UI treats them as one collection so users can
+ *  reorder by clicking the star on any tile. */
+function normalizeGallery(
+  coverImage: string,
+  gallery: { src: string; caption: string }[]
+): { coverImage: string; gallery: { src: string; caption: string }[] } {
+  const safe = (gallery || []).filter((g) => g?.src);
+  if (!coverImage) return { coverImage: safe[0]?.src || "", gallery: safe };
+  const idx = safe.findIndex((g) => g.src === coverImage);
+  if (idx === 0) return { coverImage, gallery: safe };
+  if (idx > 0) {
+    const reordered = [safe[idx], ...safe.filter((_, j) => j !== idx)];
+    return { coverImage, gallery: reordered };
+  }
+  return { coverImage, gallery: [{ src: coverImage, caption: "" }, ...safe] };
+}
+
 function AddProjectModal({
   open,
   onClose,
@@ -1263,16 +1282,14 @@ function AddProjectModal({
     isFeatured: false,
     featuredImage: "",
   });
-  const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
-  const coverRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  // Detect floor plans among the cover + gallery so they can be excluded
-  // from the featured photo picker.
+  // Detect floor plans among the gallery so they can be excluded from the
+  // featured photo picker.
   const pickerCandidates = useMemo(
-    () => [draft.coverImage, ...draft.gallery.map((g) => g.src)].filter(Boolean) as string[],
-    [draft.coverImage, draft.gallery]
+    () => draft.gallery.map((g) => g.src).filter(Boolean) as string[],
+    [draft.gallery]
   );
   const floorPlanSet = useFloorPlanSet(pickerCandidates);
 
@@ -1303,23 +1320,6 @@ function AddProjectModal({
 
   const patch = (p: Partial<NewProjectDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
-    setUploadingCover(true);
-    try {
-      const url = await uploadDesignerImage(file);
-      patch({ coverImage: url });
-      toast.success("Cover image uploaded");
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed");
-    }
-    setUploadingCover(false);
-    if (coverRef.current) coverRef.current.value = "";
-  };
-
   const handleGalleryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -1333,7 +1333,10 @@ function AddProjectModal({
         uploaded.push({ src: url, caption: "" });
       }
       if (uploaded.length) {
-        setDraft((d) => ({ ...d, gallery: [...d.gallery, ...uploaded] }));
+        setDraft((d) => {
+          const next = [...d.gallery, ...uploaded];
+          return { ...d, gallery: next, coverImage: d.coverImage || next[0]?.src || "" };
+        });
         toast.success(`${uploaded.length} image${uploaded.length > 1 ? "s" : ""} uploaded`);
       }
     } catch (err: any) {
@@ -1347,20 +1350,20 @@ function AddProjectModal({
     setDraft((d) => ({ ...d, gallery: d.gallery.map((g, j) => (j === i ? { ...g, caption } : g)) }));
   };
   const removeGalleryImage = (i: number) => {
-    setDraft((d) => ({ ...d, gallery: d.gallery.filter((_, j) => j !== i) }));
+    setDraft((d) => {
+      const next = d.gallery.filter((_, j) => j !== i);
+      return { ...d, gallery: next, coverImage: next[0]?.src || "" };
+    });
   };
-  // Promote a gallery image to be the project cover. The current cover (if any)
-  // takes the gallery slot it just vacated so nothing is lost.
+  // Promote a gallery image to position 0 (the cover). The previous cover
+  // slides to position 1, everything else shifts accordingly.
   const setAsCover = (i: number) => {
     setDraft((d) => {
-      const promoted = d.gallery[i]?.src;
-      if (!promoted || promoted === d.coverImage) return d;
-      const prevCover = d.coverImage;
-      const nextGallery = d.gallery.map((g, j) =>
-        j === i ? { src: prevCover || "", caption: g.caption } : g
-      );
-      const cleaned = prevCover ? nextGallery : nextGallery.filter((g) => g.src);
-      return { ...d, coverImage: promoted, gallery: cleaned };
+      if (i <= 0 || !d.gallery[i]?.src) return d;
+      const promoted = d.gallery[i];
+      const rest = d.gallery.filter((_, j) => j !== i);
+      const next = [promoted, ...rest];
+      return { ...d, gallery: next, coverImage: promoted.src };
     });
   };
 
@@ -1378,7 +1381,7 @@ function AddProjectModal({
   if (!draft.title.trim()) errors.title = "Project title is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
-  if (!draft.coverImage) errors.coverImage = "Upload a cover image";
+  if (!draft.gallery.length || !draft.coverImage) errors.gallery = "Upload at least one image";
   const isValid = Object.keys(errors).length === 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1463,45 +1466,6 @@ function AddProjectModal({
         {/* Body — scrollable */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
           <div className="p-6 flex flex-col gap-5">
-            {/* Cover image */}
-            <div>
-              <label style={labelStyle}>Cover Image <span style={{ color: "#c14" }}>*</span></label>
-              <input ref={coverRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFile} />
-              <button
-                type="button"
-                onClick={() => !uploadingCover && coverRef.current?.click()}
-                disabled={uploadingCover}
-                className="relative w-full overflow-hidden cursor-pointer group/cover"
-                style={{
-                  aspectRatio: "16/9",
-                  background: C.cream,
-                  border: `2px dashed ${C.creamBorder}`,
-                  borderRadius: "12px",
-                }}
-              >
-                {draft.coverImage ? (
-                  <>
-                    <img src={draft.coverImage} alt="Cover" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center transition-colors bg-black/0 group-hover/cover:bg-black/30">
-                      <Camera size={22} className="opacity-0 group-hover/cover:opacity-100 transition-opacity" style={{ color: C.white }} />
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                    {uploadingCover ? (
-                      <Loader2 size={22} className="animate-spin" style={{ color: C.gray }} />
-                    ) : (
-                      <>
-                        <Camera size={22} style={{ color: C.grayLight }} />
-                        <span className="text-[12px]" style={{ color: C.gray }}>Click to upload cover (16:9)</span>
-                      </>
-                    )}
-                  </div>
-                )}
-              </button>
-              {errors.coverImage && <p className="mt-1.5 text-[11px]" style={{ color: "#c14" }}>{errors.coverImage}</p>}
-            </div>
-
             {/* Title */}
             <div>
               <label style={labelStyle}>Project Title <span style={{ color: "#c14" }}>*</span></label>
@@ -1675,13 +1639,16 @@ function AddProjectModal({
               </div>
             </div>
 
-            {/* Gallery */}
+            {/* Project Images — first tile is the cover. */}
             <div>
-              <label style={labelStyle}>Gallery Images</label>
+              <label style={labelStyle}>Project Images <span style={{ color: "#c14" }}>*</span></label>
+              <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
+                The first image is the project cover. Click the star on any image to make it the cover.
+              </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                 {draft.gallery.map((img, i) => {
-                  const isCover = img.src === draft.coverImage;
+                  const isCover = i === 0;
                   return (
                     <div
                       key={i}
@@ -1697,10 +1664,11 @@ function AddProjectModal({
                       <button
                         type="button"
                         onClick={() => setAsCover(i)}
-                        className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer"
+                        disabled={isCover}
+                        className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer disabled:cursor-default"
                         style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }}
                         aria-label={isCover ? "Current cover image" : "Set as cover image"}
-                        title={isCover ? "Current cover" : "Set as cover"}
+                        title={isCover ? "Cover" : "Set as cover"}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -1743,6 +1711,7 @@ function AddProjectModal({
                   )}
                 </button>
               </div>
+              {errors.gallery && <p className="mt-1.5 text-[11px]" style={{ color: "#c14" }}>{errors.gallery}</p>}
             </div>
           </div>
 
@@ -1900,25 +1869,29 @@ function EditProjectModal({
   teamMembers?: any[];
   existingProjects?: any[];
 }) {
-  const [draft, setDraft] = useState<NewProjectDraft>({
-    title: project.title || project.name || "",
-    location: project.location || "",
-    cost: project.cost || "",
-    size: project.size || "",
-    year: project.year || String(new Date().getFullYear()),
-    propertyType: project.propertyType || "",
-    propertySubType: project.propertySubType || "",
-    style: project.style || "",
-    coverImage: project.coverImage || project.image || "",
-    gallery: project.gallery || [],
-    worksIncluded: project.worksIncluded || [],
-    designerName: project.designerName || "",
-    isFeatured: project.isFeatured || false,
-    featuredImage: project.featuredImage || project.coverImage || project.image || "",
+  const [draft, setDraft] = useState<NewProjectDraft>(() => {
+    const norm = normalizeGallery(
+      project.coverImage || project.image || "",
+      project.gallery || []
+    );
+    return {
+      title: project.title || project.name || "",
+      location: project.location || "",
+      cost: project.cost || "",
+      size: project.size || "",
+      year: project.year || String(new Date().getFullYear()),
+      propertyType: project.propertyType || "",
+      propertySubType: project.propertySubType || "",
+      style: project.style || "",
+      coverImage: norm.coverImage,
+      gallery: norm.gallery,
+      worksIncluded: project.worksIncluded || [],
+      designerName: project.designerName || "",
+      isFeatured: project.isFeatured || false,
+      featuredImage: project.featuredImage || norm.coverImage,
+    };
   });
-  const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
-  const coverRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
   // Detect floor plans so they can be hidden from the featured photo picker.
@@ -1940,23 +1913,6 @@ function EditProjectModal({
 
   const patch = (p: Partial<NewProjectDraft>) => setDraft((d) => ({ ...d, ...p }));
 
-  const handleCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("Image must be under 5MB"); return; }
-    setUploadingCover(true);
-    try {
-      const url = await uploadDesignerImage(file);
-      patch({ coverImage: url });
-      toast.success("Cover image uploaded");
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed");
-    }
-    setUploadingCover(false);
-    if (coverRef.current) coverRef.current.value = "";
-  };
-
   const handleGalleryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -1970,7 +1926,10 @@ function EditProjectModal({
         uploaded.push({ src: url, caption: "" });
       }
       if (uploaded.length) {
-        setDraft((d) => ({ ...d, gallery: [...d.gallery, ...uploaded] }));
+        setDraft((d) => {
+          const next = [...d.gallery, ...uploaded];
+          return { ...d, gallery: next, coverImage: d.coverImage || next[0]?.src || "" };
+        });
         toast.success(`${uploaded.length} image${uploaded.length > 1 ? "s" : ""} uploaded`);
       }
     } catch (err: any) {
@@ -1984,23 +1943,22 @@ function EditProjectModal({
     setDraft((d) => ({ ...d, gallery: d.gallery.map((g, j) => (j === i ? { ...g, caption } : g)) }));
   };
   const removeGalleryImage = (i: number) => {
-    setDraft((d) => ({ ...d, gallery: d.gallery.filter((_, j) => j !== i) }));
+    setDraft((d) => {
+      const next = d.gallery.filter((_, j) => j !== i);
+      return { ...d, gallery: next, coverImage: next[0]?.src || "" };
+    });
   };
-  // Promote a gallery image to be the project cover. The current cover (if any)
-  // takes the gallery slot it just vacated so nothing is lost. Caption preserved
-  // on the demoted image; the promoted image's caption is dropped since covers
-  // don't render captions.
+  // Promote a gallery image to the cover (position 0). The previous cover
+  // shifts down to position 1, everything else slides accordingly. No data
+  // is lost — the gallery list is the single source of truth and gallery[0]
+  // is always rendered as the project cover on the public profile.
   const setAsCover = (i: number) => {
     setDraft((d) => {
-      const promoted = d.gallery[i]?.src;
-      if (!promoted || promoted === d.coverImage) return d;
-      const prevCover = d.coverImage;
-      const nextGallery = d.gallery.map((g, j) =>
-        j === i ? { src: prevCover || "", caption: g.caption } : g
-      );
-      // If there was no previous cover, drop the now-empty slot we created.
-      const cleaned = prevCover ? nextGallery : nextGallery.filter((g) => g.src);
-      return { ...d, coverImage: promoted, gallery: cleaned };
+      if (i <= 0 || !d.gallery[i]?.src) return d;
+      const promoted = d.gallery[i];
+      const rest = d.gallery.filter((_, j) => j !== i);
+      const next = [promoted, ...rest];
+      return { ...d, gallery: next, coverImage: promoted.src };
     });
   };
 
@@ -2017,7 +1975,7 @@ function EditProjectModal({
   if (!draft.title.trim()) errors.title = "Project title is required";
   if (!draft.propertyType) errors.propertyType = "Select a property type";
   if (!draft.style.trim()) errors.style = "Interior style is required";
-  if (!draft.coverImage) errors.coverImage = "Upload a cover image";
+  if (!draft.gallery.length || !draft.coverImage) errors.gallery = "Upload at least one image";
   const isValid = Object.keys(errors).length === 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -2061,29 +2019,6 @@ function EditProjectModal({
         {/* Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
           <div className="p-6 flex flex-col gap-5">
-            {/* Cover image */}
-            <div>
-              <label style={labelStyle}>Cover Image <span style={{ color: "#c14" }}>*</span></label>
-              <input ref={coverRef} type="file" accept="image/*" className="hidden" onChange={handleCoverFile} />
-              <button type="button" onClick={() => !uploadingCover && coverRef.current?.click()} disabled={uploadingCover} className="relative w-full overflow-hidden cursor-pointer group/cover" style={{ aspectRatio: "16/9", background: C.cream, border: `2px dashed ${C.creamBorder}`, borderRadius: "12px" }}>
-                {draft.coverImage ? (
-                  <>
-                    <img src={draft.coverImage} alt="Cover" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 flex items-center justify-center transition-colors bg-black/0 group-hover/cover:bg-black/30">
-                      <Camera size={22} className="opacity-0 group-hover/cover:opacity-100 transition-opacity" style={{ color: C.white }} />
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                    {uploadingCover ? <Loader2 size={22} className="animate-spin" style={{ color: C.gray }} /> : (
-                      <><Camera size={22} style={{ color: C.grayLight }} /><span className="text-[12px]" style={{ color: C.gray }}>Click to upload cover (16:9)</span></>
-                    )}
-                  </div>
-                )}
-              </button>
-              {errors.coverImage && <p className="mt-1.5 text-[11px]" style={{ color: "#c14" }}>{errors.coverImage}</p>}
-            </div>
-
             {/* Title */}
             <div>
               <label style={labelStyle}>Project Title <span style={{ color: "#c14" }}>*</span></label>
@@ -2162,17 +2097,21 @@ function EditProjectModal({
               </div>
             </div>
 
-            {/* Gallery */}
+            {/* Project Images — the first tile is the cover. Use the star button
+                 to promote any image to cover. */}
             <div>
-              <label style={labelStyle}>Gallery Images</label>
+              <label style={labelStyle}>Project Images <span style={{ color: "#c14" }}>*</span></label>
+              <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
+                The first image is the project cover. Click the star on any image to make it the cover.
+              </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                 {draft.gallery.map((img, i) => {
-                  const isCover = img.src === draft.coverImage;
+                  const isCover = i === 0;
                   return (
                     <div key={i} className="relative overflow-hidden" style={{ aspectRatio: "1/1", background: C.cream, border: `1px solid ${isCover ? "#f59e0b" : C.creamBorder}`, borderRadius: "10px" }}>
                       <img src={img.src} alt="" className="w-full h-full object-cover" />
-                      <button type="button" onClick={() => setAsCover(i)} className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }} aria-label={isCover ? "Current cover image" : "Set as cover image"} title={isCover ? "Current cover" : "Set as cover"}>
+                      <button type="button" onClick={() => setAsCover(i)} disabled={isCover} className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer disabled:cursor-default" style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }} aria-label={isCover ? "Current cover image" : "Set as cover image"} title={isCover ? "Cover" : "Set as cover"}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                       </button>
                       <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
@@ -2184,6 +2123,7 @@ function EditProjectModal({
                   {uploadingGallery ? <Loader2 size={18} className="animate-spin" style={{ color: C.gray }} /> : (<><Plus size={18} style={{ color: C.gray }} /><span className="text-[10px]" style={{ color: C.gray }}>Add</span></>)}
                 </button>
               </div>
+              {errors.gallery && <p className="mt-1.5 text-[11px]" style={{ color: "#c14" }}>{errors.gallery}</p>}
             </div>
           </div>
 
