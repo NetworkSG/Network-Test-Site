@@ -1646,7 +1646,7 @@ function AddProjectModal({
                 The first image is the project cover. Click the star on any image to make it the cover.
               </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 {draft.gallery.map((img, i) => {
                   const isCover = i === 0;
                   return (
@@ -2105,7 +2105,7 @@ function EditProjectModal({
                 The first image is the project cover. Click the star on any image to make it the cover.
               </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 {draft.gallery.map((img, i) => {
                   const isCover = i === 0;
                   return (
