@@ -1284,6 +1284,10 @@ function AddProjectModal({
   });
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
+  // Drag-and-drop reorder state. dragIdx = tile being dragged; overIdx = tile
+  // under the cursor right now. Both null when no drag is in progress.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   // Detect floor plans among the gallery so they can be excluded from the
   // featured photo picker.
@@ -1364,6 +1368,19 @@ function AddProjectModal({
       const rest = d.gallery.filter((_, j) => j !== i);
       const next = [promoted, ...rest];
       return { ...d, gallery: next, coverImage: promoted.src };
+    });
+  };
+  // Reorder via drag-and-drop. Splice the dragged tile out of its old slot and
+  // insert it at the drop target's index, then re-sync coverImage to the new
+  // gallery[0] (so dragging an image to position 0 makes it the cover, same as
+  // clicking its star).
+  const reorderGallery = (from: number, to: number) => {
+    setDraft((d) => {
+      if (from === to || from < 0 || to < 0 || from >= d.gallery.length || to >= d.gallery.length) return d;
+      const next = [...d.gallery];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return { ...d, gallery: next, coverImage: next[0]?.src || "" };
     });
   };
 
@@ -1643,24 +1660,35 @@ function AddProjectModal({
             <div>
               <label style={labelStyle}>Project Images <span style={{ color: "#c14" }}>*</span></label>
               <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
-                The first image is the project cover. Click the star on any image to make it the cover.
+                The first image is the project cover. Drag any tile to reorder, or click its star to make it the cover.
               </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 {draft.gallery.map((img, i) => {
                   const isCover = i === 0;
+                  const isDragging = dragIdx === i;
+                  const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
                   return (
                     <div
                       key={i}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragIdx(i); }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
+                      onDragLeave={() => { if (overIdx === i) setOverIdx(null); }}
+                      onDrop={(e) => { e.preventDefault(); if (dragIdx !== null) reorderGallery(dragIdx, i); setDragIdx(null); setOverIdx(null); }}
+                      onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
                       className="relative overflow-hidden"
                       style={{
                         aspectRatio: "1/1",
                         background: C.cream,
-                        border: `1px solid ${isCover ? "#f59e0b" : C.creamBorder}`,
+                        border: `${isOver ? 2 : 1}px ${isOver ? "dashed" : "solid"} ${isOver ? "#0f0f0d" : isCover ? "#f59e0b" : C.creamBorder}`,
                         borderRadius: "10px",
+                        cursor: "grab",
+                        opacity: isDragging ? 0.4 : 1,
+                        transition: "opacity 120ms, border-color 120ms",
                       }}
                     >
-                      <img src={img.src} alt="" className="w-full h-full object-cover" />
+                      <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
                       <button
                         type="button"
                         onClick={() => setAsCover(i)}
@@ -1684,7 +1712,7 @@ function AddProjectModal({
                         <X size={11} />
                     </button>
                     {isCover && (
-                      <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>
+                      <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider pointer-events-none" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>
                     )}
                     </div>
                   );
@@ -1893,6 +1921,10 @@ function EditProjectModal({
   });
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
+  // Drag-and-drop reorder state. dragIdx = tile being dragged; overIdx = tile
+  // under the cursor right now. Both null when no drag is in progress.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   // Detect floor plans so they can be hidden from the featured photo picker.
   const pickerCandidates = useMemo(
@@ -2102,20 +2134,40 @@ function EditProjectModal({
             <div>
               <label style={labelStyle}>Project Images <span style={{ color: "#c14" }}>*</span></label>
               <p className="text-[11px] mb-2.5" style={{ color: C.gray, fontFamily: sans }}>
-                The first image is the project cover. Click the star on any image to make it the cover.
+                The first image is the project cover. Drag any tile to reorder, or click its star to make it the cover.
               </p>
               <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={handleGalleryFile} />
               <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                 {draft.gallery.map((img, i) => {
                   const isCover = i === 0;
+                  const isDragging = dragIdx === i;
+                  const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
                   return (
-                    <div key={i} className="relative overflow-hidden" style={{ aspectRatio: "1/1", background: C.cream, border: `1px solid ${isCover ? "#f59e0b" : C.creamBorder}`, borderRadius: "10px" }}>
-                      <img src={img.src} alt="" className="w-full h-full object-cover" />
+                    <div
+                      key={i}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragIdx(i); }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
+                      onDragLeave={() => { if (overIdx === i) setOverIdx(null); }}
+                      onDrop={(e) => { e.preventDefault(); if (dragIdx !== null) reorderGallery(dragIdx, i); setDragIdx(null); setOverIdx(null); }}
+                      onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                      className="relative overflow-hidden"
+                      style={{
+                        aspectRatio: "1/1",
+                        background: C.cream,
+                        border: `${isOver ? 2 : 1}px ${isOver ? "dashed" : "solid"} ${isOver ? "#0f0f0d" : isCover ? "#f59e0b" : C.creamBorder}`,
+                        borderRadius: "10px",
+                        cursor: "grab",
+                        opacity: isDragging ? 0.4 : 1,
+                        transition: "opacity 120ms, border-color 120ms",
+                      }}
+                    >
+                      <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
                       <button type="button" onClick={() => setAsCover(i)} disabled={isCover} className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer disabled:cursor-default" style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }} aria-label={isCover ? "Current cover image" : "Set as cover image"} title={isCover ? "Cover" : "Set as cover"}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                       </button>
                       <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
-                      {isCover && <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>}
+                      {isCover && <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider pointer-events-none" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>}
                     </div>
                   );
                 })}
