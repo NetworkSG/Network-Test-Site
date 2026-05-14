@@ -1669,8 +1669,12 @@ function AddProjectModal({
                   const isDragging = dragIdx === i;
                   const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
                   return (
-                    <div
-                      key={i}
+                    <motion.div
+                      key={img.src}
+                      layout
+                      transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.6 }}
+                      whileDrag={{ scale: 1.04 }}
+                      animate={{ scale: isDragging ? 0.96 : 1 }}
                       draggable
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragIdx(i); }}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
@@ -1684,8 +1688,8 @@ function AddProjectModal({
                         border: `${isOver ? 2 : 1}px ${isOver ? "dashed" : "solid"} ${isOver ? "#0f0f0d" : isCover ? "#f59e0b" : C.creamBorder}`,
                         borderRadius: "10px",
                         cursor: "grab",
-                        opacity: isDragging ? 0.4 : 1,
-                        transition: "opacity 120ms, border-color 120ms",
+                        opacity: isDragging ? 0.5 : 1,
+                        boxShadow: isOver ? "0 0 0 3px rgba(15,15,13,0.08)" : "none",
                       }}
                     >
                       <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
@@ -1714,7 +1718,7 @@ function AddProjectModal({
                     {isCover && (
                       <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider pointer-events-none" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>
                     )}
-                    </div>
+                    </motion.div>
                   );
                 })}
                 <button
@@ -2154,8 +2158,12 @@ function EditProjectModal({
                   const isDragging = dragIdx === i;
                   const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
                   return (
-                    <div
-                      key={i}
+                    <motion.div
+                      key={img.src}
+                      layout
+                      transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.6 }}
+                      whileDrag={{ scale: 1.04 }}
+                      animate={{ scale: isDragging ? 0.96 : 1 }}
                       draggable
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); setDragIdx(i); }}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overIdx !== i) setOverIdx(i); }}
@@ -2169,8 +2177,8 @@ function EditProjectModal({
                         border: `${isOver ? 2 : 1}px ${isOver ? "dashed" : "solid"} ${isOver ? "#0f0f0d" : isCover ? "#f59e0b" : C.creamBorder}`,
                         borderRadius: "10px",
                         cursor: "grab",
-                        opacity: isDragging ? 0.4 : 1,
-                        transition: "opacity 120ms, border-color 120ms",
+                        opacity: isDragging ? 0.5 : 1,
+                        boxShadow: isOver ? "0 0 0 3px rgba(15,15,13,0.08)" : "none",
                       }}
                     >
                       <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
@@ -2179,7 +2187,7 @@ function EditProjectModal({
                       </button>
                       <button type="button" onClick={() => removeGalleryImage(i)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer" style={{ background: "rgba(15,15,13,0.7)", color: C.white }} aria-label="Remove image"><X size={11} /></button>
                       {isCover && <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wider pointer-events-none" style={{ background: "#f59e0b", color: "#fff", fontFamily: sans }}>Cover</span>}
-                    </div>
+                    </motion.div>
                   );
                 })}
                 <button type="button" onClick={() => !uploadingGallery && galleryRef.current?.click()} disabled={uploadingGallery} className="flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:opacity-80" style={{ aspectRatio: "1/1", background: C.cream, border: `2px dashed ${C.creamBorder}`, borderRadius: "10px" }}>
