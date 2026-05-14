@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { supabase } from "./supabaseClient";
 import { useFloorPlanSet, classifyFloorPlan } from "../utils/floor-plan-detect";
+import { thumbnailUrl } from "../utils/image-url";
 import {
   DesignerDataContext,
   ProfileEditContext,
@@ -1692,7 +1693,7 @@ function AddProjectModal({
                         boxShadow: isOver ? "0 0 0 3px rgba(15,15,13,0.08)" : "none",
                       }}
                     >
-                      <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
+                      <img src={/^https?:\/\//i.test(img.src) ? thumbnailUrl(img.src, 480, 70) : img.src} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none" />
                       <button
                         type="button"
                         onClick={() => setAsCover(i)}
@@ -2181,7 +2182,7 @@ function EditProjectModal({
                         boxShadow: isOver ? "0 0 0 3px rgba(15,15,13,0.08)" : "none",
                       }}
                     >
-                      <img src={img.src} alt="" className="w-full h-full object-cover pointer-events-none" />
+                      <img src={/^https?:\/\//i.test(img.src) ? thumbnailUrl(img.src, 480, 70) : img.src} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none" />
                       <button type="button" onClick={() => setAsCover(i)} disabled={isCover} className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full flex items-center justify-center hover:opacity-85 cursor-pointer disabled:cursor-default" style={{ background: isCover ? "#f59e0b" : "rgba(15,15,13,0.7)", color: C.white }} aria-label={isCover ? "Current cover image" : "Set as cover image"} title={isCover ? "Cover" : "Set as cover"}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill={isCover ? "#fff" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                       </button>
