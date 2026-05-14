@@ -1425,7 +1425,7 @@ function AddProjectModal({
       onClick={() => !saving && onClose()}
     >
       <div
-        className="relative w-full max-w-[720px] max-h-[92vh] overflow-hidden flex flex-col"
+        className="relative w-full max-w-[1400px] max-h-[92vh] overflow-hidden flex flex-col"
         style={{
           background: C.white,
           border: `1px solid ${C.creamBorder}`,
@@ -2043,7 +2043,7 @@ function EditProjectModal({
       onClick={() => !saving && onClose()}
     >
       <div
-        className="relative w-full max-w-[720px] max-h-[92vh] overflow-hidden flex flex-col"
+        className="relative w-full max-w-[1400px] max-h-[92vh] overflow-hidden flex flex-col"
         style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "16px", boxShadow: "0 24px 60px rgba(15,15,13,0.25)", fontFamily: sans }}
         onClick={(e) => e.stopPropagation()}
       >
