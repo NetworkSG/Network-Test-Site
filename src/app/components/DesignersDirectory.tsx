@@ -1,9 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Search, Star, MapPin, ChevronDown, ArrowRight, SlidersHorizontal, X, Loader2 } from "lucide-react";
+import { Search, Star, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, SlidersHorizontal, X } from "lucide-react";
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
+import { HeroMatchForm, type HeroLeadFormData } from "./shared/HeroMatchForm";
+import { QualifyingFlow } from "./homepage/v8/sections/HeroSection";
+import { COMPLETION } from "./homepage/content";
+import { sendToZapier } from "@/app/utils/zapier";
+import { trackLead } from "@/app/utils/metaPixel";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
 // Hero image: a warm-toned interior from a real Qanvast-imported project.
@@ -19,6 +24,7 @@ import { ReactLenis } from "lenis/react";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { resolveAsset } from "../utils/resolveAsset";
+import { thumbnailUrl } from "../utils/image-url";
 import { Seo } from "./shared/Seo";
 import { collapseBudgetRange } from "./DesignerProfile";
 
@@ -31,6 +37,10 @@ interface DesignerCard {
   name: string;
   tagline: string;
   image: string;
+  /** Cover photos for the firm's published projects. Drives the
+   *  auto-scrolling carousel at the top of each directory card. Falls
+   *  back to `[image]` when the firm has no project gallery yet. */
+  projectImages: string[];
   logo: string;
   rating: number;
   reviews: number;
@@ -39,6 +49,9 @@ interface DesignerCard {
   propertyTypes: string[];
   styles: string[];
   budget: string;
+  /** Longer "why choose us" paragraph from the firm's profile, shown in
+   *  the gray description box on the directory card. Falls back to tagline. */
+  bio: string;
   /** Each tier is a [minThousands, maxThousands] range. Multi-tier firms
    * (e.g. Essential + Full Renovation packages) get one entry per tier so
    * the budget filter can do precise overlap checks instead of squashing
@@ -47,6 +60,9 @@ interface DesignerCard {
   verified: boolean;
   yearsActive: number;
   accreditations: string[];
+  /** Service-area regions as stored on the designer record, e.g.
+   *  ["West", "East", "North"]. Drives the new Location filter. */
+  regions: string[];
 }
 
 /** Parse a single token like "$30K", "30K", "30,000", "$30000" into a number
@@ -87,6 +103,66 @@ function parseBudgetTiers(raw: string): Array<[number, number]> {
     }
   }
   return tiers;
+}
+
+/** Map a Singapore address (street name + 6-digit postal code) to one of
+ *  the five planning regions the directory filter uses. Returns null when
+ *  the address is missing / too ambiguous to classify, so callers can
+ *  fall back to whatever the firm self-reported as their service area.
+ *
+ *  Strategy: pattern-match common neighbourhood and road keywords first
+ *  (cheap + high signal), then fall back to the postal-sector prefix
+ *  (first two digits of the 6-digit postal code). The prefix-to-region
+ *  table follows URA / SingPost sector boundaries and intentionally
+ *  resolves the messy "border" sectors (15, 21, 38, 58, 77) toward the
+ *  region where each sector's main town centre sits. */
+function inferShowroomRegion(address: string): string | null {
+  if (!address) return null;
+  const a = address.toLowerCase();
+
+  // Neighbourhood keyword pass — these win when present because they're
+  // unambiguous (a road like "Tampines North Drive" is always East even
+  // if the postal code somehow looks otherwise).
+  const KEYWORDS: Array<[RegExp, string]> = [
+    [/\b(woodlands|sembawang|yishun|admiralty|kranji|mandai|sungei kadut)\b/, "North"],
+    [/\b(hougang|sengkang|punggol|serangoon|ang mo kio|bishan|lorong chuan|seletar|buangkok)\b/, "North-East"],
+    [/\b(tampines|bedok|pasir ris|changi|simei|tanah merah|eunos|kembangan|aljunied|geylang|katong|marine parade|joo chiat|paya lebar|ubi|loyang|east coast)\b/, "East"],
+    [/\b(jurong|bukit batok|bukit panjang|choa chu kang|clementi|tuas|boon lay|pioneer|lakeside|buona vista|dover|pandan|tengah|west coast)\b/, "West"],
+    [/\b(orchard|tanglin|newton|novena|toa payoh|bukit timah|holland|queenstown|tiong bahru|outram|chinatown|bugis|beach road|lavender|kallang|macpherson|braddell|thomson|whampoa|balestier|rochor|tanjong pagar|raffles|marina|river valley|cairnhill)\b/, "Central"],
+  ];
+  for (const [re, region] of KEYWORDS) if (re.test(a)) return region;
+
+  // Postal-sector fallback — pull the 6-digit code, take the first two
+  // digits, look it up in the table.
+  const m = a.match(/\b(\d{6})\b/);
+  if (!m) return null;
+  const sector = parseInt(m[1].slice(0, 2), 10);
+  const SECTOR_REGION: Record<number, string> = {
+    // Central (CBD, Orchard, Bukit Timah, Toa Payoh, Newton, Novena)
+    1: "Central", 2: "Central", 3: "Central", 4: "Central", 5: "Central",
+    6: "Central", 7: "Central", 8: "Central", 9: "Central", 10: "Central",
+    11: "Central", 22: "Central", 23: "Central", 24: "Central", 25: "Central",
+    26: "Central", 27: "Central", 28: "Central", 29: "Central", 30: "Central",
+    31: "Central", 32: "Central", 33: "Central", 34: "Central", 35: "Central",
+    36: "Central", 37: "Central",
+    // East (Geylang, Katong, Bedok, Tampines, Pasir Ris, Changi)
+    14: "East", 15: "East", 16: "East", 17: "East", 18: "East", 19: "East",
+    38: "East", 39: "East", 40: "East", 41: "East", 42: "East", 43: "East",
+    44: "East", 45: "East", 46: "East", 47: "East", 48: "East", 49: "East",
+    50: "East", 51: "East", 52: "East", 81: "East",
+    // North-East (Hougang, Sengkang, Punggol, Ang Mo Kio, Bishan)
+    20: "North-East", 53: "North-East", 54: "North-East", 55: "North-East",
+    56: "North-East", 57: "North-East", 79: "North-East", 80: "North-East",
+    82: "North-East",
+    // West (Buona Vista, Jurong, Bukit Batok, Choa Chu Kang, Tengah)
+    12: "West", 13: "West", 21: "West", 58: "West", 59: "West",
+    60: "West", 61: "West", 62: "West", 63: "West", 64: "West", 65: "West",
+    66: "West", 67: "West", 68: "West", 69: "West", 70: "West", 71: "West",
+    // North (Woodlands, Sembawang, Yishun, Mandai, Sungei Kadut)
+    72: "North", 73: "North", 74: "North", 75: "North", 76: "North",
+    77: "North", 78: "North",
+  };
+  return SECTOR_REGION[sector] ?? null;
 }
 
 /* ─── MAP API DATA → CARD ─── */
@@ -172,7 +248,34 @@ function mapDesigner(d: any): DesignerCard {
     slug: d.slug || "",
     name: d.name || "Untitled Designer",
     tagline: d.tagline || "",
-    image: images.cover || "",
+    // Card hero image: prefer the firm's first featured project so the
+    // static fallback shows the same curated shot they promote on their
+    // profile. Falls back to `images.cover` for firms without any
+    // featured projects.
+    image: (() => {
+      const all: any[] = Array.isArray(d.projects) ? d.projects : [];
+      const firstFeatured = all.find((p) => p?.isFeatured);
+      const featuredSrc = firstFeatured?.coverImage || firstFeatured?.featuredImage || firstFeatured?.image || firstFeatured?.images?.cover || "";
+      return featuredSrc || images.cover || "";
+    })(),
+    projectImages: (() => {
+      // Carousel order: the firm-curated `isFeatured` projects first
+      // (same set the profile page promotes), then the firm's main cover
+      // as a final fallback so the card never strands on an all-broken
+      // image set — many `imported/*.jpeg` rows in the API point at
+      // files that no longer exist on Supabase storage, and the carousel
+      // auto-skips broken slides via its onError handler.
+      const all: any[] = Array.isArray(d.projects) ? d.projects : [];
+      const featured = all.filter((p) => p?.isFeatured).slice(0, 5);
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const p of featured) {
+        const src = p?.featuredImage || p?.coverImage || p?.image || p?.images?.cover || "";
+        if (src && !seen.has(src)) { seen.add(src); out.push(src); }
+      }
+      if (images.cover && !seen.has(images.cover)) out.push(images.cover);
+      return out;
+    })(),
     logo: images.logo || "",
     // Prefer the live Google rating + total ratings (Outscraper / Places)
     // when present, falling back to the manual stats fields. This keeps the
@@ -189,16 +292,27 @@ function mapDesigner(d: any): DesignerCard {
     propertyTypes,
     styles,
     budget,
+    bio: String(d.bio || d.tagline || "").trim(),
     budgetTiers,
     verified: d.verified || false,
     yearsActive,
     accreditations,
+    // Region the "All Locations" filter matches against. Prefer the
+    // showroom region inferred from the office address (what users
+    // actually care about when filtering "where is their studio?"), then
+    // fall back to the firm's self-declared service-area regions.
+    regions: (() => {
+      const showroom = inferShowroomRegion(location);
+      if (showroom) return [showroom];
+      return Array.isArray(d?.serviceArea?.regions) ? d.serviceArea.regions : [];
+    })(),
   };
 }
 
-const PROPERTY_FILTERS = ["All", "HDB", "Condo", "EC", "Landed", "Commercial"];
+const PROPERTY_FILTERS = ["Any Property", "HDB", "Condo", "EC", "Landed", "Commercial"];
 const STYLE_FILTERS = ["All Styles", "Modern", "Contemporary", "Scandinavian", "Industrial", "Japandi", "Minimalist", "Mid-Century", "Luxury/High-End"];
-const BUDGET_FILTERS = ["Any Budget", "Under $30K", "$30K – $60K", "$60K – $120K", "$120K+"];
+const BUDGET_FILTERS = ["Any Budget", "$40,000 and under", "$60,000 and under", "$80,000 and under"];
+const LOCATION_FILTERS = ["All Locations", "North", "North-East", "East", "West", "Central"];
 const SORT_OPTIONS = ["Most Reviewed", "Highest Rated", "Most Projects", "Newest"];
 // Multi-select license options. Filter tests against d.accreditations[] using
 // a substring/regex match so different stored phrasings ("BCA Registered" vs
@@ -366,6 +480,427 @@ function MultiCheckboxDropdown({
   );
 }
 
+/** Bundled authority logo file + the fraction of the source PNG that is the
+ *  actual mark (the rest is the "BCA Registered" / "HDB Registered" text we
+ *  want to crop off). Files live in public/credentials/. */
+/** Bundled square authority logo for each accreditation we recognise. Files
+ *  live in public/credentials/ and are already cropped to a square mark. The
+ *  `?v=2` query string busts any stale browser cache from earlier non-square
+ *  versions that were served from this directory. */
+const CREDENTIAL_LOGOS: Array<{ match: RegExp; src: string }> = [
+  { match: /hdb/i, src: "/credentials/hdb.png?v=2" },
+  { match: /bca/i, src: "/credentials/bca.png?v=2" },
+  { match: /case/i, src: "/credentials/casetrust.png?v=2" },
+  { match: /biz\s*safe/i, src: "/credentials/bizsafe.png?v=2" },
+];
+
+/** Renders the official authority logo cropped to just the mark, framed in a
+ *  rounded bordered tile. Falls back to a colored monogram pill for
+ *  accreditations we don't have a bundled file for. */
+function AccreditationLogo({ label }: { label: string }) {
+  const entry = CREDENTIAL_LOGOS.find((c) => c.match.test(label));
+  if (entry) {
+    return (
+      <div
+        title={label}
+        className="shrink-0 overflow-hidden"
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 8,
+          border: `1px solid ${C.creamBorder}`,
+          background: C.white,
+        }}
+        role="img"
+        aria-label={label}
+      >
+        <img
+          src={entry.src}
+          alt=""
+          className="w-full h-full object-contain"
+          style={{ display: "block" }}
+        />
+      </div>
+    );
+  }
+  const upper = label.toUpperCase();
+  let mono = "";
+  let color = C.black;
+  if (upper.includes("LANDED")) { mono = "LE"; color = "#7c3aed"; }
+  else if (upper.includes("ISO")) { mono = "ISO"; color = "#0f172a"; }
+  else {
+    mono = label.split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase().slice(0, 3) || label.slice(0, 3).toUpperCase();
+  }
+  return (
+    <span
+      title={label}
+      className="inline-flex items-center justify-center rounded-[8px] text-[10px] font-bold tracking-wide"
+      style={{
+        height: 32,
+        padding: "0 10px",
+        background: C.white,
+        border: `1.5px solid ${color}`,
+        color,
+        fontFamily: sans,
+      }}
+    >
+      {mono}
+    </span>
+  );
+}
+
+/** Three-state lead funnel for the directory hero: captures contact
+ *  details, runs the same 7-question qualifying flow the homepage uses,
+ *  and persists the result to Supabase / Zapier so the lead lands in the
+ *  same pipeline. Falls back to a thank-you panel on completion. */
+function DirectoryLeadFunnel() {
+  const [state, setState] = useState<"capturing" | "qualifying" | "complete">("capturing");
+  const [contact, setContact] = useState<HeroLeadFormData>({ name: "", phone: "", email: "" });
+
+  if (state === "capturing") {
+    return (
+      <HeroMatchForm
+        onSubmit={(data) => {
+          setContact(data);
+          setState("qualifying");
+        }}
+      />
+    );
+  }
+
+  if (state === "qualifying") {
+    return (
+      <QualifyingFlow
+        onComplete={(answers) => {
+          setState("complete");
+          trackLead("directory-hero-lead");
+          // Persist to Supabase homepage_leads — same table the homepage
+          // funnel writes to, so ops only watches one stream.
+          const sbUrl = `https://${projectId}.supabase.co`;
+          const sbKey = publicAnonKey;
+          fetch(`${sbUrl}/rest/v1/homepage_leads`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+            body: JSON.stringify({
+              name: contact.name,
+              phone: contact.phone,
+              email: contact.email || null,
+              ...answers,
+            }),
+          }).catch((err) => console.error("Lead save error:", err));
+          sendToZapier("hero-lead", {
+            "First Name": contact.name,
+            "Contact Phone": contact.phone,
+            "Email Address": contact.email || "",
+            "Situation": answers.situation || "",
+            "Key Date": answers.timeline || "",
+            "Property Type": answers.home_type || "",
+            "Design Level": answers.design_level || "",
+            "Renovation Budget":
+              (answers.budget_range || "").match(/^\$[\d,]+K?\+?(?:[–\-]+\$[\d,]+K?\+?)?/)?.[0] || answers.budget_range || "",
+            "Biggest Concern": answers.biggest_concern || "",
+            "Decision Maker": answers.is_decision_maker || "",
+            "Meeting Preference": answers.meeting_preference || "",
+            "Lead Form": "Directory Lead Form",
+          });
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="p-8 md:p-10 text-center"
+      style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: 12 }}
+    >
+      <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: C.black }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M20 6L9 17L4 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <h2 className="text-[26px] md:text-[32px] leading-[1.15] mb-3" style={{ fontFamily: serif, color: C.black }}>
+        {COMPLETION.headline}
+      </h2>
+      <p className="text-[14px] font-normal leading-[1.7] mb-2" style={{ color: C.gray, fontFamily: sans }}>
+        {COMPLETION.subheadline}
+      </p>
+      <p className="text-[13px] font-normal leading-[1.7]" style={{ color: C.grayLight, fontFamily: sans }}>
+        {COMPLETION.body}
+      </p>
+    </div>
+  );
+}
+
+/** FAQ copy specific to the directory page — addresses the top conversion
+ *  objections (cost, trust, process, alternatives) for shopping-stage
+ *  homeowners. Answers are 1-3 sentences, no fabricated claims. */
+const DIRECTORY_FAQS: Array<{ q: string; a: string }> = [
+  {
+    q: "Is Network really free for homeowners?",
+    a: "Yes. You pay nothing to browse, match, or message firms. Designers only pay us when they win your project.",
+  },
+  {
+    q: "How are these firms verified?",
+    a: "Every firm is checked against HDB, BCA, CaseTrust, and bizSAFE credentials before going live, and we monitor Google reviews afterwards.",
+  },
+  {
+    q: "How does the matching work?",
+    a: "Tell us your property, style, and budget. We hand-pick up to three firms whose past work matches your brief — usually within a day.",
+  },
+  {
+    q: "What if I don't like the matches?",
+    a: "Reply once and we'll re-pitch with different firms. No fees, no commitment, no obligation to hire any of them.",
+  },
+  {
+    q: "Can I contact a firm directly without getting matched?",
+    a: "Yes. Open any profile and reach out — matching is a shortcut, not a gate.",
+  },
+  {
+    q: "What does a renovation in Singapore actually cost?",
+    a: "HDB Essential packages start around $30K and full Condo or Landed renovations run $80K–$120K+. The Cost Guide gives a project-specific estimate in under a minute.",
+  },
+  {
+    q: "How do I know what my home will look like before signing?",
+    a: "Use Room Designer to generate AI renders from a photo, and Layout Planner for a 3D floor plan — both free, no firm needed.",
+  },
+  {
+    q: "Is my deposit protected if something goes wrong?",
+    a: "Handshake holds milestone payments and only releases them when work is approved. The firm gets paid as work passes, not before.",
+  },
+  {
+    q: "How long does the whole process take?",
+    a: "Most homeowners receive their first round of matches within 24 hours. Quotes typically come back in 3–5 days after that.",
+  },
+  {
+    q: "Why use Network instead of walking into showrooms?",
+    a: "One brief beats five Saturdays of door-to-door. You get pre-vetted firms, side-by-side quotes, and Handshake payment protection — without the showroom pitch.",
+  },
+];
+
+/** Accordion-style FAQ block rendered at the bottom of the directory. Only
+ *  one row is open at a time; opening another collapses the previous. */
+function DirectoryFAQs() {
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  return (
+    <section className="mt-16 md:mt-24">
+      <h2
+        className="font-normal mb-8"
+        style={{ fontFamily: serif, color: C.black, fontSize: "clamp(26px, 3vw, 40px)", letterSpacing: "-0.01em" }}
+      >
+        Frequently Asked Questions
+      </h2>
+      <div
+        className="rounded-[16px] overflow-hidden"
+        style={{ background: C.white, border: `1px solid ${C.creamBorder}` }}
+      >
+        {DIRECTORY_FAQS.map((item, i) => {
+          const open = openIndex === i;
+          return (
+            <div
+              key={item.q}
+              style={i > 0 ? { borderTop: `1px solid ${C.creamBorder}` } : undefined}
+            >
+              <button
+                onClick={() => setOpenIndex(open ? null : i)}
+                className="w-full flex items-start justify-between gap-6 text-left cursor-pointer px-6 py-5 md:px-8 md:py-6"
+                style={{ background: "transparent", border: "none" }}
+                aria-expanded={open}
+              >
+                <span
+                  className="text-[15px] md:text-[17px] font-medium"
+                  style={{ fontFamily: sans, color: C.black, lineHeight: 1.4 }}
+                >
+                  {item.q}
+                </span>
+                <motion.span
+                  animate={{ rotate: open ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="shrink-0 mt-0.5"
+                  style={{ color: C.gray }}
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </motion.span>
+              </button>
+              <AnimatePresence initial={false}>
+                {open && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <p
+                      className="text-[14px] md:text-[15px] px-6 md:px-8 pb-6 md:pb-7"
+                      style={{ fontFamily: sans, color: C.gray, lineHeight: 1.65, margin: 0, maxWidth: 760 }}
+                    >
+                      {item.a}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Cover-slot carousel that swipes through up to ~6 featured project shots
+ *  for a firm. Auto-advances every 4.5 s; pauses while the user is hovering
+ *  the card. Prev/next buttons let the user step through manually, and a
+ *  dot row shows position. Clicks on the buttons swallow propagation so they
+ *  don't trigger the card-level "navigate to profile" handler. */
+function DesignerCoverCarousel({ designer }: { designer: DesignerCard }) {
+  const rawSlides = designer.projectImages.length > 0 ? designer.projectImages : [designer.image];
+  // Track which sources have failed to load (e.g. bucket entries blocked by
+  // ORB / CORS) so the carousel can skip past them instead of stranding the
+  // user on a broken-image fallback tile.
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const slides = rawSlides.filter((s) => !failed.has(s));
+  const safeSlides = slides.length > 0 ? slides : [rawSlides[0]];
+  const [index, setIndex] = useState(0);
+
+  // Clamp the active index when the visible-slide set shrinks (e.g. an
+  // image just failed and was filtered out).
+  useEffect(() => {
+    if (index >= safeSlides.length) setIndex(0);
+  }, [safeSlides.length, index]);
+
+  const go = (delta: number) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIndex((i) => (i + delta + safeSlides.length) % safeSlides.length);
+  };
+  const jumpTo = (i: number) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIndex(i);
+  };
+  const markFailed = (src: string) =>
+    setFailed((prev) => {
+      if (prev.has(src)) return prev;
+      const next = new Set(prev);
+      next.add(src);
+      return next;
+    });
+
+  return (
+    <div className="absolute inset-0">
+      {/* Render only the currently-visible slide so we only fire one image
+          request per card on initial mount — keeps the directory's network
+          burst small enough that the image proxy doesn't ORB-block any of
+          them. The previous slide cross-fades out via AnimatePresence. */}
+      {/* Single <img> that swaps src on slide change. The key includes
+          the slide src so the browser fetches the new image on demand
+          but the DOM node is reused — avoids the AnimatePresence
+          removeChild race we hit on iOS Safari with popLayout mode. */}
+      <img
+        key={`${designer.id}-${safeSlides[index]}`}
+        src={thumbnailUrl(resolveAsset(safeSlides[index]), 480, 70)}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ transition: "opacity 0.3s ease" }}
+        loading="lazy"
+        decoding="async"
+        onError={() => markFailed(safeSlides[index])}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
+
+      {/* Swipe controls — only rendered when there's more than one slide. */}
+      {safeSlides.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={go(-1)}
+            aria-label="Previous project"
+            className="absolute top-1/2 -translate-y-1/2 left-2 flex items-center justify-center rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ width: 32, height: 32, background: "rgba(255,255,255,0.92)", border: "none", color: C.black, backdropFilter: "blur(4px)" }}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={go(1)}
+            aria-label="Next project"
+            className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center justify-center rounded-full cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ width: 32, height: 32, background: "rgba(255,255,255,0.92)", border: "none", color: C.black, backdropFilter: "blur(4px)" }}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {/* Dot indicators */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+            {safeSlides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={jumpTo(i)}
+                aria-label={`Show project ${i + 1}`}
+                style={{
+                  width: i === index ? 16 : 6,
+                  height: 6,
+                  borderRadius: 999,
+                  background: i === index ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "width 0.25s ease, background 0.25s ease",
+                  padding: 0,
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Skeleton placeholder rendered while the firm list is being fetched.
+ *  Mirrors the real card's silhouette so the grid doesn't reflow when data
+ *  arrives. Uses a single shimmering keyframe shared across all blocks. */
+function DesignerCardSkeleton() {
+  const block: React.CSSProperties = {
+    background: "linear-gradient(90deg, #ece8df 0%, #f4f1ea 50%, #ece8df 100%)",
+    backgroundSize: "200% 100%",
+    animation: "designer-skeleton-shimmer 1.4s linear infinite",
+    borderRadius: 8,
+  };
+  return (
+    <div
+      className="rounded-[16px] overflow-hidden"
+      style={{ background: C.white, border: `1px solid ${C.creamBorder}` }}
+      aria-hidden
+    >
+      <div style={{ ...block, height: 220, borderRadius: 0 }} />
+      <div className="p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div style={{ ...block, width: 52, height: 52, borderRadius: 999 }} />
+          <div style={{ ...block, height: 18, flex: 1, maxWidth: 180 }} />
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div style={{ ...block, height: 22, width: 56 }} />
+          <div style={{ ...block, height: 14, width: 88 }} />
+          <div style={{ ...block, height: 14, width: 72 }} />
+        </div>
+        <div style={{ ...block, height: 78, marginBottom: 16 }} />
+        <div className="flex items-center gap-2 mb-5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ ...block, width: 40, height: 40 }} />
+          ))}
+        </div>
+        <div className="flex items-center justify-between pt-4" style={{ borderTop: `1px solid ${C.creamBorder}` }}>
+          <div>
+            <div style={{ ...block, height: 10, width: 80, marginBottom: 6 }} />
+            <div style={{ ...block, height: 14, width: 100 }} />
+          </div>
+          <div style={{ ...block, height: 36, width: 110, borderRadius: 12 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── DESIGNER CARD ─── */
 function DesignerCardComponent({ designer, index }: { designer: DesignerCard; index: number }) {
   const navigate = useNavigate();
@@ -383,20 +918,17 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
           boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}
       >
-        {/* Cover image */}
+        {/* Cover — slide-based featured-project carousel. Auto-advances
+            every 4.5s and pauses on hover; prev/next buttons let the user
+            jump manually. Falls back to a static hero image when there is
+            only one image to show. */}
         <div className="relative h-[220px] overflow-hidden">
-          <SmartImage
-            src={resolveAsset(designer.image)}
-            alt={designer.name}
-            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+          <DesignerCoverCarousel designer={designer} />
 
           {/* Verified badge */}
           {designer.verified && (
             <div
-              className="absolute top-3 left-3 rounded-[100px] px-3 py-[5px] flex items-center gap-1.5"
+              className="absolute top-3 left-3 rounded-[100px] px-3 py-[5px] flex items-center gap-1.5 z-10"
               style={{ background: C.cream, border: `1px solid ${C.creamBorder}` }}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -408,7 +940,7 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
 
           {/* Project count pill */}
           {designer.projects > 0 && (
-            <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm rounded-[100px] px-3 py-[5px]">
+            <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-sm rounded-[100px] px-3 py-[5px] z-10">
               <span className="text-[12px] font-medium" style={{ fontFamily: sans, color: C.black }}>
                 {designer.projects} projects
               </span>
@@ -418,85 +950,90 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
 
         {/* Content */}
         <div className="p-5 pb-6">
-          {/* Logo + Name + Rating row */}
-          <div className="flex items-start gap-3 mb-2">
+          {/* Logo + Name */}
+          <div className="flex items-center gap-3 mb-3">
             <img
               src={logoSrc}
               alt=""
-              className="size-[36px] rounded-full object-cover shrink-0"
+              className="size-[52px] rounded-full object-cover shrink-0"
               style={{ border: `1px solid ${C.creamBorder}` }}
               onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_LOGO; }}
             />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h3
-                  className="text-[20px] font-normal leading-[1.2] line-clamp-1"
-                  style={{ fontFamily: serif, color: C.black }}
-                >
-                  {designer.name}
-                </h3>
-                {designer.rating > 0 && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Star className="w-[14px] h-[14px] fill-[#FFA929] text-[#FFA929]" />
-                    <span className="font-medium text-[14px]" style={{ fontFamily: sans, color: C.black }}>{designer.rating}</span>
-                    {designer.reviews > 0 && (
-                      <span className="text-[12px]" style={{ fontFamily: sans, color: C.grayLight }}>({designer.reviews})</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <h3
+              className="text-[20px] font-normal leading-[1.2] line-clamp-1 flex-1 min-w-0"
+              style={{ fontFamily: serif, color: C.black }}
+            >
+              {designer.name}
+            </h3>
           </div>
 
-          {/* Tagline */}
-          {designer.tagline && (
-            <p
-              className="text-[14px] leading-[1.5] mb-4 line-clamp-2"
-              style={{ fontFamily: sans, color: C.gray }}
-            >
-              {designer.tagline}
-            </p>
-          )}
-
-          {/* Location */}
-          {designer.location && (
-            <div className="flex items-center gap-1.5 mb-4 min-w-0">
-              <MapPin className="w-[14px] h-[14px] shrink-0" style={{ color: C.grayLight }} />
+          {/* Rating · Reviews · Projects · Accreditations row. The
+              accreditation cluster is pushed to the right and capped at
+              three logos; any extra marks fold into a "+N" pill so the
+              row keeps a fixed width. */}
+          <div className="flex items-center gap-3 mb-4 text-[13px]" style={{ fontFamily: sans, color: C.gray }}>
+            {designer.rating > 0 && (
               <span
-                className="text-[13px] truncate min-w-0"
-                style={{ fontFamily: sans, color: C.gray }}
-                title={designer.location}
-              >{designer.location}</span>
-              {designer.yearsActive > 0 && (
-                <span className="text-[13px] ml-1 shrink-0" style={{ fontFamily: sans, color: C.grayLight }}>{designer.yearsActive} yrs</span>
-              )}
-            </div>
-          )}
+                className="inline-flex items-center gap-1 rounded-[8px] px-2 py-[3px]"
+                style={{ background: "#fff7e8" }}
+              >
+                <Star className="w-[14px] h-[14px] fill-[#FFA929] text-[#FFA929]" />
+                <span className="font-semibold" style={{ color: C.black }}>{designer.rating}</span>
+              </span>
+            )}
+            {designer.reviews > 0 && (
+              <>
+                <span style={{ color: C.grayLight }}>|</span>
+                <span><span style={{ color: C.black, fontWeight: 500 }}>{designer.reviews}</span> Reviews</span>
+              </>
+            )}
+            {(() => {
+              const visible = designer.accreditations.filter((a) => {
+                const u = a.toUpperCase();
+                return !u.includes("LANDED") && !u.includes("ISO");
+              });
+              if (visible.length === 0) return null;
+              const shown = visible.slice(0, 3);
+              const overflow = visible.length - shown.length;
+              return (
+                <div className="flex items-center gap-1.5 ml-auto">
+                  {shown.map((a) => (
+                    <AccreditationLogo key={a} label={a} />
+                  ))}
+                  {overflow > 0 && (
+                    <span
+                      title={visible.slice(3).join(" · ")}
+                      className="inline-flex items-center justify-center shrink-0 text-[11px] font-semibold"
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        background: C.white,
+                        border: `1px solid ${C.creamBorder}`,
+                        color: C.gray,
+                        fontFamily: sans,
+                      }}
+                    >
+                      +{overflow}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
 
-          {/* Accreditations row — show 2 inline, hide the rest behind a +N pill (hover for full list). */}
-          {designer.accreditations.length > 0 && (
-            <div className="flex flex-wrap gap-[6px] mb-5">
-              {designer.accreditations.slice(0, 2).map((a) => (
-                <span
-                  key={a}
-                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium inline-flex items-center gap-1"
-                  style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.black }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#22c55e" }}>
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  {a}
-                </span>
-              ))}
-              {designer.accreditations.length > 2 && (
-                <span
-                  className="rounded-[100px] px-3 py-[5px] text-[12px] font-medium cursor-help"
-                  style={{ background: C.white, border: `1px solid ${C.creamBorder}`, fontFamily: sans, color: C.gray }}
-                  title={designer.accreditations.slice(2).join(" · ")}
-                >
-                  +{designer.accreditations.length - 2} more
-                </span>
-              )}
+          {/* Why choose — bio in a gray box, 3 lines max with ellipsis */}
+          {designer.bio && (
+            <div
+              className="rounded-[10px] px-3.5 py-3 mb-4"
+              style={{ background: C.cream }}
+            >
+              <p
+                className="text-[13px] leading-[1.55] line-clamp-3"
+                style={{ fontFamily: sans, color: C.gray, margin: 0 }}
+              >
+                {designer.bio}
+              </p>
             </div>
           )}
 
@@ -533,14 +1070,29 @@ function DesignerCardComponent({ designer, index }: { designer: DesignerCard; in
 export function DesignersDirectory() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [propertyFilter, setPropertyFilter] = useState("All");
+  const [propertyFilter, setPropertyFilter] = useState("Any Property");
   const [styleFilter, setStyleFilter] = useState("All Styles");
   const [budgetFilter, setBudgetFilter] = useState("Any Budget");
+  const [locationFilter, setLocationFilter] = useState("All Locations");
   const [licenseFilter, setLicenseFilter] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState("Most Reviewed");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [designers, setDesigners] = useState<DesignerCard[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Seed budget / location filters from query params on first mount so the
+  // homepage-nav dropdown (and any other deep-link) can pre-apply filters.
+  // Only runs once — once the user is here we don't want to fight their edits.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const budget = params.get("budget");
+    if (budget === "40") setBudgetFilter("$40,000 and under");
+    else if (budget === "60") setBudgetFilter("$60,000 and under");
+    else if (budget === "80") setBudgetFilter("$80,000 and under");
+    const region = params.get("region");
+    if (region && LOCATION_FILTERS.includes(region)) setLocationFilter(region);
+  }, []);
 
   const toggleLicense = (opt: string) => setLicenseFilter((prev) => {
     const next = new Set(prev);
@@ -548,7 +1100,7 @@ export function DesignersDirectory() {
     return next;
   });
 
-  const activeFilterCount = [propertyFilter !== "All", styleFilter !== "All Styles", budgetFilter !== "Any Budget", licenseFilter.size > 0].filter(Boolean).length;
+  const activeFilterCount = [propertyFilter !== "Any Property", styleFilter !== "All Styles", budgetFilter !== "Any Budget", locationFilter !== "All Locations", licenseFilter.size > 0].filter(Boolean).length;
 
   const filteredDesigners = useMemo(() => {
     let result = [...designers];
@@ -564,7 +1116,7 @@ export function DesignersDirectory() {
       );
     }
 
-    if (propertyFilter !== "All") {
+    if (propertyFilter !== "Any Property") {
       result = result.filter((d) => d.propertyTypes.includes(propertyFilter));
     }
 
@@ -579,10 +1131,9 @@ export function DesignersDirectory() {
       // tiers actually overlap, instead of being squashed into a single
       // $30K-$120K floor-to-ceiling range.
       const bands: Record<string, [number, number]> = {
-        "Under $30K": [0, 30],
-        "$30K – $60K": [30, 60],
-        "$60K – $120K": [60, 120],
-        "$120K+": [120, Infinity],
+        "$40,000 and under": [0, 40],
+        "$60,000 and under": [0, 60],
+        "$80,000 and under": [0, 80],
       };
       const [bMin, bMax] = bands[budgetFilter] || [0, Infinity];
       result = result.filter((d) => {
@@ -590,6 +1141,10 @@ export function DesignersDirectory() {
         if (tiers.length === 0) return true; // no budget data — keep visible
         return tiers.some(([fMin, fMax]) => fMin < bMax && fMax >= bMin);
       });
+    }
+
+    if (locationFilter !== "All Locations") {
+      result = result.filter((d) => d.regions.includes(locationFilter));
     }
 
     // Multi-license filter — designer must hold ALL selected licenses.
@@ -609,13 +1164,14 @@ export function DesignersDirectory() {
     if (sortBy === "Newest") result.sort((a, b) => a.yearsActive - b.yearsActive);
 
     return result;
-  }, [search, propertyFilter, styleFilter, budgetFilter, licenseFilter, sortBy, designers]);
+  }, [search, propertyFilter, styleFilter, budgetFilter, locationFilter, licenseFilter, sortBy, designers]);
 
   const clearAllFilters = () => {
     setSearch("");
-    setPropertyFilter("All");
+    setPropertyFilter("Any Property");
     setStyleFilter("All Styles");
     setBudgetFilter("Any Budget");
+    setLocationFilter("All Locations");
     setLicenseFilter(new Set());
     setSortBy("Most Reviewed");
   };
@@ -649,13 +1205,13 @@ export function DesignersDirectory() {
       <div className="min-h-screen relative overflow-x-clip" style={{ background: C.cream }}>
         <HomepageNav />
 
-        {/* ─── HERO PHOTO BAND ─── */}
+        {/* ─── HERO — two-column lead-capture band ─── */}
         <section className="pt-8 md:pt-12 px-6 md:px-10">
           <div className="max-w-[1280px] mx-auto">
             <FadeIn>
               <div
                 className="relative overflow-hidden"
-                style={{ borderRadius: 24, height: "clamp(360px, 48vw, 480px)" }}
+                style={{ borderRadius: 24, minHeight: "clamp(420px, 52vw, 540px)" }}
               >
                 <SmartImage
                   src={heroPhoto}
@@ -664,75 +1220,37 @@ export function DesignersDirectory() {
                   priority
                   className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-black/35" />
-                <div className="relative h-full flex flex-col items-center justify-center text-center px-6 md:px-10">
-                  <p
-                    className="mb-4"
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.85)",
-                      fontFamily: sans,
-                    }}
-                  >
-                    Interior Designers
-                  </p>
-                  <h1
-                    className="font-normal leading-[1.1] mb-1"
-                    style={{ fontFamily: serif, color: C.white, fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
-                  >
-                    Find Your Designer
-                  </h1>
-                  <p
-                    className="font-normal leading-[1.1] mb-5 md:mb-6"
-                    style={{ fontFamily: serif, color: "rgba(255,255,255,0.85)", fontSize: "clamp(36px, 5vw, 60px)", letterSpacing: "-0.02em" }}
-                  >
-                    Browse & Compare
-                  </p>
-                  <p
-                    className="text-[14px] md:text-[16px] max-w-[560px] leading-[1.6]"
-                    style={{ fontFamily: sans, color: "rgba(255,255,255,0.88)" }}
-                  >
-                    Explore our curated directory of verified interior designers. Filter by style, budget, and property type to find your perfect match.
-                  </p>
-                </div>
-              </div>
-            </FadeIn>
-
-            {/* Floating search card overlapping the photo's bottom edge */}
-            <FadeIn delay={0.1}>
-              <div
-                className="relative z-10 mx-auto"
-                style={{ marginTop: -32, maxWidth: 720 }}
-              >
-                <div
-                  className="relative"
-                  style={{
-                    background: C.white,
-                    border: `1px solid ${C.creamBorder}`,
-                    borderRadius: 100,
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.10)",
-                  }}
-                >
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: C.grayLight }} />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by name, style, or location..."
-                    className="w-full h-[60px] rounded-[100px] pl-14 pr-12 text-[15px] focus:outline-none bg-transparent"
-                    style={{
-                      fontFamily: sans,
-                      color: C.black,
-                    }}
-                  />
-                  {search && (
-                    <button onClick={() => setSearch("")} className="absolute right-6 top-1/2 -translate-y-1/2 cursor-pointer">
-                      <X className="w-4 h-4 transition-colors" style={{ color: C.grayLight }} />
-                    </button>
-                  )}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/20" />
+                <div className="relative grid md:grid-cols-[1fr_minmax(340px,440px)] gap-8 md:gap-12 items-center py-12 px-6 md:px-12">
+                  {/* Left — value proposition + browse CTA */}
+                  <div className="text-left">
+                    <h1
+                      className="font-normal leading-[1.05] mb-4 md:mb-5"
+                      style={{ fontFamily: serif, color: C.white, fontSize: "clamp(34px, 4.5vw, 56px)", letterSpacing: "-0.02em" }}
+                    >
+                      Find your designer. Skip the showroom marathon.
+                    </h1>
+                    <p
+                      className="text-[14px] md:text-[16px] max-w-[520px] leading-[1.65] mb-7 md:mb-8"
+                      style={{ fontFamily: sans, color: "rgba(255,255,255,0.85)" }}
+                    >
+                      Every firm here is checked against HDB, BCA, CaseTrust, and bizSAFE — and Handshake protects your deposit. Browse the directory, or share your brief for a 3-firm shortlist.
+                    </p>
+                    <a
+                      href="#designer-grid"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        document.getElementById("designer-grid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                      className="inline-flex items-center gap-2 h-[48px] px-7 text-[14px] font-medium cursor-pointer hover:opacity-90 active:scale-[0.98]"
+                      style={{ background: C.white, color: C.black, borderRadius: 12, fontFamily: sans, transition: "all 0.15s" }}
+                    >
+                      Browse Designers
+                      <ChevronDown className="w-4 h-4" />
+                    </a>
+                  </div>
+                  {/* Right — lead capture → 7-question qualifying flow → completion. */}
+                  <DirectoryLeadFunnel />
                 </div>
               </div>
             </FadeIn>
@@ -740,56 +1258,59 @@ export function DesignersDirectory() {
         </section>
 
         {/* ─── FILTERS + GRID ─── */}
-        <section className="px-6 md:px-10 pt-10 md:pt-14 pb-20 md:pb-28">
+        <section id="designer-grid" className="px-6 md:px-10 pt-10 md:pt-14 pb-20 md:pb-28 scroll-mt-20">
           <div className="max-w-[1280px] mx-auto">
-            {/* Filter bar — Desktop */}
-            <FadeIn delay={0.05}>
-              <div className="hidden md:flex items-center justify-between mb-8 flex-wrap gap-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-[6px] mr-2 flex-wrap">
-                    {PROPERTY_FILTERS.map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setPropertyFilter(f)}
-                        className="rounded-[100px] px-5 py-[10px] text-[14px] transition-all cursor-pointer"
-                        style={{
-                          fontFamily: sans,
-                          ...(propertyFilter === f
-                            ? { background: C.black, color: C.white, fontWeight: 500 }
-                            : { background: C.white, border: `1px solid ${C.creamBorder}`, color: C.black }),
-                        }}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="w-px h-8" style={{ background: C.creamBorder }} />
-
-                  <FilterDropdown options={STYLE_FILTERS} value={styleFilter} onChange={setStyleFilter} />
-                  <FilterDropdown options={BUDGET_FILTERS} value={budgetFilter} onChange={setBudgetFilter} />
-                  <MultiCheckboxDropdown
-                    label="License"
-                    options={LICENSE_FILTERS.map((l) => l.label)}
-                    selected={licenseFilter}
-                    onToggle={toggleLicense}
+            {/* Combined search + filter row — keeps the input, the five
+                filter pills, the "Clear all" affordance, and the Search
+                submit button on the same line so users see everything
+                they can narrow by at a glance. Wraps on smaller widths. */}
+            <FadeIn>
+              <div className="hidden md:flex items-center mb-8 flex-wrap gap-3">
+                <form
+                  onSubmit={(e) => e.preventDefault()}
+                  className="relative flex-1 min-w-[260px] max-w-[420px]"
+                  style={{
+                    background: C.white,
+                    border: `1px solid ${C.creamBorder}`,
+                    borderRadius: 100,
+                  }}
+                >
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: C.grayLight }} />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search by name, style, or location..."
+                    className="w-full h-[48px] rounded-[100px] pl-12 pr-10 text-[14px] focus:outline-none bg-transparent"
+                    style={{ fontFamily: sans, color: C.black }}
                   />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {activeFilterCount > 0 && (
-                    <button
-                      onClick={clearAllFilters}
-                      className="text-[13px] underline transition-colors cursor-pointer"
-                      style={{ fontFamily: sans, color: C.grayLight }}
-                      onMouseEnter={(e) => { (e.target as HTMLElement).style.color = C.black; }}
-                      onMouseLeave={(e) => { (e.target as HTMLElement).style.color = C.grayLight; }}
-                    >
-                      Clear all
+                  {search && (
+                    <button type="button" onClick={() => setSearch("")} className="absolute right-5 top-1/2 -translate-y-1/2 cursor-pointer">
+                      <X className="w-4 h-4" style={{ color: C.grayLight }} />
                     </button>
                   )}
-                  <FilterDropdown options={SORT_OPTIONS} value={sortBy} onChange={setSortBy} />
-                </div>
+                </form>
+                <FilterDropdown options={PROPERTY_FILTERS} value={propertyFilter} onChange={setPropertyFilter} />
+                <FilterDropdown options={STYLE_FILTERS} value={styleFilter} onChange={setStyleFilter} />
+                <FilterDropdown options={BUDGET_FILTERS} value={budgetFilter} onChange={setBudgetFilter} />
+                <FilterDropdown options={LOCATION_FILTERS} value={locationFilter} onChange={setLocationFilter} />
+                <MultiCheckboxDropdown
+                  label="License"
+                  options={LICENSE_FILTERS.map((l) => l.label)}
+                  selected={licenseFilter}
+                  onToggle={toggleLicense}
+                />
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="ml-auto text-[13px] underline transition-colors cursor-pointer"
+                    style={{ fontFamily: sans, color: C.grayLight }}
+                    onMouseEnter={(e) => { (e.target as HTMLElement).style.color = C.black; }}
+                    onMouseLeave={(e) => { (e.target as HTMLElement).style.color = C.grayLight; }}
+                  >
+                    Clear all
+                  </button>
+                )}
               </div>
             </FadeIn>
 
@@ -900,6 +1421,28 @@ export function DesignersDirectory() {
                       </div>
                     </div>
 
+                    {/* Location */}
+                    <div className="mb-8">
+                      <label className="text-[14px] font-medium block mb-3" style={{ fontFamily: sans, color: C.black }}>Location</label>
+                      <div className="flex flex-wrap gap-2">
+                        {LOCATION_FILTERS.map((loc) => (
+                          <button
+                            key={loc}
+                            onClick={() => setLocationFilter(loc)}
+                            className="rounded-[100px] px-4 py-[9px] text-[13px] transition-all cursor-pointer"
+                            style={{
+                              fontFamily: sans,
+                              ...(locationFilter === loc
+                                ? { background: C.black, color: C.white, fontWeight: 500 }
+                                : { background: C.cream, color: C.black }),
+                            }}
+                          >
+                            {loc}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Sort */}
                     <div className="mb-8">
                       <label className="text-[14px] font-medium block mb-3" style={{ fontFamily: sans, color: C.black }}>Sort by</label>
@@ -953,12 +1496,16 @@ export function DesignersDirectory() {
             </FadeIn>
 
             {/* ─── GRID ─── */}
+            <style>{`
+              @keyframes designer-skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+              @keyframes directory-cover-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+              .directory-cover-marquee:hover > .flex { animation-play-state: paused !important; }
+            `}</style>
             {loading ? (
-              <div className="text-center py-20">
-                <Loader2 className="w-12 h-12 animate-spin mx-auto mb-5" style={{ color: C.black }} />
-                <h3 className="text-[22px] font-normal mb-2" style={{ fontFamily: serif, color: C.black }}>
-                  Loading designers...
-                </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <DesignerCardSkeleton key={i} />
+                ))}
               </div>
             ) : filteredDesigners.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
@@ -990,43 +1537,9 @@ export function DesignersDirectory() {
               </div>
             )}
 
-            {/* ─── BOTTOM CTA ─── */}
+            {/* ─── FAQ ─── */}
             <FadeIn>
-              <div className="mt-16 md:mt-24">
-                <div
-                  className="px-8 py-16 md:px-16 md:py-20 text-center"
-                  style={{ background: C.footerDark, borderRadius: "16px" }}
-                >
-                  <TagLabel>
-                    <span style={{ color: "rgba(255,255,255,0.4)" }}>Need help?</span>
-                  </TagLabel>
-                  <h2
-                    className="font-normal leading-[1.15] mt-6 mb-2"
-                    style={{ fontFamily: serif, color: "#ffffff", fontSize: "clamp(28px, 3.5vw, 48px)", letterSpacing: "-0.01em" }}
-                  >
-                    Not sure where to start?
-                  </h2>
-                  <p
-                    className="font-normal leading-[1.15] mb-5 md:mb-6"
-                    style={{ fontFamily: serif, color: "rgba(255,255,255,0.5)", fontSize: "clamp(28px, 3.5vw, 48px)", letterSpacing: "-0.01em" }}
-                  >
-                    Let us match you.
-                  </p>
-                  <p
-                    className="text-[15px] md:text-[17px] font-normal leading-[1.65] max-w-[480px] mx-auto mb-10"
-                    style={{ color: "rgba(255,255,255,0.55)", fontFamily: sans }}
-                  >
-                    Answer a few quick questions and we'll recommend designers tailored to your project, style, and budget.
-                  </p>
-                  <button
-                    onClick={() => navigate("/get-matched")}
-                    className="h-[52px] px-9 text-[15px] font-medium cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all"
-                    style={{ background: "#ffffff", color: C.footerDark, borderRadius: "12px", fontFamily: sans }}
-                  >
-                    Get Matched Free
-                  </button>
-                </div>
-              </div>
+              <DirectoryFAQs />
             </FadeIn>
           </div>
         </section>

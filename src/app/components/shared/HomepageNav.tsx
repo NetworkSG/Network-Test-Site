@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { HomeownerSheet } from "./HomeownerSheet";
@@ -17,11 +17,171 @@ const C = {
 const NAV_LINKS = [
   { label: "Home", href: "/" },
   { label: "Interior Designers", href: "/interior-designers" },
-  { label: "Room Designer", href: "/render-tool" },
-  { label: "Layout Planner", href: "/floorplan3d" },
-  { label: "Cost Guide", href: "/cost-guide" },
   { label: "Handshake", href: "/networkxhandshake" },
 ];
+
+// Hover-dropdown content for the Interior Designers nav link. Each item is a
+// real anchor so middle-click / right-click work; the directory reads
+// ?budget= / ?region= on mount and pre-applies the matching chip.
+const ID_DROPDOWN_FIRMS: { label: string; href: string }[] = [
+  { label: "All Designers", href: "/interior-designers" },
+  { label: "Top Rated", href: "/interior-designers" },
+  { label: "Recently Joined", href: "/interior-designers" },
+  { label: "Verified Firms", href: "/interior-designers" },
+];
+const ID_DROPDOWN_BUDGETS: { label: string; href: string }[] = [
+  { label: "$40,000 and under", href: "/interior-designers?budget=40" },
+  { label: "$60,000 and under", href: "/interior-designers?budget=60" },
+  { label: "$80,000 and under", href: "/interior-designers?budget=80" },
+];
+const ID_DROPDOWN_LOCATIONS: { label: string; href: string }[] = [
+  { label: "North", href: "/interior-designers?region=North" },
+  { label: "North-East", href: "/interior-designers?region=North-East" },
+  { label: "East", href: "/interior-designers?region=East" },
+  { label: "West", href: "/interior-designers?region=West" },
+  { label: "Central", href: "/interior-designers?region=Central" },
+];
+
+/**
+ * Hover-anchored container that wraps the "Interior Designers" nav link and
+ * reveals a 2-column filter panel on hover. Uses a small close-delay so the
+ * cursor can travel from the link onto the panel without it disappearing.
+ */
+function InteriorDesignersDropdown() {
+  const [open, setOpen] = useState(false);
+  // Keep the close timer on a ref so a rapid re-enter cancels the pending close.
+  const closeTimerRef = useRef<number | null>(null);
+  const handleEnter = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setOpen(true);
+  };
+  const handleLeave = () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+  };
+  useEffect(() => () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+  }, []);
+
+  const columnHeaderStyle: React.CSSProperties = {
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    color: "#9a9790",
+    fontFamily: sans,
+    marginBottom: 12,
+  };
+
+  const linkStyle: React.CSSProperties = {
+    color: C.black,
+    fontFamily: sans,
+    fontSize: 13,
+    lineHeight: 1.4,
+    transition: "opacity 0.15s",
+  };
+
+  return (
+    <div onMouseEnter={handleEnter} onMouseLeave={handleLeave} style={{ position: "static" }}>
+      <a
+        href="/interior-designers"
+        className="text-[15px] font-normal cursor-pointer hover:opacity-60"
+        style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        Interior Designers
+      </a>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            role="menu"
+            className="absolute left-0 right-0 top-full"
+            style={{
+              background: C.cream,
+              borderTop: `1px solid ${C.creamBorder}`,
+              borderBottom: `1px solid ${C.creamBorder}`,
+              boxShadow: "0 12px 32px rgba(15,15,13,0.08), 0 2px 6px rgba(15,15,13,0.04)",
+              fontFamily: sans,
+            }}
+          >
+            {/* Invisible bridge so the cursor can travel from the link
+                onto the panel without crossing a gap. */}
+            <div style={{ position: "absolute", left: 0, right: 0, top: -8, height: 8 }} />
+            <div className="max-w-[1280px] mx-auto px-6 md:px-10 py-14 flex items-start justify-center gap-12">
+              <div>
+                <p style={columnHeaderStyle}>By Firms</p>
+                <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+                  {ID_DROPDOWN_FIRMS.map((item) => (
+                    <li key={item.label}>
+                      <a href={item.href} className="block cursor-pointer hover:opacity-60" style={linkStyle}>
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p style={columnHeaderStyle}>By Budget (S$)</p>
+                <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+                  {ID_DROPDOWN_BUDGETS.map((item) => (
+                    <li key={item.href}>
+                      <a href={item.href} className="block cursor-pointer hover:opacity-60" style={linkStyle}>
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p style={columnHeaderStyle}>By Location</p>
+                <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+                  {ID_DROPDOWN_LOCATIONS.map((item) => (
+                    <li key={item.href}>
+                      <a href={item.href} className="block cursor-pointer hover:opacity-60" style={linkStyle}>
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="flex flex-col gap-4" style={{ borderLeft: `1px solid ${C.creamBorder}`, paddingLeft: 32, width: 280 }}>
+                <a
+                  href="/get-matched"
+                  className="block cursor-pointer hover:opacity-90"
+                  style={{
+                    background: C.white,
+                    border: `1px solid ${C.creamBorder}`,
+                    borderRadius: 12,
+                    padding: "14px 16px",
+                    transition: "opacity 0.15s",
+                  }}
+                >
+                  <p style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: C.black, margin: 0, marginBottom: 4 }}>
+                    Get matched
+                  </p>
+                  <p style={{ fontFamily: sans, fontSize: 12, color: C.gray, margin: 0, lineHeight: 1.4 }}>
+                    Tell us your needs and we'll pair you with the right designer.
+                  </p>
+                  <p style={{ fontFamily: sans, fontSize: 12, color: C.black, margin: 0, marginTop: 8, fontWeight: 500 }}>
+                    Start now ›
+                  </p>
+                </a>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 interface HomepageNavProps {
   /**
@@ -138,12 +298,89 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
 
   return (
     <>
-    <nav
+    {/* Sticky header stack — top utility bar + main nav slide together
+        when the user scrolls up/down so the contact details and primary
+        links share the same hide-on-scroll behaviour. */}
+    <div
       className="sticky top-0 z-50"
       style={{
-        background: C.cream,
         transform: navHidden && !mobileMenuOpen ? "translateY(-100%)" : "translateY(0)",
         transition: "transform 0.3s ease",
+      }}
+    >
+    {/* Top utility bar — social icons (left) + contact details (right).
+        Hidden on mobile where the information is moved into the
+        hamburger menu instead. */}
+    <div
+      className="hidden md:block"
+      style={{
+        background: C.black,
+        color: C.white,
+        fontFamily: sans,
+      }}
+    >
+      <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[44px] px-6 md:px-10 text-[13px]">
+        <div className="flex items-center gap-5">
+          <a
+            href="https://www.instagram.com/networksingapore/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Network on Instagram"
+            className="hover:opacity-70 transition-opacity"
+            style={{ color: C.white }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+            </svg>
+          </a>
+          <a
+            href="https://www.facebook.com/networksingapore/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Network on Facebook"
+            className="hover:opacity-70 transition-opacity"
+            style={{ color: C.white }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.51 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46H15.2c-1.24 0-1.63.77-1.63 1.56V12h2.77l-.44 2.89h-2.33v6.99A10 10 0 0 0 22 12z" />
+            </svg>
+          </a>
+        </div>
+        <div className="flex items-center gap-5">
+          <a href="/render-tool" className="hover:opacity-70 transition-opacity" style={{ color: C.white }}>
+            Room Designer
+          </a>
+          <a href="/floorplan3d" className="hover:opacity-70 transition-opacity" style={{ color: C.white }}>
+            Layout Planner
+          </a>
+          <a href="/cost-guide" className="hover:opacity-70 transition-opacity" style={{ color: C.white }}>
+            Cost Guide
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              // Signed-in users get the account drawer; signed-out users
+              // go to /profile which renders the login / signup screen.
+              if (auth.signedIn) setSheetOpen(true);
+              else window.location.href = "/profile";
+            }}
+            className="flex items-center gap-1.5 hover:opacity-70 transition-opacity cursor-pointer"
+            style={{ background: "transparent", border: "none", color: C.white, fontFamily: sans, fontSize: 13, padding: 0 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            {auth.signedIn ? (auth.name || "Account") : "Log in / Sign up"}
+          </button>
+        </div>
+      </div>
+    </div>
+    <nav
+      style={{
+        background: C.cream,
       }}
     >
       <div className="max-w-[1280px] mx-auto flex items-center justify-between h-[56px] md:h-[64px] px-6 md:px-10">
@@ -154,12 +391,16 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
         }} />
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-8">
-          {NAV_LINKS.map((l) => (
-            <a key={l.href} href={l.href}
-              className="text-[13px] font-normal cursor-pointer hover:opacity-60"
-              style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
-            >{l.label}</a>
-          ))}
+          {NAV_LINKS.map((l) =>
+            l.label === "Interior Designers" ? (
+              <InteriorDesignersDropdown key={l.href} />
+            ) : (
+              <a key={l.href} href={l.href}
+                className="text-[15px] font-normal cursor-pointer hover:opacity-60"
+                style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+              >{l.label}</a>
+            )
+          )}
         </div>
         {/* Desktop right cluster — avatar (when signed in) + CTA */}
         <div className="hidden md:flex items-center gap-3">
@@ -243,6 +484,7 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
         )}
       </AnimatePresence>
     </nav>
+    </div>
     <HomeownerSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
     </>
   );

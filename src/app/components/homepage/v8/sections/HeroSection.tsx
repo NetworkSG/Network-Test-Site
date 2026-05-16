@@ -15,7 +15,7 @@ import photo3 from "figma:asset/bc9ffe9973654a94a381c863292fc3780b81397b.webp";
 import heroPhoto from "figma:asset/51afa0ea316295d8d1d824fcab3b3afbe1092843.webp";
 
 /* ── Qualifying Flow ── */
-function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, string>) => void }) {
+export function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, string>) => void }) {
   const [currentQ, setCurrentQ] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -77,45 +77,52 @@ function QualifyingFlow({ onComplete }: { onComplete: (answers: Record<string, s
           <div className="flex flex-col gap-2.5">
             {question.options.map((opt, idx) => {
               const sel = selectedOption === idx;
+              // Pull the leading "$30K–$60K" / "$150K+" out of the option's
+              // reveal text so we can render it as an inline price hint
+              // directly on the option — replaces the old pop-out reveal.
+              const priceRange = opt.reveal?.match(/^\$[\d,]+K?\+?(?:[–\-]+\$[\d,]+K?\+?)?/)?.[0] || null;
               return (
                 <button key={idx} onClick={() => handleSelect(idx)} aria-pressed={sel}
-                  className="w-full text-left px-5 py-4 text-[14px] leading-[1.6] cursor-pointer"
+                  className="w-full text-left px-5 py-4 text-[14px] leading-[1.6] cursor-pointer flex items-center justify-between gap-3"
                   style={{
                     borderRadius: "10px",
                     border: sel ? `1px solid ${C.black}` : `1px solid ${C.creamBorder}`,
                     background: sel ? C.creamDark : C.white,
                     color: sel ? C.black : C.gray,
                     fontFamily: sans, transition: "all 0.15s",
-                  }}>{opt.label}</button>
+                  }}>
+                  <span className="flex-1">{opt.label}</span>
+                  {priceRange && (
+                    <span
+                      className="text-[12px] font-semibold shrink-0 rounded-full px-2.5 py-0.5"
+                      style={{
+                        background: sel ? C.black : C.cream,
+                        color: sel ? C.white : C.black,
+                        fontFamily: sans,
+                      }}
+                    >
+                      {priceRange}
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
-          {/* Show response/reveal when selected */}
-          <AnimatePresence>
-            {selectedOption !== null && question.options[selectedOption].response && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-                <div className="mt-4 p-5" style={{ background: C.cream, border: `1px solid ${C.creamBorder}`, borderRadius: "10px" }}>
-                  <p className="text-[13px] leading-[1.8] italic" style={{ color: C.gray, fontFamily: sans }}>{question.options[selectedOption].response}</p>
-                  {question.options[selectedOption].reveal && (
-                    <div className="mt-3 p-4 text-[13px] font-medium not-italic leading-[1.6]" style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}>
-                      {question.options[selectedOption].reveal}
-                    </div>
-                  )}
-                  {currentQ === 2 && selectedOption === OTHER_PROPERTY_IDX && (
-                    <input
-                      type="text"
-                      value={otherPropertyText}
-                      onChange={(e) => setOtherPropertyText(e.target.value)}
-                      placeholder="Tell us more about your property (optional)"
-                      maxLength={120}
-                      className="w-full h-[44px] mt-3 px-4 text-[13px] font-normal focus-visible:outline-none"
-                      style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}
-                    />
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Free-text follow-up when the user picks "Other" on the
+              property-type question. The per-option `response` and
+              `reveal` pop-outs are intentionally hidden — they slowed the
+              flow and pushed the Next button off-screen on mobile. */}
+          {currentQ === 2 && selectedOption === OTHER_PROPERTY_IDX && (
+            <input
+              type="text"
+              value={otherPropertyText}
+              onChange={(e) => setOtherPropertyText(e.target.value)}
+              placeholder="Tell us more about your property (optional)"
+              maxLength={120}
+              className="w-full h-[44px] mt-3 px-4 text-[13px] font-normal focus-visible:outline-none"
+              style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: "10px", color: C.black, fontFamily: sans }}
+            />
+          )}
           {currentQ === 6 && (
             <label className="flex items-start gap-3 mt-6 cursor-pointer">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#0f0f0d] shrink-0" />
