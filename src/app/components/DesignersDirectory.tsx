@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Search, Star, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, SlidersHorizontal, X } from "lucide-react";
+import { Search, Star, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, SlidersHorizontal, X, Calculator, Check } from "lucide-react";
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
 import { HeroMatchForm, type HeroLeadFormData } from "./shared/HeroMatchForm";
@@ -786,25 +786,74 @@ function DesignerCoverCarousel({ designer }: { designer: DesignerCard }) {
       return next;
     });
 
+  // Track which slide images have finished decoding so the visible <img>
+  // can fade in from a cream placeholder instead of flashing white while
+  // the network request is in flight.
+  const [loaded, setLoaded] = useState<Set<string>>(() => new Set());
+  const currentSrc = safeSlides[index];
+  const isLoaded = loaded.has(currentSrc);
+
+  // Warm the browser cache for non-visible slides so swiping/auto-advance
+  // doesn't restart the flash cycle. Runs once per src after first paint.
+  useEffect(() => {
+    const next = rawSlides.filter((s) => !loaded.has(s));
+    if (next.length === 0) return;
+    const imgs = next.map((src) => {
+      const i = new Image();
+      i.decoding = "async";
+      i.src = thumbnailUrl(resolveAsset(src), 480, 70);
+      const done = () =>
+        setLoaded((prev) => {
+          if (prev.has(src)) return prev;
+          const out = new Set(prev);
+          out.add(src);
+          return out;
+        });
+      i.onload = done;
+      i.onerror = () => markFailed(src);
+      // If the image was already cached, onload may never fire — check now.
+      if (i.complete && i.naturalWidth > 0) done();
+      return i;
+    });
+    return () => {
+      imgs.forEach((i) => {
+        i.onload = null;
+        i.onerror = null;
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawSlides.join("|")]);
+
   return (
-    <div className="absolute inset-0">
-      {/* Render only the currently-visible slide so we only fire one image
-          request per card on initial mount — keeps the directory's network
-          burst small enough that the image proxy doesn't ORB-block any of
-          them. The previous slide cross-fades out via AnimatePresence. */}
+    <div
+      className="absolute inset-0"
+      style={{
+        background:
+          "linear-gradient(135deg, #ece8df 0%, #f4f1ea 50%, #ece8df 100%)",
+      }}
+    >
       {/* Single <img> that swaps src on slide change. The key includes
           the slide src so the browser fetches the new image on demand
           but the DOM node is reused — avoids the AnimatePresence
-          removeChild race we hit on iOS Safari with popLayout mode. */}
+          removeChild race we hit on iOS Safari with popLayout mode.
+          opacity is driven by `loaded` so the image fades in instead
+          of popping after the cream placeholder. */}
       <img
-        key={`${designer.id}-${safeSlides[index]}`}
-        src={thumbnailUrl(resolveAsset(safeSlides[index]), 480, 70)}
+        key={`${designer.id}-${currentSrc}`}
+        src={thumbnailUrl(resolveAsset(currentSrc), 480, 70)}
         alt=""
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ transition: "opacity 0.3s ease" }}
-        loading="lazy"
+        style={{ opacity: isLoaded ? 1 : 0, transition: "opacity 0.35s ease" }}
         decoding="async"
-        onError={() => markFailed(safeSlides[index])}
+        onLoad={() =>
+          setLoaded((prev) => {
+            if (prev.has(currentSrc)) return prev;
+            const out = new Set(prev);
+            out.add(currentSrc);
+            return out;
+          })
+        }
+        onError={() => markFailed(currentSrc)}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
 
@@ -897,6 +946,216 @@ function DesignerCardSkeleton() {
           <div style={{ ...block, height: 36, width: 110, borderRadius: 12 }} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Animated Notion-style calculator ─── */
+// Self-contained inline SVG with SMIL animations:
+//   - whole body gently bobs up and down (translate y, 2.8s)
+//   - display cycles through three budget figures (opacity, 6s)
+//   - the orange-equivalent operator key pulses (fill, 1.6s)
+// 64×64 viewBox so it slots into the existing white badge tile.
+function AnimatedCalculator() {
+  return (
+    <svg
+      width="44"
+      height="44"
+      viewBox="0 0 64 64"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <g
+        fill="none"
+        stroke="#0f0f0d"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="translate"
+          values="0 0; 0 -1.5; 0 0"
+          dur="2.8s"
+          repeatCount="indefinite"
+        />
+
+        {/* Body */}
+        <rect
+          x="10"
+          y="6"
+          width="44"
+          height="52"
+          rx="6"
+          fill="#fafaf8"
+          strokeWidth="2.5"
+        />
+
+        {/* Halftone shading on the bottom-right */}
+        <g fill="#0f0f0d" stroke="none">
+          {[
+            [44, 52], [47, 52], [50, 52],
+            [44, 55], [47, 55], [50, 55],
+            [50, 49], [47, 49],
+          ].map(([cx, cy]) => (
+            <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="0.7" />
+          ))}
+        </g>
+
+        {/* Display */}
+        <rect
+          x="14"
+          y="10"
+          width="36"
+          height="13"
+          rx="2"
+          fill="#0f0f0d"
+          stroke="none"
+        />
+
+        {/* Cycling display values */}
+        <g
+          stroke="none"
+          fill="#fafaf8"
+          fontFamily="'DM Sans', sans-serif"
+          fontSize="7"
+          fontWeight="700"
+          textAnchor="end"
+        >
+          <text x="46" y="20">
+            <animate
+              attributeName="opacity"
+              values="1;1;0;0;0;0"
+              keyTimes="0;0.30;0.34;0.66;0.99;1"
+              dur="6s"
+              repeatCount="indefinite"
+            />
+            $42K
+          </text>
+          <text x="46" y="20">
+            <animate
+              attributeName="opacity"
+              values="0;0;1;1;0;0"
+              keyTimes="0;0.33;0.37;0.63;0.66;1"
+              dur="6s"
+              repeatCount="indefinite"
+            />
+            $58K
+          </text>
+          <text x="46" y="20">
+            <animate
+              attributeName="opacity"
+              values="0;0;0;1;1;0"
+              keyTimes="0;0.66;0.70;0.74;0.97;1"
+              dur="6s"
+              repeatCount="indefinite"
+            />
+            $75K
+          </text>
+        </g>
+
+        {/* Buttons — 3 cols on the left + tall operator column on the right */}
+        <g strokeWidth="1.6" fill="#fafaf8">
+          {/* Row 1 (digits) */}
+          <rect x="14" y="27" width="8" height="6" rx="1.6" />
+          <rect x="24" y="27" width="8" height="6" rx="1.6" />
+          <rect x="34" y="27" width="8" height="6" rx="1.6" />
+          {/* Row 2 (digits) */}
+          <rect x="14" y="35" width="8" height="6" rx="1.6" />
+          <rect x="24" y="35" width="8" height="6" rx="1.6" />
+          <rect x="34" y="35" width="8" height="6" rx="1.6" />
+          {/* Row 3 (digits) */}
+          <rect x="14" y="43" width="8" height="6" rx="1.6" />
+          <rect x="24" y="43" width="8" height="6" rx="1.6" />
+          <rect x="34" y="43" width="8" height="6" rx="1.6" />
+          {/* Bottom wide zero */}
+          <rect x="14" y="51" width="18" height="6" rx="1.6" />
+          <rect x="34" y="51" width="8" height="6" rx="1.6" />
+
+          {/* Operator column on the right — pulsing */}
+          <rect x="44" y="27" width="6" height="14" rx="1.6" fill="#0f0f0d">
+            <animate
+              attributeName="opacity"
+              values="1;0.55;1"
+              dur="1.6s"
+              repeatCount="indefinite"
+            />
+          </rect>
+          {/* Equals key (taller) */}
+          <rect x="44" y="43" width="6" height="14" rx="1.6" fill="#0f0f0d" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+/* ─── COST GUIDE INLINE CTA ─── */
+// Slides into the directory grid as a full-width band after every 6 cards.
+// Copy is outcome-led (the homeowner *gets* an honest estimate) and
+// reuses claims we can actually back up from /cost-guide — no fabricated
+// statistics, no "thousands of reviews" filler.
+function CostGuideInlineCTA() {
+  const navigate = useNavigate();
+  return (
+    <div
+      className="col-span-full flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-8 p-6 md:p-7 rounded-[20px] my-2"
+      style={{
+        background: C.black,
+        border: `1px solid ${C.black}`,
+      }}
+    >
+      <div
+        className="shrink-0 flex items-center justify-center"
+        style={{
+          width: 64,
+          height: 64,
+          background: C.white,
+          borderRadius: "16px",
+          color: C.black,
+        }}
+      >
+        <AnimatedCalculator />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <h3
+          className="text-[22px] md:text-[24px] leading-[1.2] m-0 mb-2"
+          style={{ color: C.white, fontFamily: serif, fontWeight: 500 }}
+        >
+          Not Sure What Your Renovation Should Cost?
+        </h3>
+        <ul
+          className="flex flex-col md:flex-row md:flex-wrap gap-x-6 gap-y-1.5 m-0 p-0 list-none text-[13.5px]"
+          style={{ color: "#c9c5bc", fontFamily: sans }}
+        >
+          {[
+            "See real cost breakdowns by HDB, condo, and landed scope",
+            "Built from honest line items, not designer marketing",
+            "Free, 3 minutes, no email required",
+          ].map((line) => (
+            <li key={line} className="inline-flex items-center gap-2">
+              <Check size={14} strokeWidth={2.4} style={{ color: C.white }} />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => navigate("/cost-guide")}
+        className="shrink-0 inline-flex items-center gap-1.5 h-[48px] px-6 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
+        style={{
+          background: C.white,
+          color: C.black,
+          borderRadius: "12px",
+          fontFamily: sans,
+          border: "none",
+          transition: "all 0.15s",
+        }}
+      >
+        Estimate my budget
+        <ArrowRight size={14} strokeWidth={2} />
+      </button>
     </div>
   );
 }
@@ -1079,6 +1338,9 @@ export function DesignersDirectory() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [designers, setDesigners] = useState<DesignerCard[]>([]);
   const [loading, setLoading] = useState(true);
+  // Pagination — show 6 cards initially, reveal 6 more per "Load more" click.
+  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   // Seed budget / location filters from query params on first mount so the
   // homepage-nav dropdown (and any other deep-link) can pre-apply filters.
@@ -1165,6 +1427,15 @@ export function DesignersDirectory() {
 
     return result;
   }, [search, propertyFilter, styleFilter, budgetFilter, locationFilter, licenseFilter, sortBy, designers]);
+
+  // Reset pagination whenever the filter/sort/search changes so the user
+  // never lands on "show 12 of 4" after narrowing the list.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, propertyFilter, styleFilter, budgetFilter, locationFilter, licenseFilter, sortBy]);
+
+  const visibleDesigners = filteredDesigners.slice(0, visibleCount);
+  const hasMoreDesigners = filteredDesigners.length > visibleCount;
 
   const clearAllFilters = () => {
     setSearch("");
@@ -1508,11 +1779,42 @@ export function DesignersDirectory() {
                 ))}
               </div>
             ) : filteredDesigners.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-                {filteredDesigners.map((designer, i) => (
-                  <DesignerCardComponent key={designer.id} designer={designer} index={i} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+                  {visibleDesigners.map((designer, i) => {
+                    const isPageBoundary =
+                      (i + 1) % PAGE_SIZE === 0 && i + 1 < visibleDesigners.length;
+                    return (
+                      <React.Fragment key={designer.id}>
+                        <DesignerCardComponent designer={designer} index={i} />
+                        {isPageBoundary && <CostGuideInlineCTA />}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                {hasMoreDesigners && (
+                  <div className="mt-12 md:mt-14 flex flex-col items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+                      className="h-[52px] px-8 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
+                      style={{
+                        background: C.black,
+                        color: C.white,
+                        borderRadius: "12px",
+                        fontFamily: sans,
+                        border: "none",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      Load more designers
+                    </button>
+                    <span className="text-[12px]" style={{ color: C.grayLight, fontFamily: sans }}>
+                      Showing {visibleDesigners.length} of {filteredDesigners.length}
+                    </span>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-20">
                 <div

@@ -41,6 +41,9 @@ const LazyQanvastImportTest = lazy(() => import("./components/qanvast-import/Qan
 const LazyPrivacyPolicy = lazy(() => import("./components/PrivacyPolicy").then((m) => ({ default: m.PrivacyPolicy })));
 const LazyEscrow = lazy(() => import("./components/Escrow").then((m) => ({ default: m.Escrow })));
 const LazyPinterestDownloader = lazy(() => import("./components/PinterestDownloader").then((m) => ({ default: m.PinterestDownloader })));
+const LazyBlogIndex = lazy(() => import("./components/BlogIndex").then((m) => ({ default: m.BlogIndex })));
+const LazyBlogArticle = lazy(() => import("./components/BlogArticle").then((m) => ({ default: m.BlogArticle })));
+const LazyAdminBlogEditor = lazy(() => import("./components/AdminBlogEditor").then((m) => ({ default: m.AdminBlogEditor })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -127,6 +130,10 @@ export const router = createBrowserRouter([
   { path: "/privacy-policy", element: createElement(LazyRoute, { component: LazyPrivacyPolicy }) },
   { path: "/escrow", element: createElement(LazyRoute, { component: LazyEscrow }) },
   { path: "/tools/pinterest-downloader", element: createElement(LazyRoute, { component: LazyPinterestDownloader }) },
+  { path: "/blog", element: createElement(LazyRoute, { component: LazyBlogIndex }) },
+  { path: "/blog/:slug", element: createElement(LazyRoute, { component: LazyBlogArticle }) },
+  { path: "/admin/blog/new", element: createElement(LazyRoute, { component: LazyAdminBlogEditor }) },
+  { path: "/admin/blog/edit/:slug", element: createElement(LazyRoute, { component: LazyAdminBlogEditor }) },
   { path: "/style-quiz", element: createElement(LazyRoute, { component: LazyStyleQuizLanding }) },
   { path: "/style-quiz/start", element: createElement(LazyRoute, { component: LazyStyleQuizPage }) },
   // { path: "/mood-board", element: createElement(LazyRoute, { component: LazyMoodBoardLanding }) },

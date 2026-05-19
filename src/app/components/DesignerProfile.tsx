@@ -100,6 +100,43 @@ export function relabelSqmToSqft(value: string): string {
   return value.replace(/\b(sqm|sq\s*m|m²|m2)\b/gi, "sqft");
 }
 
+/** Build the dot-separated meta line shown under a project card name.
+ *  Prefers the project's individual fields (propertyTypeDisplay / size /
+ *  cost / year) over the legacy concatenated `meta` string so missing
+ *  values can be dropped instead of leaving "HDB ·  · 2024" gaps.
+ *  Falls back to cleaning the legacy string for older project records
+ *  that don't have the individual fields. */
+export function buildProjectMeta(p: any): string {
+  const parts: string[] = [];
+  const propertyType = (p?.propertyTypeDisplay || p?.propertyType || "").toString().trim();
+  if (propertyType) parts.push(propertyType);
+  const rawSize = (p?.size || "").toString().trim();
+  // "0" / "0 sqft" / "0 sqm" mean the size wasn't actually entered — skip
+  // those so the meta line doesn't read "HDB · 0 · $98,000 · 2025".
+  if (rawSize && !/^0(\s*(sq\s*ft|sqft|sq\s*m|sqm|m²|m2))?$/i.test(rawSize)) {
+    // Older project records stored size as a bare number ("92"); newer
+    // ones tack on " sqm" via the editor's buildSizeString. Make sure
+    // every rendered size carries a unit so the meta line never shows
+    // "HDB · 92 · $42,000".
+    const hasUnit = /\b(sq\s*ft|sqft|sq\s*m|sqm|m²|m2)\b/i.test(rawSize);
+    parts.push(hasUnit ? rawSize : `${rawSize} sqm`);
+  }
+  const cost = (p?.cost || "").toString().trim();
+  // Treat "$0" or "0" as no-data so we don't show a misleading zero budget.
+  if (cost && !/^\$?\s*0$/.test(cost)) parts.push(cost);
+  const year = (p?.year || "").toString().trim();
+  if (year) parts.push(year);
+  if (parts.length > 0) return parts.join(" · ");
+  // Legacy fallback: split the prebuilt `meta` string, drop empty pieces,
+  // rejoin so old data without individual fields also renders cleanly.
+  const legacy = (p?.meta || "").toString();
+  return legacy
+    .split("·")
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /* Re-export thumbnailUrl from the shared utility module. The implementation
  * lives in src/app/utils/image-url.ts so SmartImage can import it without a
  * circular dependency back into DesignerProfile.tsx. */
@@ -1616,7 +1653,15 @@ function ProjectCard({ p, idx, slug, editCtx, onRemove, onEdit }: { p: any; idx:
         {overlay}
         <div className="absolute bottom-4 left-5 z-[2] pointer-events-none">
           <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] md:text-[14px] text-white leading-[22px] tracking-[0.08px]">{p.name}</p>
-          <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">{isForme3Slug(slug) ? relabelSqmToSqft(p.meta || "") : p.meta}</p>
+          {(() => {
+            const meta = buildProjectMeta(p);
+            if (!meta) return null;
+            return (
+              <p className="font-['DM_Sans',sans-serif] text-[12px] md:text-[14px] text-[#bab7b3] tracking-[0.08px]">
+                {isForme3Slug(slug) ? relabelSqmToSqft(meta) : meta}
+              </p>
+            );
+          })()}
         </div>
         {/* Featured badge */}
         {p.isFeatured && (
@@ -1765,7 +1810,15 @@ function AllProjectsModal({ projs, slug, onClose }: { projs: any[]; slug: string
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent to-[55%]" />
                   <div className="absolute bottom-3 left-4 right-4">
                     <p className="font-['DM_Sans',sans-serif] font-semibold text-[13px] text-white leading-[20px] tracking-[0.08px]">{p.name}</p>
-                    <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#bab7b3] tracking-[0.08px] mt-0.5">{isForme3Slug(slug) ? relabelSqmToSqft(p.meta || "") : p.meta}</p>
+                    {(() => {
+                      const meta = buildProjectMeta(p);
+                      if (!meta) return null;
+                      return (
+                        <p className="font-['DM_Sans',sans-serif] text-[11px] text-[#bab7b3] tracking-[0.08px] mt-0.5">
+                          {isForme3Slug(slug) ? relabelSqmToSqft(meta) : meta}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </Link>
               ))}

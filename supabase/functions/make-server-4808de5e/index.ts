@@ -1077,6 +1077,146 @@ app.get("/make-server-4808de5e/health", (c) => {
   return c.json({ status: "ok" });
 });
 
+// ─── Blog persistence ─────────────────────────────────────────────
+// Stores admin-authored blog overrides on top of the static seed shipped
+// with the client. Same shape the client used to keep in localStorage:
+//   blog:override:{slug}   → Post (full post object)
+//   blog:tombstone:{slug}  → true (seed slug marked deleted)
+//   blog:status:{slug}     → "draft" | "published"
+//   blog:views:{slug}      → number
+//
+// GET /blog/state is public so the index/article pages can render without
+// admin auth. Write endpoints require verifyAuth.
+function blogSlug(raw: any): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim().toLowerCase();
+  if (!/^[a-z0-9-]{1,80}$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+app.get("/make-server-4808de5e/blog/state", async (c) => {
+  try {
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const [overrideRows, tombstoneRows, statusRows, viewRows] = await Promise.all([
+      kv.entriesByPrefix("blog:override:"),
+      kv.entriesByPrefix("blog:tombstone:"),
+      kv.entriesByPrefix("blog:status:"),
+      kv.entriesByPrefix("blog:views:"),
+    ]);
+
+    const overrides: Record<string, any> = {};
+    for (const { key, value } of overrideRows) {
+      overrides[key.slice("blog:override:".length)] = value;
+    }
+    const tombstones: string[] = tombstoneRows.map((r: any) =>
+      r.key.slice("blog:tombstone:".length)
+    );
+    const status: Record<string, "draft" | "published"> = {};
+    for (const { key, value } of statusRows) {
+      status[key.slice("blog:status:".length)] = value;
+    }
+    const views: Record<string, number> = {};
+    for (const { key, value } of viewRows) {
+      views[key.slice("blog:views:".length)] = Number(value) || 0;
+    }
+    return c.json({ overrides, tombstones, status, views });
+  } catch (err) {
+    console.log("/blog/state error:", err);
+    return c.json({ error: "Failed to load blog state" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/blog/save", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const body = await c.req.json();
+    const post = body?.post;
+    const postStatus = body?.status;
+    const slug = blogSlug(post?.slug);
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    if (postStatus !== "draft" && postStatus !== "published") {
+      return c.json({ error: "Invalid status" }, 400);
+    }
+    // Clean tombstone if re-saving a previously deleted seed slug.
+    await kv.del(`blog:tombstone:${slug}`).catch(() => {});
+    await kv.set(`blog:override:${slug}`, post);
+    await kv.set(`blog:status:${slug}`, postStatus);
+    return c.json({ ok: true });
+  } catch (err) {
+    console.log("/blog/save error:", err);
+    return c.json({ error: "Failed to save" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/blog/delete", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const body = await c.req.json();
+    const slug = blogSlug(body?.slug);
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const isSeed = body?.isSeed === true;
+
+    // Remove any custom record + status + views.
+    await Promise.all([
+      kv.del(`blog:override:${slug}`).catch(() => {}),
+      kv.del(`blog:status:${slug}`).catch(() => {}),
+      kv.del(`blog:views:${slug}`).catch(() => {}),
+    ]);
+    // Seed slugs need a tombstone so the client still hides them.
+    if (isSeed) {
+      await kv.set(`blog:tombstone:${slug}`, true);
+    }
+    return c.json({ ok: true });
+  } catch (err) {
+    console.log("/blog/delete error:", err);
+    return c.json({ error: "Failed to delete" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/blog/status", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const body = await c.req.json();
+    const slug = blogSlug(body?.slug);
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const postStatus = body?.status;
+    if (postStatus !== "draft" && postStatus !== "published") {
+      return c.json({ error: "Invalid status" }, 400);
+    }
+    await kv.set(`blog:status:${slug}`, postStatus);
+    return c.json({ ok: true });
+  } catch (err) {
+    console.log("/blog/status error:", err);
+    return c.json({ error: "Failed to update status" }, 500);
+  }
+});
+
+app.post("/make-server-4808de5e/blog/view", async (c) => {
+  try {
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const body = await c.req.json();
+    const slug = blogSlug(body?.slug);
+    if (!slug) return c.json({ error: "Invalid slug" }, 400);
+    const current = Number((await kv.get(`blog:views:${slug}`)) || 0);
+    const next = current + 1;
+    await kv.set(`blog:views:${slug}`, next);
+    return c.json({ ok: true, views: next });
+  } catch (err) {
+    console.log("/blog/view error:", err);
+    return c.json({ error: "Failed" }, 500);
+  }
+});
+
 // ─── Image proxy ──────────────────────────────────────────────────
 // Tiny same-origin pass-through used by the client-side floor-plan detector.
 // Qanvast's CDN (d1hy6t2xeg0mdl.cloudfront.net) doesn't return CORS headers,

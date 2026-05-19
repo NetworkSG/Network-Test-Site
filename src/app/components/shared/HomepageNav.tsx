@@ -17,7 +17,7 @@ const C = {
 const NAV_LINKS = [
   { label: "Home", href: "/" },
   { label: "Interior Designers", href: "/interior-designers" },
-  { label: "Handshake", href: "/networkxhandshake" },
+  { label: "Blog", href: "/blog" },
 ];
 
 // Hover-dropdown content for the Interior Designers nav link. Each item is a
@@ -357,6 +357,9 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
           </a>
           <a href="/cost-guide" className="hover:opacity-70 transition-opacity" style={{ color: C.white }}>
             Cost Guide
+          </a>
+          <a href="/networkxhandshake" className="hover:opacity-70 transition-opacity" style={{ color: C.white }}>
+            Protect Your Renovation
           </a>
           <button
             type="button"
