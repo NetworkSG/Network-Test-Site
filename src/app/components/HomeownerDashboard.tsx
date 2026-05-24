@@ -607,6 +607,20 @@ export function HomeownerDashboard() {
     if (!token || !savedId) { setAuthed(false); return; }
     setUserId(savedId);
     setAuthed(true);
+    // If this user just signed up (potentially via a different entry point
+    // like /firm-onboarding) and there's stale `data` hydrated from a
+    // previous session's cache, clear it. Otherwise the cached
+    // `data.onboardedAt` from the old user bypasses the onboarding gate
+    // for one render, the main profile flashes, then fetchData returns
+    // the fresh user's empty profile and the gate fires correctly —
+    // user reads it as "profile loaded then bounced back to onboarding".
+    if (localStorage.getItem(`homeowner-just-signed-up:${savedId}`) === "1") {
+      setData(null);
+      try {
+        localStorage.removeItem("homeowner-full-cache");
+        localStorage.removeItem("homeowner-profile-cache");
+      } catch {}
+    }
     api("/homeowner-session").then(r => r.json()).then(json => {
       if (!json.valid) {
         localStorage.removeItem("homeowner-token");
@@ -655,35 +669,67 @@ export function HomeownerDashboard() {
   }, [showStatusMenu]);
 
   if (authed === null && !data) return <ProfileSkeleton />;
-  if (authed === false) return <AuthScreen onAuth={(t, id) => { setUserId(id); setAuthed(true); }} />;
-  if (!data) return <ProfileSkeleton />;
+  if (authed === false) {
+    return (
+      <AuthScreen
+        onAuth={(_t, id) => {
+          // Wipe any cached profile from a prior session BEFORE flipping
+          // authed=true. Without this, stale `data` (with an old user's
+          // onboardedAt) bypasses the onboarding gate for one render —
+          // causing the main profile UI to flash briefly before the
+          // onboarding shell renders on the next data update. The flash
+          // reads as "profile menu appears, then signup form pops up again."
+          setData(null);
+          try {
+            localStorage.removeItem("homeowner-full-cache");
+            localStorage.removeItem("homeowner-profile-cache");
+          } catch {}
+          setUserId(id);
+          setAuthed(true);
+        }}
+      />
+    );
+  }
 
-  // First-time onboarding — shown only when AuthScreen flagged this session
-  // as a fresh signup. Returning logins skip onboarding even if they never
-  // finished it (it's opt-in; we don't want to nag on every sign-in). The
-  // flag is consumed when the user finishes or explicitly skips. The shell
-  // mirrors AuthScreen's split layout so signup flows straight into these
-  // questions in the same right-column space.
+  // First-time onboarding gate — must run BEFORE the `if (!data)` fallback
+  // below. Otherwise a just-signed-up user briefly sees the main-dashboard
+  // ProfileSkeleton (with the top nav bar) before fetchData returns and the
+  // onboarding shell takes over. Keeping the user inside AuthShellLayout
+  // for the whole signup→onboarding handoff prevents that flash.
+  // The flag is consumed when the user finishes or explicitly skips.
   const justSignedUpKey = userId ? `homeowner-just-signed-up:${userId}` : "";
   const justSignedUp = !!justSignedUpKey && localStorage.getItem(justSignedUpKey) === "1";
-  if (justSignedUp && !data.onboardedAt) {
+  if (justSignedUp && (!data || !data.onboardedAt)) {
     return (
       <AuthShellLayout>
-        <HomeownerOnboarding
-          userName={data.name || ""}
-          initialPhone={data.phone || ""}
-          onComplete={() => {
-            try { localStorage.removeItem(justSignedUpKey); } catch {}
-            fetchData();
-          }}
-          onSkip={() => {
-            try { localStorage.removeItem(justSignedUpKey); } catch {}
-            fetchData();
-          }}
-        />
+        {data ? (
+          <HomeownerOnboarding
+            userName={data.name || ""}
+            initialPhone={data.phone || ""}
+            onComplete={() => {
+              try { localStorage.removeItem(justSignedUpKey); } catch {}
+              fetchData();
+            }}
+            onSkip={() => {
+              try { localStorage.removeItem(justSignedUpKey); } catch {}
+              fetchData();
+            }}
+          />
+        ) : (
+          // Waiting on fetchData — show a quiet spinner in the same right
+          // column so the layout doesn't flicker when onboarding mounts.
+          <div className="flex-1 flex items-center justify-center py-20">
+            <div
+              className="w-7 h-7 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: C.black, borderTopColor: "transparent" }}
+            />
+          </div>
+        )}
       </AuthShellLayout>
     );
   }
+
+  if (!data) return <ProfileSkeleton />;
 
   const userName = data?.name || "Homeowner";
   const userEmail = data?.email || "";
