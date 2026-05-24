@@ -480,11 +480,86 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
                   style={{ color: C.black, fontFamily: sans }}
                 >{l.label}</a>
               ))}
+
+              {/* Utility links — mirror the desktop top utility bar
+                  inside the mobile menu since mobile doesn't show that
+                  bar. Same links, same order. */}
+              <div className="h-px my-2" style={{ background: C.creamBorder }} />
+              <a
+                href="/render-tool"
+                className="py-3 text-[15px] font-normal cursor-pointer"
+                style={{ color: C.black, fontFamily: sans }}
+              >Room Designer</a>
+              <a
+                href="/floorplan3d"
+                className="py-3 text-[15px] font-normal cursor-pointer"
+                style={{ color: C.black, fontFamily: sans }}
+              >Layout Planner</a>
+              <a
+                href="/cost-guide"
+                className="py-3 text-[15px] font-normal cursor-pointer"
+                style={{ color: C.black, fontFamily: sans }}
+              >Cost Guide</a>
+              <a
+                href="/networkxhandshake"
+                className="py-3 text-[15px] font-normal cursor-pointer"
+                style={{ color: C.black, fontFamily: sans }}
+              >Protect Your Renovation</a>
+
+              {!auth.signedIn && (
+                <>
+                  <div className="h-px my-2" style={{ background: C.creamBorder }} />
+                  <a
+                    href="/profile"
+                    className="py-3 text-[15px] font-normal cursor-pointer flex items-center gap-2"
+                    style={{ color: C.black, fontFamily: sans }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    Log in / Sign up
+                  </a>
+                </>
+              )}
+
               <button
                 onClick={() => { setMobileMenuOpen(false); handleCta(); }}
-                className="w-full h-[48px] mt-2 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
+                className="w-full h-[48px] mt-3 text-[14px] font-medium cursor-pointer hover:opacity-85 active:scale-[0.98]"
                 style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, border: "none", transition: "all 0.15s" }}
               >{ctaLabel}</button>
+
+              {/* Social icons row — also mirrors the left side of the
+                  top utility bar so mobile users can reach IG / FB
+                  without scrolling to the footer. */}
+              <div className="flex items-center justify-center gap-6 pt-5 pb-1">
+                <a
+                  href="https://www.instagram.com/networksingapore/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Network on Instagram"
+                  className="hover:opacity-70 transition-opacity"
+                  style={{ color: C.black }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                  </svg>
+                </a>
+                <a
+                  href="https://www.facebook.com/networksingapore/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Network on Facebook"
+                  className="hover:opacity-70 transition-opacity"
+                  style={{ color: C.black }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.51 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46H15.2c-1.24 0-1.63.77-1.63 1.56V12h2.77l-.44 2.89h-2.33v6.99A10 10 0 0 0 22 12z" />
+                  </svg>
+                </a>
+              </div>
             </div>
           </motion.div>
         )}
