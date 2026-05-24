@@ -405,9 +405,12 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
             )
           )}
         </div>
-        {/* Desktop right cluster — avatar (when signed in) + CTA */}
+        {/* Desktop right cluster — CTA only.
+            The signed-in avatar lives in the top utility bar already
+            (rendered by Navbar), so we don't duplicate it here.
+            Mobile keeps its own avatar inside the hamburger menu below
+            since mobile doesn't show the utility bar. */}
         <div className="hidden md:flex items-center gap-3">
-          {auth.signedIn && renderAvatarTrigger()}
           <button onClick={handleCta}
             className="text-[12px] font-medium cursor-pointer px-5 py-2.5 hover:opacity-80"
             style={{ background: C.black, color: C.white, borderRadius: "12px", fontFamily: sans, border: "none", transition: "all 0.15s" }}
