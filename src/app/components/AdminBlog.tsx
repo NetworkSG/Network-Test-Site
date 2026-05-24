@@ -10,6 +10,8 @@ import {
   X,
   CheckCircle2,
   CircleDot,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import {
   getAllPostsForAdmin,
@@ -22,6 +24,30 @@ import {
   type AdminPost,
 } from "./blog/blogStore";
 import type { Post, Block } from "./blog/posts";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
+
+const API = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
+
+// Suggested seed prompts — clicking one fills the textarea so the editor
+// has a low-friction starting point. Tuned for the SG renovation market.
+const AI_PROMPT_SUGGESTIONS: { label: string; text: string }[] = [
+  {
+    label: "BTO budget breakdown",
+    text: "Write a practical guide breaking down what a $40-60K BTO renovation budget actually covers in Singapore — hacking, electrical, carpentry, flooring, etc — and what hidden costs to plan for.",
+  },
+  {
+    label: "Choosing an ID firm",
+    text: "Write a guide for first-time HDB homeowners on how to evaluate an interior design firm before signing — credentials to check, red flags in quotes, and questions to ask in the first meeting.",
+  },
+  {
+    label: "Resale vs BTO renovation",
+    text: "Compare the renovation realities of buying a resale HDB versus a new BTO in Singapore — cost differences, scope of hacking, hidden problems to watch for, and timeline.",
+  },
+  {
+    label: "Japandi style for HDB",
+    text: "Write a style guide on bringing Japandi design into a 4-room HDB — palette, materials, lighting tricks, and how to keep it practical for SG humidity.",
+  },
+];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -377,7 +403,128 @@ export function AdminBlog() {
   const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all");
   const [confirmDelete, setConfirmDelete] = useState<AdminPost | null>(null);
 
+  // ── AI article generator state ─────────────────────────────────
+  // Two-phase progress: Claude writes the text (~15-30s), then we
+  // poll kie.ai's nano-banana-2 task until the cover image is ready
+  // (~1-3 min). Only after BOTH phases finish do we save the draft —
+  // so it lands in the list complete with cover image on first appearance.
+  type AiPhase = "idle" | "writing" | "imaging" | "saving" | "error";
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiPhase, setAiPhase] = useState<AiPhase>("idle");
+  const [aiError, setAiError] = useState("");
+  // Elapsed-seconds counter for the image phase so the modal can show
+  // "Generating cover image… 47s" instead of a stale spinner.
+  const [aiImageElapsed, setAiImageElapsed] = useState(0);
+
   useEffect(() => subscribe(() => setPosts(getAllPostsForAdmin())), []);
+
+  // Tick the image-phase elapsed counter every second.
+  useEffect(() => {
+    if (aiPhase !== "imaging") { setAiImageElapsed(0); return; }
+    const id = setInterval(() => setAiImageElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [aiPhase]);
+
+  const closeAi = () => {
+    // Block close while a phase is in flight — we don't want a half-baked
+    // draft (or a paid-for image task we never use).
+    if (aiPhase === "writing" || aiPhase === "imaging" || aiPhase === "saving") return;
+    setAiOpen(false);
+    setAiPrompt("");
+    setAiPhase("idle");
+    setAiError("");
+  };
+
+  // Polls /admin-blog-image-status until kie.ai's nano-banana-2 task
+  // succeeds, fails, or hits the max-attempts ceiling. Returns the image
+  // URL on success; null if it gave up (the caller decides whether to
+  // save the draft anyway with no cover).
+  const waitForCoverImage = async (taskId: string): Promise<string | null> => {
+    const MAX_ATTEMPTS = 50; // ~5 min @ 6s
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // First check after 4s, then every 6s.
+      await new Promise((r) => setTimeout(r, attempt === 0 ? 4000 : 6000));
+      try {
+        const res = await fetch(
+          `${API}/admin-blog-image-status?taskId=${encodeURIComponent(taskId)}`,
+          { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        );
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data?.status === "success" && data.imageUrl) return data.imageUrl;
+        if (data?.status === "failed") return null;
+        // "processing" — keep polling.
+      } catch { /* network blip, keep polling */ }
+    }
+    return null;
+  };
+
+  const runAiGenerate = async () => {
+    const prompt = aiPrompt.trim();
+    if (prompt.length < 10) {
+      setAiError("Give me a topic or angle (at least 10 characters).");
+      setAiPhase("error");
+      return;
+    }
+    setAiError("");
+
+    // ── Phase 1: Claude drafts the article ──
+    setAiPhase("writing");
+    let post: Post | null = null;
+    let coverImageTaskId: string | null = null;
+    try {
+      const res = await fetch(`${API}/admin-blog-generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok || !data?.post) {
+        const msg = data?.error || `Generation failed (HTTP ${res.status}).`;
+        setAiError(
+          res.status === 404
+            ? "Backend endpoint not deployed yet. Run: supabase functions deploy make-server-4808de5e"
+            : msg,
+        );
+        setAiPhase("error");
+        return;
+      }
+      post = data.post as Post;
+      coverImageTaskId = typeof data.coverImageTaskId === "string" ? data.coverImageTaskId : null;
+    } catch (err: any) {
+      setAiError("Network error: " + (err?.message || String(err)).slice(0, 200));
+      setAiPhase("error");
+      return;
+    }
+
+    // ── Phase 2: Wait for cover image to finish ──
+    let coverImageUrl: string | null = null;
+    if (coverImageTaskId) {
+      setAiPhase("imaging");
+      coverImageUrl = await waitForCoverImage(coverImageTaskId);
+      // If we gave up / failed, soft-fall-through and save without cover.
+      // The user can attach one later via the editor's image picker.
+    }
+
+    // ── Phase 3: Save the complete draft ──
+    setAiPhase("saving");
+    const finalPost: Post = coverImageUrl
+      ? { ...post, image: coverImageUrl, imageAlt: post.title }
+      : post;
+    savePost(finalPost, "draft");
+
+    // Close modal, reset state.
+    setAiOpen(false);
+    setAiPrompt("");
+    setAiPhase("idle");
+    setAiError("");
+  };
+
+  const aiBusy = aiPhase === "writing" || aiPhase === "imaging" || aiPhase === "saving";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -407,13 +554,30 @@ export function AdminBlog() {
             Manage articles published on <span className="font-mono">/blog</span>.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/admin/blog/new")}
-          className="inline-flex items-center gap-1.5 px-4 h-10 text-[13px] font-medium text-white bg-[#101828] rounded-lg hover:opacity-90 cursor-pointer"
-        >
-          <Plus className="size-4" /> Add new article
-        </button>
+        <div className="flex items-center gap-2">
+          {/* AI generate — white surface with glowing iridescent stroke.
+              The pseudo-element creates a soft animated halo behind the
+              button without breaking the white interior. */}
+          <button
+            type="button"
+            onClick={() => setAiOpen(true)}
+            className="ai-glow-btn relative inline-flex items-center gap-1.5 px-4 h-10 text-[13px] font-medium text-[#101828] bg-white rounded-lg cursor-pointer transition-transform active:scale-[0.98]"
+            style={{
+              boxShadow:
+                "0 0 0 1px rgba(167, 139, 250, 0.55), 0 0 14px rgba(167, 139, 250, 0.45), 0 0 28px rgba(99, 102, 241, 0.28)",
+            }}
+          >
+            <Sparkles className="size-4" style={{ color: "#7c3aed" }} />
+            <span>Create article with AI</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/admin/blog/new")}
+            className="inline-flex items-center gap-1.5 px-4 h-10 text-[13px] font-medium text-white bg-[#101828] rounded-lg hover:opacity-90 cursor-pointer"
+          >
+            <Plus className="size-4" /> Add new article
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -572,6 +736,171 @@ export function AdminBlog() {
           }}
         />
       )}
+
+      {/* ── AI article generator modal ──────────────────────── */}
+      {aiOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create article with AI"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) closeAi(); }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[560px] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e5e7eb] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4" style={{ color: "#7c3aed" }} />
+                <h3 className="text-[15px] font-semibold text-[#101828] m-0">Create article with AI</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeAi}
+                disabled={aiBusy}
+                className="p-1 text-[#6a7282] hover:text-[#101828] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 flex flex-col gap-4">
+              <p className="text-[13px] text-[#6a7282] m-0">
+                Describe the topic or angle for the article. Claude Sonnet 4.6 will
+                draft the copy and Nano Banana 2 will generate a cover image — both
+                via kie.ai. The result lands as a draft you can review and publish.
+              </p>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[12px] font-semibold text-[#101828]">Topic or prompt</span>
+                <textarea
+                  value={aiPrompt}
+                  onChange={(e) => {
+                    setAiPrompt(e.target.value);
+                    if (aiPhase === "error") { setAiPhase("idle"); setAiError(""); }
+                  }}
+                  disabled={aiBusy}
+                  placeholder="e.g., Write a guide for first-time HDB owners on how to evaluate ID quotes — what to compare line-by-line, what tradeoffs to expect, and red flags…"
+                  rows={5}
+                  className="w-full px-3 py-2 text-[13px] border border-[#e5e7eb] rounded-lg outline-none focus:border-[#7c3aed] disabled:bg-[#f9fafb] disabled:cursor-not-allowed resize-y"
+                />
+                <span className="text-[11px] text-[#9ca3af]">
+                  {aiPrompt.length} / 2000 characters
+                </span>
+              </label>
+
+              {!aiBusy && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] uppercase tracking-wider text-[#9ca3af]">
+                    Quick start
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {AI_PROMPT_SUGGESTIONS.map((s) => (
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={() => { setAiPrompt(s.text); setAiError(""); setAiPhase("idle"); }}
+                        className="px-2.5 py-1 text-[11px] font-medium text-[#475467] bg-[#f9fafb] border border-[#e5e7eb] rounded-full cursor-pointer hover:bg-[#eff6ff] hover:text-[#2563eb] hover:border-[#bfdbfe]"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiBusy && (
+                <div className="flex flex-col gap-2 px-3 py-3 bg-gradient-to-r from-[#faf5ff] to-[#eff6ff] border border-[#e9d5ff] rounded-lg">
+                  <AiPhaseRow
+                    label="Writing article with Claude Sonnet 4.6"
+                    sublabel="Drafting title, lede, sections, and tags"
+                    state={aiPhase === "writing" ? "active" : "done"}
+                  />
+                  <AiPhaseRow
+                    label="Generating cover image with Nano Banana 2"
+                    sublabel={
+                      aiPhase === "imaging"
+                        ? `~1–3 minutes · ${aiImageElapsed}s elapsed`
+                        : "16:9 editorial photo, generated then attached"
+                    }
+                    state={
+                      aiPhase === "imaging" ? "active"
+                      : aiPhase === "saving" ? "done"
+                      : "pending"
+                    }
+                  />
+                  <AiPhaseRow
+                    label="Saving as draft"
+                    sublabel="Appears in your article list, ready to review"
+                    state={aiPhase === "saving" ? "active" : "pending"}
+                  />
+                </div>
+              )}
+
+              {aiPhase === "error" && aiError && (
+                <div className="text-[12px] text-[#dc2626] bg-[#fef2f2] border border-[#fecaca] rounded-md px-3 py-2">
+                  {aiError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-2 bg-[#f9fafb]">
+              <button
+                type="button"
+                onClick={closeAi}
+                disabled={aiBusy}
+                className="px-4 h-9 text-[13px] font-medium text-[#101828] bg-white border border-[#e5e7eb] rounded-lg cursor-pointer hover:bg-[#f3f4f6] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={runAiGenerate}
+                disabled={aiBusy || aiPrompt.trim().length < 10}
+                className="inline-flex items-center gap-1.5 px-4 h-9 text-[13px] font-medium text-white rounded-lg disabled:bg-[#cbd5e1] disabled:cursor-not-allowed"
+                style={
+                  !aiBusy && aiPrompt.trim().length >= 10
+                    ? { background: "linear-gradient(135deg, #7c3aed 0%, #2563eb 100%)" }
+                    : undefined
+                }
+              >
+                {aiPhase === "writing" ? (
+                  <><Loader2 className="size-3.5 animate-spin" /> Writing…</>
+                ) : aiPhase === "imaging" ? (
+                  <><Loader2 className="size-3.5 animate-spin" /> Generating image…</>
+                ) : aiPhase === "saving" ? (
+                  <><Loader2 className="size-3.5 animate-spin" /> Saving…</>
+                ) : (
+                  <><Sparkles className="size-3.5" /> Generate article</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Glow animation for the AI button */}
+      <style>{`
+        @keyframes ai-glow-pulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 1px rgba(167, 139, 250, 0.55),
+              0 0 14px rgba(167, 139, 250, 0.45),
+              0 0 28px rgba(99, 102, 241, 0.28);
+          }
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(124, 58, 237, 0.7),
+              0 0 22px rgba(167, 139, 250, 0.7),
+              0 0 40px rgba(99, 102, 241, 0.45);
+          }
+        }
+        .ai-glow-btn {
+          animation: ai-glow-pulse 2.6s ease-in-out infinite;
+        }
+        .ai-glow-btn:hover {
+          animation-duration: 1.4s;
+        }
+      `}</style>
     </div>
   );
 }
@@ -600,6 +929,48 @@ function StatCard({
         style={{ color: accent }}
       >
         {value.toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+// One row in the AI generator's three-phase progress stack.
+// `pending` = grey, `active` = spinning purple, `done` = green check.
+function AiPhaseRow({
+  label,
+  sublabel,
+  state,
+}: {
+  label: string;
+  sublabel: string;
+  state: "pending" | "active" | "done";
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="shrink-0 w-5 h-5 flex items-center justify-center">
+        {state === "done" ? (
+          <CheckCircle2 className="size-5 text-[#16a34a]" />
+        ) : state === "active" ? (
+          <Loader2 className="size-4 animate-spin text-[#7c3aed]" />
+        ) : (
+          <div className="w-3 h-3 rounded-full border border-[#cbd5e1]" />
+        )}
+      </div>
+      <div className="text-[12px] leading-tight flex-1 min-w-0">
+        <div
+          className={`font-medium ${
+            state === "done"
+              ? "text-[#101828]"
+              : state === "active"
+              ? "text-[#101828]"
+              : "text-[#9ca3af]"
+          }`}
+        >
+          {label}
+        </div>
+        <div className={state === "pending" ? "text-[#cbd5e1]" : "text-[#6a7282]"}>
+          {sublabel}
+        </div>
       </div>
     </div>
   );

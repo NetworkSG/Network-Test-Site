@@ -11,11 +11,18 @@ export type BlogCategory =
 
 // Article body is modelled as a list of typed blocks so the renderer can
 // style each one consistently without parsing markdown.
+// Text blocks may contain inline HTML produced by the rich-text editor
+// (<strong>, <em>, <u>, <a>) — kept as a string so the renderer can drop
+// it straight in via dangerouslySetInnerHTML.
 export type Block =
   | { type: "p"; text: string }
   | { type: "h2"; text: string }
+  | { type: "h3"; text: string }
   | { type: "ul"; items: string[] }
-  | { type: "quote"; text: string };
+  | { type: "ol"; items: string[] }
+  | { type: "quote"; text: string }
+  | { type: "image"; src: string; alt?: string }
+  | { type: "divider" };
 
 export interface Post {
   slug: string;

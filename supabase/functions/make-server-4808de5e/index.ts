@@ -1198,6 +1198,250 @@ app.post("/make-server-4808de5e/blog/status", async (c) => {
   }
 });
 
+// ─── AI ARTICLE GENERATION (kie.ai) ─────────────────────────────────
+// /admin-blog-generate — sync Claude Sonnet article + async nano-banana-2
+// cover image task. The frontend stores the returned post as a draft
+// immediately, then polls /admin-blog-image-status to swap in the cover
+// when the image finishes rendering (~1-3 minutes).
+app.post("/make-server-4808de5e/admin-blog-generate", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => null);
+    const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+    if (prompt.length < 10) return c.json({ error: "Prompt must be at least 10 characters." }, 400);
+    if (prompt.length > 2000) return c.json({ error: "Prompt must be under 2000 characters." }, 400);
+
+    const apiKey = Deno.env.get("ai_model_keys");
+    if (!apiKey) return c.json({ error: "AI model API key not configured on server" }, 500);
+
+    // ── Step 1: Article text via Claude Sonnet on kie.ai codex responses API ──
+    const systemPrompt = [
+      "You are a professional content writer for Network Singapore — an interior",
+      "design matching platform for SG homeowners. Generate a blog article based",
+      "on the user's topic.",
+      "",
+      "Output ONLY a single JSON object (no prose, no markdown fences) with this",
+      "exact shape:",
+      "",
+      "{",
+      '  "title": "punchy 6-12 word title",',
+      '  "excerpt": "1 sentence (max 160 chars) summary for the index card",',
+      '  "lede": "2-3 sentence opener that sells the read",',
+      '  "category": "Cost Guides" | "Process Guides" | "Style Guides" | "Designer Insights" | "Homeowner Stories",',
+      '  "tags": ["string", "string", "string"],',
+      '  "readMin": number (3-12),',
+      '  "body": [ /* see Block shapes below */ ]',
+      "}",
+      "",
+      "Body blocks (use a mix, 5-8 sections total, 600-1000 words):",
+      '  { "type": "p", "text": "paragraph" }',
+      '  { "type": "h2", "text": "section heading" }',
+      '  { "type": "h3", "text": "subsection" }',
+      '  { "type": "quote", "text": "pull-quote" }',
+      '  { "type": "ul", "items": ["bullet 1", "bullet 2"] }',
+      '  { "type": "divider" }',
+      "",
+      "Voice rules:",
+      "- Sound like a knowledgeable friend, not a brochure",
+      "- Use Singapore references where natural: HDB / BTO / Resale / Condo / Landed,",
+      "  SGD dollar amounts, BCA / HDB licensing, common SG neighbourhoods",
+      "- Never use the word 'leverage' or em-dashes",
+      "- End with one soft CTA paragraph mentioning Network's free 3-firm concierge match",
+    ].join("\n");
+
+    let articleJson: any = null;
+    try {
+      // kie.ai exposes Claude via the Anthropic-style /claude/v1/messages
+      // endpoint (NOT the OpenAI-style codex/responses one). System prompt
+      // is a top-level parameter; messages array carries only user turns.
+      const res = await fetch("https://api.kie.ai/claude/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          // Default to Claude Sonnet 4.6. Override via env if your kie.ai
+          // account exposes Claude under a different model id.
+          model: Deno.env.get("ai_blog_text_model") || "claude-sonnet-4-6",
+          stream: false,
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: [
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        console.log("kie.ai claude error:", res.status, txt.slice(0, 400));
+        return c.json({ error: `AI text generation failed (HTTP ${res.status}). Check that your kie.ai account has access to Claude Sonnet.` }, 502);
+      }
+      const data = await res.json();
+      // Anthropic response shape: { content: [{ type: "text", text: "..." }, ...] }
+      // Fall through to other shapes defensively in case kie.ai tweaks it.
+      let raw: string | null = null;
+      if (Array.isArray(data?.content)) {
+        for (const block of data.content) {
+          if (block?.type === "text" && typeof block.text === "string") {
+            raw = (raw || "") + block.text;
+          }
+        }
+      }
+      if (!raw && typeof data?.output_text === "string") raw = data.output_text;
+      if (!raw && Array.isArray(data?.output)) {
+        for (const item of data.output) {
+          for (const p of (item?.content || [])) {
+            if (typeof p?.text === "string") { raw = p.text; break; }
+          }
+          if (raw) break;
+        }
+      }
+      if (!raw && Array.isArray(data?.choices)) {
+        raw = data.choices[0]?.message?.content ?? null;
+      }
+      if (!raw) return c.json({ error: "AI returned an empty response." }, 502);
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (!m) return c.json({ error: "AI returned unparseable response." }, 502);
+      articleJson = JSON.parse(m[0]);
+    } catch (err: any) {
+      console.log("admin-blog-generate text err:", err?.message || err);
+      return c.json({ error: "AI text generation failed: " + String(err?.message || err).slice(0, 200) }, 500);
+    }
+
+    const title = String(articleJson?.title || "").trim().slice(0, 200);
+    if (!title) return c.json({ error: "AI didn't return a title." }, 502);
+
+    // Slugify title (matches blog/save's blogSlug shape — lowercase a-z 0-9 + dashes).
+    const baseSlug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 80) || `ai-draft-${Date.now()}`;
+    // De-collide against existing saved posts.
+    let slug = baseSlug;
+    let n = 2;
+    while (await kv.get(`blog:override:${slug}`)) {
+      slug = `${baseSlug}-${n++}`.slice(0, 80);
+      if (n > 50) break;
+    }
+
+    const ALLOWED_CATS = ["Cost Guides", "Process Guides", "Style Guides", "Designer Insights", "Homeowner Stories"];
+    const rawCat = String(articleJson?.category || "").trim();
+    const category = ALLOWED_CATS.includes(rawCat) ? rawCat : "Process Guides";
+
+    // ── Step 2: Kick off cover image via nano-banana-2 (async) ──
+    let coverImageTaskId: string | null = null;
+    try {
+      const imagePrompt = [
+        `Editorial 16:9 hero photo for a blog article titled "${title}".`,
+        "Modern Singaporean home interior, warm natural lighting, professional",
+        "architectural photography, magazine-quality composition.",
+        "No text, no people, no logos, no watermarks.",
+      ].join(" ");
+      const callBackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/make-server-4808de5e/admin-blog-image-noop`;
+      const imgRes = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "nano-banana-2",
+          callBackUrl,
+          input: {
+            prompt: imagePrompt,
+            aspect_ratio: "16:9",
+            google_search: false,
+            resolution: "1K",
+            output_format: "jpg",
+          },
+        }),
+      });
+      if (imgRes.ok) {
+        const imgData = await imgRes.json();
+        coverImageTaskId = imgData?.data?.taskId || imgData?.data?.task_id || imgData?.data?.id || null;
+      } else {
+        const t = await imgRes.text().catch(() => "");
+        console.log("kie.ai image kick error:", imgRes.status, t.slice(0, 300));
+      }
+    } catch (err: any) {
+      console.log("admin-blog-generate image kick err:", err?.message || err);
+      // Soft fail — text article still returned without cover image.
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const excerpt = String(articleJson?.excerpt || "").trim().slice(0, 300);
+    const post = {
+      slug,
+      category,
+      title,
+      description: excerpt,
+      image: "",
+      author: { name: "Network Editorial", avatar: "NE" },
+      readMin: Number(articleJson?.readMin) || 6,
+      publishedOn: today,
+      lede: String(articleJson?.lede || "").trim(),
+      body: Array.isArray(articleJson?.body) ? articleJson.body : [],
+      excerpt,
+      tags: Array.isArray(articleJson?.tags) ? articleJson.tags.slice(0, 6).map((t: any) => String(t).slice(0, 40)) : [],
+      imageAlt: "",
+    };
+
+    return c.json({ ok: true, post, coverImageTaskId });
+  } catch (err: any) {
+    console.log("/admin-blog-generate fatal:", err?.message || err);
+    return c.json({ error: "AI generation failed: " + String(err?.message || err).slice(0, 200) }, 500);
+  }
+});
+
+// Poll endpoint — frontend hits this every ~6s after a successful
+// /admin-blog-generate response until the cover image is ready.
+app.get("/make-server-4808de5e/admin-blog-image-status", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const taskId = c.req.query("taskId");
+    if (!taskId || !/^[a-zA-Z0-9_\-]{1,200}$/.test(taskId)) {
+      return c.json({ error: "Invalid taskId" }, 400);
+    }
+    const apiKey = Deno.env.get("ai_model_keys");
+    if (!apiKey) return c.json({ error: "AI model API key not configured" }, 500);
+
+    const res = await fetch(
+      `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+      { headers: { "Authorization": `Bearer ${apiKey}` } },
+    );
+    if (!res.ok) return c.json({ status: "processing" });
+    const data = await res.json();
+    const state = String(data?.data?.state || "").toLowerCase();
+    if (state === "success" || state === "completed") {
+      let imageUrl: string | null = null;
+      try {
+        const result = typeof data.data.resultJson === "string"
+          ? JSON.parse(data.data.resultJson)
+          : data.data.resultJson;
+        if (Array.isArray(result?.resultUrls) && result.resultUrls.length > 0) {
+          imageUrl = String(result.resultUrls[0]);
+        }
+      } catch { /* fall through to processing */ }
+      if (imageUrl) return c.json({ status: "success", imageUrl });
+      return c.json({ status: "processing" });
+    }
+    if (state === "failed" || state === "fail" || state === "error") {
+      return c.json({ status: "failed" });
+    }
+    return c.json({ status: "processing" });
+  } catch (err: any) {
+    console.log("/admin-blog-image-status error:", err?.message || err);
+    return c.json({ status: "processing" });
+  }
+});
+
+// kie.ai requires a callBackUrl on image tasks; we poll instead, so this
+// just acknowledges with 200 and discards the payload.
+app.post("/make-server-4808de5e/admin-blog-image-noop", async (c) => {
+  return c.json({ ok: true });
+});
+
 app.post("/make-server-4808de5e/blog/view", async (c) => {
   try {
     const ip = getClientIp(c);

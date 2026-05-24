@@ -91,14 +91,24 @@ function ArticleBlock({ block }: { block: Block }) {
           {block.text}
         </h2>
       );
+    case "h3":
+      return (
+        <h3
+          className="text-[22px] md:text-[24px] leading-[1.25] mt-10 mb-3 m-0"
+          style={{ color: C.black, fontFamily: serif, fontWeight: 500 }}
+        >
+          {block.text}
+        </h3>
+      );
     case "p":
+      // text may contain inline HTML from the rich-text editor
+      // (<strong>, <em>, <u>, <a>) — render through innerHTML.
       return (
         <p
           className="text-[17px] leading-[1.7] m-0 mb-5"
           style={{ color: "#3a3833", fontFamily: sans }}
-        >
-          {block.text}
-        </p>
+          dangerouslySetInnerHTML={{ __html: block.text }}
+        />
       );
     case "ul":
       return (
@@ -107,9 +117,20 @@ function ArticleBlock({ block }: { block: Block }) {
           style={{ color: "#3a3833", fontFamily: sans }}
         >
           {block.items.map((item, i) => (
-            <li key={i}>{item}</li>
+            <li key={i} dangerouslySetInnerHTML={{ __html: item }} />
           ))}
         </ul>
+      );
+    case "ol":
+      return (
+        <ol
+          className="m-0 mb-5 pl-6 flex flex-col gap-2.5 text-[17px] leading-[1.7] list-decimal"
+          style={{ color: "#3a3833", fontFamily: sans }}
+        >
+          {block.items.map((item, i) => (
+            <li key={i} dangerouslySetInnerHTML={{ __html: item }} />
+          ))}
+        </ol>
       );
     case "quote":
       return (
@@ -124,6 +145,24 @@ function ArticleBlock({ block }: { block: Block }) {
         >
           {block.text}
         </blockquote>
+      );
+    case "image":
+      return (
+        <figure className="my-8 m-0">
+          <img
+            src={block.src}
+            alt={block.alt || ""}
+            className="w-full rounded-2xl"
+            loading="lazy"
+          />
+        </figure>
+      );
+    case "divider":
+      return (
+        <hr
+          className="my-10 border-0"
+          style={{ borderTop: `1px solid ${C.creamBorder}` }}
+        />
       );
   }
 }

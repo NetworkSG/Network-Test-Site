@@ -44,6 +44,7 @@ const LazyPinterestDownloader = lazy(() => import("./components/PinterestDownloa
 const LazyBlogIndex = lazy(() => import("./components/BlogIndex").then((m) => ({ default: m.BlogIndex })));
 const LazyBlogArticle = lazy(() => import("./components/BlogArticle").then((m) => ({ default: m.BlogArticle })));
 const LazyAdminBlogEditor = lazy(() => import("./components/AdminBlogEditor").then((m) => ({ default: m.AdminBlogEditor })));
+const LazyTestHomepage = lazy(() => import("./components/homepage/test/TestHomepage").then((m) => ({ default: m.TestHomepage })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -102,6 +103,7 @@ function RootLayout() {
 export const router = createBrowserRouter([
   { Component: RootLayout, children: [
   { path: "/", Component: HomepageV8 },
+  { path: "/test-homepage", element: createElement(LazyRoute, { component: LazyTestHomepage }) },
   { path: "/old-homepage", element: createElement(LazyRoute, { component: LazyHomePage }) },
   { path: "/get-matched", element: createElement(LazyRoute, { component: LazyGetMatchedForm }) },
   { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderLanding }) },

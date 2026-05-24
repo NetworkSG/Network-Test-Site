@@ -148,15 +148,6 @@ const RENO_101: {
     illustration: "/Blog%20Illustration/magnific_two-hands-shaking-with-a-_3004968476.png?v=1",
     href: "/blog?category=Designer+Tips",
   },
-  {
-    title: "Furnish Without Regret",
-    description:
-      "Source furniture, finishes, and appliances that look great and last beyond move-in.",
-    icon: Sofa,
-    illustration: "/Blog%20Illustration/magnific_a-friendly-armchair-besid_3004973217.png?v=1",
-    imageScale: 1.35,
-    href: "/blog?category=Style+%26+Layout",
-  },
 ];
 
 // ─── Quick Clips — short-form video lessons ──────────────────────────
@@ -226,14 +217,14 @@ function Renovation101Section() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
           {RENO_101.map((item) => {
             const Icon = item.icon;
             return (
               <a
                 key={item.title}
                 href={item.href}
-                className="group flex items-start gap-5 p-6 cursor-pointer hover:-translate-y-0.5 transition-all duration-200"
+                className="group flex items-center gap-5 p-6 cursor-pointer hover:-translate-y-0.5 transition-all duration-200"
                 style={{
                   background: C.white,
                   border: `1px solid ${C.white}`,
@@ -605,7 +596,8 @@ export function BlogIndex() {
         </section>
 
         <Renovation101Section />
-        <QuickClipsSection />
+        {/* Hidden for now — re-enable when video content is ready */}
+        {/* <QuickClipsSection /> */}
 
         <div className="pb-24" />
 

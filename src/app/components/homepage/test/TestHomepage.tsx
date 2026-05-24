@@ -1,48 +1,44 @@
 import { useState, useRef, useEffect } from "react";
-import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../../../utils/phone-validation";
+import { isValid8DigitPhone } from "../../../utils/phone-validation";
 import { ReactLenis } from "lenis/react";
-import { useInView, motion, AnimatePresence } from "motion/react";
-import { C, sans, Divider } from "./primitives";
-import { NAVBAR, FOOTER } from "../content";
+import { useInView } from "motion/react";
+import { C, sans, Divider } from "../v8/primitives";
+import { NAVBAR } from "../content";
 import type { FormState, LeadFormData } from "../types";
-import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 import { Seo } from "../../shared/Seo";
 import { HomepageNav } from "../../shared/HomepageNav";
 import { HomepageFooter } from "../../shared/HomepageFooter";
 import { buildHomeStructuredData } from "../../shared/homeSchema";
 import { useGoogleReviews } from "../../useGoogleReviews";
 
-import { HeroSection } from "./sections/HeroSection";
-import { TrustStatsBar } from "./sections/SocialProof1";
-import { PainPoint } from "./sections/PainPoint";
-import { ValueProps } from "./sections/ValueProps";
+import { HeroSection } from "../v8/sections/HeroSection";
+import { TrustStatsBar } from "../v8/sections/SocialProof1";
+import { PainPoint } from "../v8/sections/PainPoint";
+import { Differentiators } from "../v8/sections/Differentiators";
+import { HowItWorks } from "../v8/sections/HowItWorks";
+import { Guarantee } from "../v8/sections/Guarantee";
+import { SocialProof3 } from "../v8/sections/SocialProof3";
+import { FAQ } from "../v8/sections/FAQ";
+import { FinalRecap } from "../v8/sections/FinalRecap";
+import { FreeTools } from "../v8/sections/FreeTools";
+import { GoogleReviews } from "../v8/sections/GoogleReviews";
+import { BlogHighlights } from "../v8/sections/BlogHighlights";
 
-import { Differentiators } from "./sections/Differentiators";
-import { HowItWorks } from "./sections/HowItWorks";
-
-import { Guarantee } from "./sections/Guarantee";
-import { SocialProof3 } from "./sections/SocialProof3";
-import { FAQ } from "./sections/FAQ";
-import { FinalRecap } from "./sections/FinalRecap";
-import { FreeTools } from "./sections/FreeTools";
-import { GoogleReviews } from "./sections/GoogleReviews";
-import { BlogHighlights } from "./sections/BlogHighlights";
+import { FeaturedDesignersGrid } from "./sections/FeaturedDesignersGrid";
 
 /**
- * Homepage — Network SOP Design
- *
- * 12-section high-converting landing page.
- * Warm cream palette, premium editorial feel.
- * EB Garamond for display, DM Sans for body/UI.
+ * TestHomepage — variant of HomepageV8 that surfaces 12 designers via the
+ * new Network Star card spec right after the hero. Otherwise identical to /.
+ * Lives at /test-homepage and intentionally does not compete with / in SEO.
  */
-export function HomepageV8() {
+export function TestHomepage() {
   const [formState, setFormState] = useState<FormState>("idle");
   const [form, setForm] = useState<LeadFormData>({ name: "", phone: "", email: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navHidden, setNavHidden] = useState(false);
   const heroRef = useRef<HTMLElement>(null);
 
+  // Mirror v8 nav-hide-on-scroll behaviour exactly.
   useEffect(() => {
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let lastTouchY = 0;
@@ -61,50 +57,30 @@ export function HomepageV8() {
     };
 
     const onWheel = (e: WheelEvent) => {
-      if (getY() < TOP_THRESHOLD) {
-        setNavHidden(false);
-      } else if (e.deltaY > 0) {
-        setNavHidden(true);
-      } else if (e.deltaY < 0) {
-        setNavHidden(false);
-      }
+      if (getY() < TOP_THRESHOLD) setNavHidden(false);
+      else if (e.deltaY > 0) setNavHidden(true);
+      else if (e.deltaY < 0) setNavHidden(false);
       armIdle();
     };
-
-    const onTouchStart = (e: TouchEvent) => {
-      lastTouchY = e.touches[0]?.clientY ?? 0;
-    };
-
+    const onTouchStart = (e: TouchEvent) => { lastTouchY = e.touches[0]?.clientY ?? 0; };
     const onTouchMove = (e: TouchEvent) => {
       const ty = e.touches[0]?.clientY ?? 0;
       const tdy = lastTouchY - ty;
-      if (getY() < TOP_THRESHOLD) {
-        setNavHidden(false);
-      } else if (tdy > 4) {
-        setNavHidden(true);
-      } else if (tdy < -4) {
-        setNavHidden(false);
-      }
+      if (getY() < TOP_THRESHOLD) setNavHidden(false);
+      else if (tdy > 4) setNavHidden(true);
+      else if (tdy < -4) setNavHidden(false);
       lastTouchY = ty;
       armIdle();
     };
-
     const onKey = (e: KeyboardEvent) => {
       const downKeys = ["ArrowDown", "PageDown", "End", " ", "Spacebar"];
       const upKeys = ["ArrowUp", "PageUp", "Home"];
-      if (getY() < TOP_THRESHOLD) {
-        setNavHidden(false);
-      } else if (downKeys.includes(e.key)) {
-        setNavHidden(true);
-      } else if (upKeys.includes(e.key)) {
-        setNavHidden(false);
-      }
+      if (getY() < TOP_THRESHOLD) setNavHidden(false);
+      else if (downKeys.includes(e.key)) setNavHidden(true);
+      else if (upKeys.includes(e.key)) setNavHidden(false);
       armIdle();
     };
-
-    const onScroll = () => {
-      if (getY() < TOP_THRESHOLD) setNavHidden(false);
-    };
+    const onScroll = () => { if (getY() < TOP_THRESHOLD) setNavHidden(false); };
 
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -121,7 +97,7 @@ export function HomepageV8() {
     };
   }, []);
 
-  const heroInView = useInView(heroRef, { margin: "-100px" });
+  useInView(heroRef, { margin: "-100px" });
   const { payload: googleReviewsPayload } = useGoogleReviews("network");
 
   const scrollToForm = () => {
@@ -132,8 +108,6 @@ export function HomepageV8() {
     e.preventDefault();
     if (!form.name.trim() || !form.phone.trim() || !form.email.trim() || isSubmitting) return;
     if (!isValid8DigitPhone(form.phone)) {
-      // Inline validation in HeroSection shows a tooltip-style error under
-      // the phone input. Just block submission silently here.
       const phoneInput = (e.currentTarget as HTMLFormElement).querySelector('input[type="tel"]') as HTMLInputElement | null;
       phoneInput?.focus();
       return;
@@ -142,48 +116,50 @@ export function HomepageV8() {
     setTimeout(() => { setIsSubmitting(false); setFormState("qualifying"); }, 600);
   };
 
+  // Silence unused-var on navHidden — kept for parity with v8 in case any
+  // child reads it via context in future. The current v8 doesn't pass it
+  // either; left as state so the listener wiring stays identical.
+  void navHidden;
+
   return (
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
       <Seo
-        title="Network | Match with Singapore's Top Interior Designers"
-        description="Singapore's interior design matching service. Get paired with vetted firms that fit your style, budget, and timeline. Free, no obligation."
-        canonical="/"
+        title="Network | Featured Interior Designers (test)"
+        description="Test homepage variant featuring 12 of Singapore's top interior design firms, ranked and protected by Handshake escrow."
+        canonical="/test-homepage"
         jsonLd={buildHomeStructuredData(googleReviewsPayload)}
       />
       <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans, color: C.black }}>
-
-        {/* ═══ NAVBAR ═══ */}
         <HomepageNav onCtaClick={scrollToForm} ctaLabel={NAVBAR.cta.label} />
 
-        {/* ═══ SECTIONS ═══ */}
         <HeroSection
           formState={formState} setFormState={setFormState}
           form={form} setForm={setForm}
           isSubmitting={isSubmitting} handleSubmit={handleSubmit}
           heroRef={heroRef}
         />
-        {/* Hide all sections below hero on mobile when qualifying/complete */}
+
         <div className={formState !== "idle" ? "hidden md:block" : ""}>
-        <TrustStatsBar />
-        <GoogleReviews />
-        <SocialProof3 />
-        <Divider />
-        <PainPoint scrollToForm={scrollToForm} />
-        <HowItWorks scrollToForm={scrollToForm} />
-        <Divider />
-        <Differentiators scrollToForm={scrollToForm} />
-        <Divider />
-        <FreeTools />
-        <BlogHighlights />
-        <Guarantee scrollToForm={scrollToForm} />
-        <FAQ scrollToForm={scrollToForm} />
-        <FinalRecap scrollToForm={scrollToForm} />
+          {/* NEW: Featured designers grid (Network Star showcase) */}
+          <FeaturedDesignersGrid />
 
-        {/* ═══ FOOTER ═══ */}
-        <HomepageFooter />
+          <TrustStatsBar />
+          <GoogleReviews />
+          <SocialProof3 />
+          <Divider />
+          <PainPoint scrollToForm={scrollToForm} />
+          <HowItWorks scrollToForm={scrollToForm} />
+          <Divider />
+          <Differentiators scrollToForm={scrollToForm} />
+          <Divider />
+          <FreeTools />
+          <BlogHighlights />
+          <Guarantee scrollToForm={scrollToForm} />
+          <FAQ scrollToForm={scrollToForm} />
+          <FinalRecap scrollToForm={scrollToForm} />
+
+          <HomepageFooter />
         </div>
-
-
       </div>
     </ReactLenis>
   );
