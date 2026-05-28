@@ -123,7 +123,7 @@ export const router = createBrowserRouter([
   { path: "/floorplan3d/editor/:projectId", Component: EditorWrapper },
   { path: "/designer-dashboard", element: createElement(LazyRoute, { component: LazyDesignerDashboard }) },
   { path: "/profile", element: createElement(LazyRoute, { component: LazyHomeownerDashboard }) },
-  { path: "/explore", element: createElement(LazyRoute, { component: LazyExplorePage }) },
+  { path: "/explore/*", element: createElement(LazyRoute, { component: LazyExplorePage }) },
   { path: "/networkxhandshake", element: createElement(LazyRoute, { component: LazyHandshakeLanding }) },
   { path: "/edit-profile/:slug", element: createElement(LazyRoute, { component: LazyDesignerProfileEditor }) },
   { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },

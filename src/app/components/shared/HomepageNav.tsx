@@ -16,6 +16,7 @@ const C = {
 
 const NAV_LINKS = [
   { label: "Home", href: "/" },
+  { label: "Explore", href: "/explore" },
   { label: "Interior Designers", href: "/interior-designers" },
   { label: "Blog", href: "/blog" },
 ];
@@ -40,6 +41,23 @@ const ID_DROPDOWN_LOCATIONS: { label: string; href: string }[] = [
   { label: "East", href: "/interior-designers?region=East" },
   { label: "West", href: "/interior-designers?region=West" },
   { label: "Central", href: "/interior-designers?region=Central" },
+];
+
+// Hover-dropdown content for the Explore nav link. Each item is a real anchor
+// linking to /explore with a query param that the page reads on mount to
+// pre-apply the matching filter.
+const EXPLORE_DROPDOWN_PROPERTY: { label: string; href: string }[] = [
+  { label: "HDB", href: "/explore?property=HDB" },
+  { label: "Condo", href: "/explore?property=Condo" },
+  { label: "Landed", href: "/explore?property=Landed" },
+];
+const EXPLORE_DROPDOWN_STYLES: { label: string; href: string }[] = [
+  { label: "Modern", href: "/explore?style=Modern" },
+  { label: "Minimalist", href: "/explore?style=Minimalist" },
+  { label: "Scandinavian", href: "/explore?style=Scandinavian" },
+  { label: "Industrial", href: "/explore?style=Industrial" },
+  { label: "Japandi", href: "/explore?style=Japandi" },
+  { label: "Contemporary", href: "/explore?style=Contemporary" },
 ];
 
 /**
@@ -154,7 +172,7 @@ function InteriorDesignersDropdown() {
               </div>
               <div className="flex flex-col gap-4" style={{ borderLeft: `1px solid ${C.creamBorder}`, paddingLeft: 32, width: 280 }}>
                 <a
-                  href="/get-matched"
+                  href="/"
                   className="block cursor-pointer hover:opacity-90"
                   style={{
                     background: C.white,
@@ -173,6 +191,96 @@ function InteriorDesignersDropdown() {
                   <p style={{ fontFamily: sans, fontSize: 12, color: C.black, margin: 0, marginTop: 8, fontWeight: 500 }}>
                     Start now ›
                   </p>
+                </a>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Hover dropdown for the "Explore" nav link, mirroring the Interior Designers
+ * panel — three filter columns plus the "Get matched" side card.
+ */
+function ExploreDropdown() {
+  const [open, setOpen] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const handleEnter = () => {
+    if (closeTimerRef.current) { window.clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+    setOpen(true);
+  };
+  const handleLeave = () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 150);
+  };
+  useEffect(() => () => { if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current); }, []);
+
+  const columnHeaderStyle: React.CSSProperties = {
+    fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase",
+    color: "#9a9790", fontFamily: sans, marginBottom: 12,
+  };
+  const linkStyle: React.CSSProperties = {
+    color: C.black, fontFamily: sans, fontSize: 13, lineHeight: 1.4, transition: "opacity 0.15s",
+  };
+
+  return (
+    <div onMouseEnter={handleEnter} onMouseLeave={handleLeave} style={{ position: "static" }}>
+      <a href="/explore"
+        className="text-[15px] font-normal cursor-pointer hover:opacity-60"
+        style={{ color: C.gray, fontFamily: sans, transition: "all 0.15s" }}
+        aria-haspopup="menu" aria-expanded={open}>
+        Explore
+      </a>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }} role="menu"
+            className="absolute left-0 right-0 top-full"
+            style={{
+              background: C.cream,
+              borderTop: `1px solid ${C.creamBorder}`,
+              borderBottom: `1px solid ${C.creamBorder}`,
+              boxShadow: "0 12px 32px rgba(15,15,13,0.08), 0 2px 6px rgba(15,15,13,0.04)",
+              fontFamily: sans,
+            }}>
+            <div style={{ position: "absolute", left: 0, right: 0, top: -8, height: 8 }} />
+            <div className="max-w-[1280px] mx-auto px-6 md:px-10 py-14 flex items-start justify-center gap-12">
+              <div>
+                <p style={columnHeaderStyle}>By Property Type</p>
+                <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+                  {EXPLORE_DROPDOWN_PROPERTY.map((item) => (
+                    <li key={item.href}>
+                      <a href={item.href} className="block cursor-pointer hover:opacity-60" style={linkStyle}>
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p style={columnHeaderStyle}>By Style</p>
+                <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+                  {EXPLORE_DROPDOWN_STYLES.map((item) => (
+                    <li key={item.href}>
+                      <a href={item.href} className="block cursor-pointer hover:opacity-60" style={linkStyle}>
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="flex flex-col gap-4" style={{ borderLeft: `1px solid ${C.creamBorder}`, paddingLeft: 32, width: 280 }}>
+                <a href="/cost-guide" className="block cursor-pointer hover:opacity-90"
+                  style={{ background: C.white, border: `1px solid ${C.creamBorder}`, borderRadius: 12, padding: "14px 16px", transition: "opacity 0.15s" }}>
+                  <p style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: C.black, margin: 0, marginBottom: 4 }}>Cost guide</p>
+                  <p style={{ fontFamily: sans, fontSize: 12, color: C.gray, margin: 0, lineHeight: 1.4 }}>
+                    See realistic renovation costs by property type, scope, and finish in Singapore.
+                  </p>
+                  <p style={{ fontFamily: sans, fontSize: 12, color: C.black, margin: 0, marginTop: 8, fontWeight: 500 }}>View guide ›</p>
                 </a>
               </div>
             </div>
@@ -397,6 +505,8 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
           {NAV_LINKS.map((l) =>
             l.label === "Interior Designers" ? (
               <InteriorDesignersDropdown key={l.href} />
+            ) : l.label === "Explore" ? (
+              <ExploreDropdown key={l.href} />
             ) : (
               <a key={l.href} href={l.href}
                 className="text-[15px] font-normal cursor-pointer hover:opacity-60"

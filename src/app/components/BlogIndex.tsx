@@ -57,6 +57,24 @@ function AuthorBadge({ name, initials }: { name: string; initials: string }) {
 }
 
 function PostCard({ post }: { post: Post }) {
+  // Derive a brief with graceful fallbacks so every card shows a preview line
+  // even when the admin left the description field blank.
+  const brief = (() => {
+    // Strip any inline HTML (rich-text body paragraphs sometimes contain <span> markup).
+    const stripHtml = (s: string) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const trim = (s: string, max = 180) => {
+      const clean = stripHtml(s || "").replace(/\s+/g, " ").trim();
+      if (!clean) return "";
+      if (clean.length <= max) return clean;
+      return clean.slice(0, max).replace(/\s+\S*$/, "") + "…";
+    };
+    if (post.description?.trim()) return trim(post.description);
+    if (post.excerpt?.trim()) return trim(post.excerpt);
+    if (post.lede?.trim()) return trim(post.lede);
+    const firstPara = (post.body || []).find((b: any) => b?.type === "p" && b.text);
+    if (firstPara && (firstPara as any).text) return trim((firstPara as any).text);
+    return "";
+  })();
   return (
     <a
       href={`/blog/${post.slug}`}
@@ -94,12 +112,14 @@ function PostCard({ post }: { post: Post }) {
         >
           {post.title}
         </h3>
-        <p
-          className="text-[14px] leading-[1.55] m-0"
-          style={{ color: C.gray, fontFamily: sans }}
-        >
-          {post.description}
-        </p>
+        {brief && (
+          <p
+            className="text-[14px] leading-[1.55] m-0"
+            style={{ color: C.gray, fontFamily: sans, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+          >
+            {brief}
+          </p>
+        )}
         <div
           className="mt-2 pt-4 flex items-center justify-between"
           style={{ borderTop: `1px solid ${C.creamBorder}` }}

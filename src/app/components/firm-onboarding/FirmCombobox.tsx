@@ -27,6 +27,14 @@ export function FirmCombobox({
 
   useEffect(() => { setQuery(value || ""); }, [value, recordId]);
 
+  const loadFirms = (refresh = false) => {
+    setLoading(true);
+    setLoadError("");
+    return listAirtableFirms({ refresh })
+      .then(setFirms)
+      .catch((e: any) => setLoadError(e?.message || "Failed to load"))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -127,7 +135,14 @@ export function FirmCombobox({
           {loadError && <li style={{ padding: "10px 12px", fontFamily: sans, fontSize: 12, color: "#c14" }}>{loadError}</li>}
           {!loadError && filtered.length === 0 && (
             <li style={{ padding: "10px 12px", fontFamily: sans, fontSize: 13, color: C.grayLight }}>
-              {loading ? "Loading firms…" : "No matches. Contact us if your firm should be listed."}
+              {loading ? "Loading firms…" : (
+                <>
+                  No matches. <button type="button" onMouseDown={(e) => { e.preventDefault(); loadFirms(true); }}
+                    style={{ background: "transparent", border: "none", padding: 0, color: C.black, fontFamily: sans, fontSize: 13, textDecoration: "underline", cursor: "pointer" }}>
+                    Refresh list
+                  </button> or contact us if your firm should be listed.
+                </>
+              )}
             </li>
           )}
           {filtered.map((f, i) => {

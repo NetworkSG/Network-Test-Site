@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { SiteFooter } from "./shared/SiteFooter";
+import { HomepageNav } from "./shared/HomepageNav";
 
 const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const serif = "'EB Garamond', Georgia, serif";
@@ -342,6 +343,7 @@ export function PrivacyPolicy() {
       </Helmet>
 
       <div style={{ background: C.cream, minHeight: "100vh" }}>
+        <HomepageNav />
         {/* Top bar with logo / back link */}
         <header className="px-6 md:px-10 pt-8 md:pt-10">
           <div className="max-w-[820px] mx-auto">

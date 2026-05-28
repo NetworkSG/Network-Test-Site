@@ -12,6 +12,7 @@ import {
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { useIsFloorPlan } from "../utils/floor-plan-detect";
 import { SiteNav } from "./SiteNav";
+import { HomepageNav } from "./shared/HomepageNav";
 import { useDesignerData } from "./useDesignerData";
 import { transformApiData } from "./DesignerProfile";
 import { SmartImage } from "./shared/SmartImage";
@@ -278,7 +279,7 @@ export function ProjectPage() {
   if (!project) {
     return (
       <div className="min-h-screen" style={{ background: C.cream, fontFamily: sans }}>
-        <SiteNav logoImg={logoMarkImg} />
+        <HomepageNav />
         <div className="max-w-[1280px] mx-auto px-6 md:px-10 pt-20 text-center">
           <h1 className="text-[28px] mb-4" style={{ fontFamily: serif, color: C.black }}>Project not found</h1>
           <p className="text-[15px] mb-8" style={{ color: C.gray }}>This project may have been removed or the link is incorrect.</p>
@@ -305,7 +306,7 @@ export function ProjectPage() {
         description={seoDesc.slice(0, 200)}
         canonical={`/designer/${slug || ""}/project/${projectIdParam || ""}`}
       />
-      <SiteNav logoImg={logoMarkImg} />
+      <HomepageNav />
 
       {/* ═══ BREADCRUMB ══════════════════════════════════════════════════════ */}
       <div className="max-w-[1280px] mx-auto px-6 md:px-10 pt-8">

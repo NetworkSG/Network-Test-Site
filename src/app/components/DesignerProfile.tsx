@@ -6,6 +6,7 @@ import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
 import { Navbar } from "./Navbar";
 import { DesignerProfileFooter } from "./DesignerProfileFooter";
 import { SiteNav } from "./SiteNav";
+import { HomepageNav } from "./shared/HomepageNav";
 import { FOOTER } from "./homepage/content";
 import { C, serif, sans, FadeIn, TagLabel } from "./homepage/v8/primitives";
 import { useDesignerData } from "./useDesignerData";
@@ -4855,7 +4856,7 @@ export function FAQ() {
 export function ProfileLoadingSkeleton() {
   return (
     <div className="bg-[#f0ede6] min-h-screen font-['DM_Sans',sans-serif]">
-      <SiteNav logoImg={logoMarkImg} />
+      <HomepageNav />
       <main className="pt-[24px] md:pt-[40px]">
         <div className="max-w-[1280px] mx-auto px-4 md:px-8">
           {/* Cover shimmer */}
@@ -4946,7 +4947,7 @@ export function DesignerProfile() {
           description={seoDescription}
           canonical={`/designer/${slug || ""}`}
         />
-        <SiteNav logoImg={logoMarkImg} />
+        <HomepageNav />
 
         <main className="pt-[16px] md:pt-[24px]">
           <div className="max-w-[1280px] mx-auto px-4 md:px-8">

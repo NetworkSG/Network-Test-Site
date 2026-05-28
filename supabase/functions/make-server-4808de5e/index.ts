@@ -2984,7 +2984,7 @@ app.post("/make-server-4808de5e/firm-onboarding-submit", async (c) => {
 // ─── Airtable PULL: Clients Pipeline "ALL" view → /firm-onboarding dropdown + prefill ───
 
 const AIRTABLE_FIRMS_CACHE: { at: number; data: { id: string; firmName: string }[] } = { at: 0, data: [] };
-const AIRTABLE_FIRMS_TTL_MS = 5 * 60 * 1000;
+const AIRTABLE_FIRMS_TTL_MS = 60 * 1000; // 1 minute — keeps the onboarding firm list close to live Airtable
 
 /** Resolve a batch of Airtable linked-record IDs to their primary-field
  *  display names. Uses the Meta API to discover which table the source
@@ -3107,7 +3107,9 @@ app.get("/make-server-4808de5e/firm-onboarding/airtable-firms", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
     const now = Date.now();
-    if (now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
+    // Allow callers to bypass the cache with ?refresh=1 — useful right after adding a firm to Airtable.
+    const forceRefresh = c.req.query("refresh") === "1";
+    if (!forceRefresh && now - AIRTABLE_FIRMS_CACHE.at < AIRTABLE_FIRMS_TTL_MS && AIRTABLE_FIRMS_CACHE.data.length) {
       return c.json({ firms: AIRTABLE_FIRMS_CACHE.data, cached: true });
     }
     // Pull all fields so we can locate the sales-rep column whatever the exact
@@ -10186,14 +10188,16 @@ app.get("/make-server-4808de5e/explore-projects", async (c) => {
     for (const p of projectRows || []) {
       const designer = activeDesigners[p.designer_slug];
       if (!designer) continue;
-      const images = Array.isArray(p.images) ? p.images : [];
-      const image = images.find((u: any) => typeof u === "string" && u.startsWith("http")) || "";
+      const rawImages = Array.isArray(p.images) ? p.images : [];
+      const images = rawImages.filter((u: any) => typeof u === "string" && u.startsWith("http"));
+      const image = images[0] || "";
       if (!image) continue;
       const meta = [p.property_type, p.cost, p.year].filter(Boolean).join(" · ");
       allProjects.push({
         projectId: p.id,
         title: p.title || "Untitled Project",
         image,
+        images,
         meta,
         propertyType: p.property_type || "",
         budget: p.cost || "",

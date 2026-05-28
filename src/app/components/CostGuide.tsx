@@ -444,6 +444,10 @@ export function CostGuide() {
   const [leadName, setLeadName] = useState("");
   const [leadPhone, setLeadPhone] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
+  // Whether the homeowner wants to be matched with designers. When "no" we
+  // skip the firm-matching Zapier webhook entirely — they still get their PDF
+  // but they don't enter the concierge automation.
+  const [lookingForDesigners, setLookingForDesigners] = useState<"yes" | "no" | "">("");
 
   // Math toggle on results
   const [mathOpen, setMathOpen] = useState(false);
@@ -772,6 +776,8 @@ export function CostGuide() {
             setLeadPhone={setLeadPhone}
             leadEmail={leadEmail}
             setLeadEmail={setLeadEmail}
+            lookingForDesigners={lookingForDesigners}
+            setLookingForDesigners={setLookingForDesigners}
             onBack={() => setScreen(4)}
             submitting={submitting}
             onSubmit={async () => {
@@ -780,6 +786,7 @@ export function CostGuide() {
               try {
                 await openCostGuidePdf({
                   lead: { name: leadName, phone: leadPhone, email: leadEmail },
+                  lookingForDesigners,
                   property,
                   newResale,
                   ocs,
@@ -807,7 +814,7 @@ export function CostGuide() {
           />
         )}
 
-        {screen === 6 && <Screen6 />}
+        {screen === 6 && <Screen6 lookingForDesigners={lookingForDesigners} />}
       </div>
       <HomepageFooter />
     </div>
@@ -1313,6 +1320,7 @@ function Screen5({
   leadName, setLeadName,
   leadPhone, setLeadPhone,
   leadEmail, setLeadEmail,
+  lookingForDesigners, setLookingForDesigners,
   onBack, onSubmit, submitting,
 }: any) {
   const isRebuild = computed.isLanded && computed.workType === "rebuild";
@@ -1502,6 +1510,45 @@ function Screen5({
         The range above is the starting point. The concierge call is where we extract specific scope, match you with aligned firms, and give you clarity on what your actual budget should be.
       </p>
 
+      {/* Looking for designers? Yes/No gate — controls whether the lead enters
+          the concierge matching automation. "No" still gets the PDF but skips
+          firm matching. */}
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: C.black, marginBottom: 8, display: "block" }}>
+          Are you looking for designers?
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[
+            { key: "yes", label: "Yes, match me with firms" },
+            { key: "no", label: "No, just send the guide" },
+          ].map((opt) => {
+            const active = lookingForDesigners === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setLookingForDesigners(opt.key)}
+                style={{
+                  flex: 1,
+                  padding: "12px 14px",
+                  background: active ? C.black : "#faf8f2",
+                  color: active ? C.white : C.black,
+                  border: `1px solid ${active ? C.black : C.creamBorder}`,
+                  borderRadius: 10,
+                  fontFamily: sans,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
       <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
       <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
@@ -1509,12 +1556,16 @@ function Screen5({
         const nameOk = leadName.trim().length > 0;
         const phoneOk = /^[0-9]{8}$/.test(leadPhone);
         const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
-        const formValid = nameOk && phoneOk && emailOk;
+        const choiceOk = lookingForDesigners === "yes" || lookingForDesigners === "no";
+        const formValid = nameOk && phoneOk && emailOk && choiceOk;
+        const submitLabel = lookingForDesigners === "no"
+          ? (submitting ? "Sending guide…" : "Send my cost guide")
+          : (submitting ? "Submitting…" : "Submit and get matched");
         return (
           <BtnRow>
             <BtnSecondary onClick={onBack}>Back</BtnSecondary>
             <BtnPrimary onClick={onSubmit} disabled={!formValid || submitting}>
-              {submitting ? "Submitting…" : "Submit and get matched"}
+              {submitLabel}
             </BtnPrimary>
           </BtnRow>
         );
@@ -1613,7 +1664,8 @@ function PhoneInput({ label, value, onChange }: { label: string; value: string; 
 // ═══════════════════════════════════════════════════════════
 // SCREEN 6 - CONFIRMATION
 // ═══════════════════════════════════════════════════════════
-function Screen6() {
+function Screen6({ lookingForDesigners }: { lookingForDesigners?: "yes" | "no" | "" }) {
+  const skipMatch = lookingForDesigners === "no";
   return (
     <div style={{ textAlign: "center", padding: "40px 24px" }}>
       <div
@@ -1632,10 +1684,12 @@ function Screen6() {
         <Check size={24} strokeWidth={3} />
       </div>
       <Hero>
-        Thanks. <Em>We'll be in touch.</Em>
+        Thanks. <Em>{skipMatch ? "Your guide is on the way." : "We'll be in touch."}</Em>
       </Hero>
       <p style={{ ...subHeroStyle, margin: "0 auto 20px" }}>
-        Check your email for the full PDF breakdown. A Network concierge will WhatsApp you within 24 hours to walk through your scope and match you with the right firms.
+        {skipMatch
+          ? "Check your email for the full PDF breakdown. When you're ready to meet a designer, come back and we'll match you with the right firms for your scope."
+          : "Check your email for the full PDF breakdown. A Network concierge will WhatsApp you within 24 hours to walk through your scope and match you with the right firms."}
       </p>
     </div>
   );
@@ -1837,6 +1891,7 @@ function routeLandedFirmType(workType: string, scopePct: LandedScope | null) {
 // ═══════════════════════════════════════════════════════════
 interface PdfData {
   lead: { name: string; phone: string; email: string };
+  lookingForDesigners?: "yes" | "no" | "";
   property: Property | null;
   newResale: NewResale | null;
   ocs: OCS | null;
@@ -2224,37 +2279,42 @@ async function openCostGuidePdf(d: PdfData) {
     }
     const pdfUrl: string = uploadJson.pdfUrl;
 
-    // Forward the lead + PDF URL to the cost-guide Zapier webhook.
-    const isOpenEnded = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
-    const budgetRange = isOpenEnded
-      ? `${fmtK(d.computed.min)}+`
-      : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
-    const phoneFull = d.lead.phone ? `+65${d.lead.phone}` : "";
-    await fetch(`${API_BASE}/zapier-proxy`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-      body: JSON.stringify({
-        hook: "cost-guide-lead",
-        data: {
-          "First Name": d.lead.name || "",
-          "Contact Phone": phoneFull,
-          "Email Address": d.lead.email || "",
-          "Property Type": d.property ? propertyLine(d) : "",
-          "Unit Type": d.unitType || "",
-          "Renovation Intent": d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : ""),
-          "Journey Stage": d.journey ? JOURNEY_LABEL[d.journey] : "",
-          "Firms Met": d.sourcing ? SOURCING_LABEL[d.sourcing] : "",
-          "Layout": d.layout ? LAYOUT_LABEL[d.layout] : "",
-          "Carpentry": d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "",
-          "Finish": d.finish ? FINISH_LABEL[d.finish] : "",
-          "Renovation Budget": budgetRange,
-          "Mid-point": Math.round(d.computed.adjustedAnchor),
-          "Recommended Firm Type": d.computed.firmType?.type || "",
-          "Cost Guide PDF": pdfUrl,
-          "Lead Form": "Cost Guide",
-        },
-      }),
-    });
+    // Forward the lead + PDF URL to the cost-guide Zapier webhook — but ONLY when
+    // the homeowner said they're looking for designers. If they said "no", we still
+    // delivered the PDF above; we just skip the concierge matching automation.
+    if (d.lookingForDesigners !== "no") {
+      const isOpenEnded = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
+      const budgetRange = isOpenEnded
+        ? `${fmtK(d.computed.min)}+`
+        : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
+      const phoneFull = d.lead.phone ? `+65${d.lead.phone}` : "";
+      await fetch(`${API_BASE}/zapier-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+        body: JSON.stringify({
+          hook: "cost-guide-lead",
+          data: {
+            "First Name": d.lead.name || "",
+            "Contact Phone": phoneFull,
+            "Email Address": d.lead.email || "",
+            "Property Type": d.property ? propertyLine(d) : "",
+            "Unit Type": d.unitType || "",
+            "Renovation Intent": d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : ""),
+            "Journey Stage": d.journey ? JOURNEY_LABEL[d.journey] : "",
+            "Firms Met": d.sourcing ? SOURCING_LABEL[d.sourcing] : "",
+            "Layout": d.layout ? LAYOUT_LABEL[d.layout] : "",
+            "Carpentry": d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "",
+            "Finish": d.finish ? FINISH_LABEL[d.finish] : "",
+            "Renovation Budget": budgetRange,
+            "Mid-point": Math.round(d.computed.adjustedAnchor),
+            "Recommended Firm Type": d.computed.firmType?.type || "",
+            "Cost Guide PDF": pdfUrl,
+            "Lead Form": "Cost Guide",
+            "Looking for Designers": d.lookingForDesigners === "yes" ? "Yes" : "",
+          },
+        }),
+      });
+    }
   } catch (err) {
     console.error("Cost guide submit failed:", err);
     throw err;

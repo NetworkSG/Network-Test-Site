@@ -131,9 +131,11 @@ export async function previewDriveFolder(url: string): Promise<DrivePreview> {
   return { ok: false, message: json?.message || `Preview failed (${res.status})` };
 }
 
-export async function listAirtableFirms(): Promise<{ id: string; firmName: string; contactEmail?: string }[]> {
-  const res = await fetch(`${API}/firm-onboarding/airtable-firms`, {
+export async function listAirtableFirms(opts: { refresh?: boolean } = {}): Promise<{ id: string; firmName: string; contactEmail?: string }[]> {
+  const qs = opts.refresh ? "?refresh=1" : "";
+  const res = await fetch(`${API}/firm-onboarding/airtable-firms${qs}`, {
     headers: { Authorization: `Bearer ${publicAnonKey}` },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to load firms (${res.status})`);
   const json = await res.json();
