@@ -1514,6 +1514,9 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
   "hero-lead": "https://hooks.zapier.com/hooks/catch/20249199/2c5b7ea/",
   "render-lead": "https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/",
   "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/ujejbhx/",
+  // Triggered when a cost-guide user picks "No, just send the guide" — sends the PDF
+  // but skips the concierge / firm-matching pipeline.
+  "cost-guide-guide-only": "https://hooks.zapier.com/hooks/catch/20249199/4b43bm0/",
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
   "concierge-match-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmm8f4/",
   "designer-profile-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmnj1y/",

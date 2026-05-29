@@ -2279,42 +2279,42 @@ async function openCostGuidePdf(d: PdfData) {
     }
     const pdfUrl: string = uploadJson.pdfUrl;
 
-    // Forward the lead + PDF URL to the cost-guide Zapier webhook — but ONLY when
-    // the homeowner said they're looking for designers. If they said "no", we still
-    // delivered the PDF above; we just skip the concierge matching automation.
-    if (d.lookingForDesigners !== "no") {
-      const isOpenEnded = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
-      const budgetRange = isOpenEnded
-        ? `${fmtK(d.computed.min)}+`
-        : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
-      const phoneFull = d.lead.phone ? `+65${d.lead.phone}` : "";
-      await fetch(`${API_BASE}/zapier-proxy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
-        body: JSON.stringify({
-          hook: "cost-guide-lead",
-          data: {
-            "First Name": d.lead.name || "",
-            "Contact Phone": phoneFull,
-            "Email Address": d.lead.email || "",
-            "Property Type": d.property ? propertyLine(d) : "",
-            "Unit Type": d.unitType || "",
-            "Renovation Intent": d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : ""),
-            "Journey Stage": d.journey ? JOURNEY_LABEL[d.journey] : "",
-            "Firms Met": d.sourcing ? SOURCING_LABEL[d.sourcing] : "",
-            "Layout": d.layout ? LAYOUT_LABEL[d.layout] : "",
-            "Carpentry": d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "",
-            "Finish": d.finish ? FINISH_LABEL[d.finish] : "",
-            "Renovation Budget": budgetRange,
-            "Mid-point": Math.round(d.computed.adjustedAnchor),
-            "Recommended Firm Type": d.computed.firmType?.type || "",
-            "Cost Guide PDF": pdfUrl,
-            "Lead Form": "Cost Guide",
-            "Looking for Designers": d.lookingForDesigners === "yes" ? "Yes" : "",
-          },
-        }),
-      });
-    }
+    // Forward the lead + PDF URL to Zapier. Which automation fires depends on the
+    // "Are you looking for designers?" answer:
+    //   • "no"  → cost-guide-guide-only  (send the PDF, no concierge matching)
+    //   • else  → cost-guide-lead        (full concierge / firm-matching pipeline)
+    const isOpenEnded = d.intent === "special" || (d.computed.isLanded && d.computed.workType === "rebuild");
+    const budgetRange = isOpenEnded
+      ? `${fmtK(d.computed.min)}+`
+      : `${fmtK(d.computed.min)} – ${fmtK(d.computed.max)}`;
+    const phoneFull = d.lead.phone ? `+65${d.lead.phone}` : "";
+    const hook = d.lookingForDesigners === "no" ? "cost-guide-guide-only" : "cost-guide-lead";
+    await fetch(`${API_BASE}/zapier-proxy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({
+        hook,
+        data: {
+          "First Name": d.lead.name || "",
+          "Contact Phone": phoneFull,
+          "Email Address": d.lead.email || "",
+          "Property Type": d.property ? propertyLine(d) : "",
+          "Unit Type": d.unitType || "",
+          "Renovation Intent": d.intent ? INTENT_DESC[d.intent] : (d.landedWorkType ? landedWorkLabel(d.landedWorkType === "unsure" ? "aa" : d.landedWorkType) : ""),
+          "Journey Stage": d.journey ? JOURNEY_LABEL[d.journey] : "",
+          "Firms Met": d.sourcing ? SOURCING_LABEL[d.sourcing] : "",
+          "Layout": d.layout ? LAYOUT_LABEL[d.layout] : "",
+          "Carpentry": d.carpentry ? CARPENTRY_LABEL[d.carpentry] : "",
+          "Finish": d.finish ? FINISH_LABEL[d.finish] : "",
+          "Renovation Budget": budgetRange,
+          "Mid-point": Math.round(d.computed.adjustedAnchor),
+          "Recommended Firm Type": d.computed.firmType?.type || "",
+          "Cost Guide PDF": pdfUrl,
+          "Lead Form": "Cost Guide",
+          "Looking for Designers": d.lookingForDesigners === "yes" ? "Yes" : "No",
+        },
+      }),
+    });
   } catch (err) {
     console.error("Cost guide submit failed:", err);
     throw err;

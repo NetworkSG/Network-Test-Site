@@ -1097,7 +1097,6 @@ export function ExplorePage() {
                       <span className="text-[16px] font-semibold" style={{ fontFamily: sans }}>{modalProject.designerName}</span>
                       {modalProject.verified && <span className="w-4 h-4 rounded-full inline-flex items-center justify-center" style={{ background: "#2b7fff" }}><Check size={9} className="text-white" strokeWidth={3} /></span>}
                     </Link>
-                    <p className="text-[13px] mt-0.5" style={{ color: C.grayLight, fontFamily: sans }}>Verified Singapore designer</p>
                   </div>
                   <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => closeProjectView()}
                     className="h-9 px-4 text-[13px] font-medium no-underline flex items-center"
@@ -1106,8 +1105,8 @@ export function ExplorePage() {
                   </Link>
                 </div>
 
-                {/* Enquire CTA */}
-                <Link to={`/designer/${modalProject.designerSlug}`} onClick={() => closeProjectView()}
+                {/* Enquire CTA — goes to the designer's full project page where the enquiry form lives */}
+                <Link to={`/designer/${modalProject.designerSlug}/project/${encodeURIComponent(modalProject.projectId)}`} onClick={() => closeProjectView()}
                   className="inline-flex items-center justify-center w-full h-12 text-[15px] font-semibold no-underline hover:opacity-90 active:scale-[0.99]"
                   style={{ background: C.black, color: C.white, borderRadius: 12, fontFamily: sans, transition: "all 0.15s" }}>
                   Enquire about this project
@@ -1210,18 +1209,29 @@ function Pin({ project, image, saved, onSave, onOpen, mini }: { project: any; im
           borderRadius: "12px",
         }} />
 
-      {/* Designer hover (top-left) */}
-      <div className="absolute top-3 left-3 z-[5] flex items-center gap-2 opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none"
-        style={mini ? { top: 8, left: 8, gap: 6 } : undefined}>
+      {/* Designer hover (top-left). Right inset reserves space for the save button so long
+          studio names wrap to a second line instead of sliding under the heart. */}
+      <div className="absolute top-3 left-3 right-12 z-[5] flex items-start gap-2 opacity-0 -translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none"
+        style={mini ? { top: 8, left: 8, right: 36, gap: 6 } : undefined}>
         <div className="rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-white"
           style={{ width: mini ? 24 : 32, height: mini ? 24 : 32, background: C.black }}>
           {project.designerLogo
             ? <img src={project.designerLogo} alt="" className="w-full h-full object-cover" />
             : <span className="text-white font-semibold" style={{ fontSize: mini ? 9 : 11, fontFamily: sans }}>{(project.designerName || "D")[0].toUpperCase()}</span>}
         </div>
-        <span className="text-white font-semibold drop-shadow-md" style={{ fontSize: mini ? 11 : 13, fontFamily: sans }}>{project.designerName}</span>
+        <span className="text-white font-semibold drop-shadow-md min-w-0 flex-1"
+          style={{
+            fontSize: mini ? 11 : 13,
+            fontFamily: sans,
+            lineHeight: 1.25,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            wordBreak: "break-word",
+          }}>{project.designerName}</span>
         {project.verified && (
-          <span className="rounded-full bg-[#2b7fff] inline-flex items-center justify-center" style={{ width: mini ? 12 : 14, height: mini ? 12 : 14 }}>
+          <span className="rounded-full bg-[#2b7fff] inline-flex items-center justify-center shrink-0 mt-1" style={{ width: mini ? 12 : 14, height: mini ? 12 : 14 }}>
             <Check size={mini ? 7 : 8} className="text-white" strokeWidth={3} />
           </span>
         )}
