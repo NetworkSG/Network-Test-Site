@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { HomepageNav } from "./shared/HomepageNav";
 import { HomepageFooter } from "./shared/HomepageFooter";
@@ -809,7 +810,9 @@ export function CostGuide() {
               }
               setSubmitting(false);
               trackLead("cost-guide-quote");
-              setScreen(6);
+              // Stay on Screen5 — submitting reveals the gated estimate inline
+              // (the gate's own handler flips `revealed`), so we no longer jump
+              // to the standalone confirmation screen.
             }}
           />
         )}
@@ -1350,9 +1353,66 @@ function Screen5({
     ? (landedConfCopy[computed.workType || "aa"] || "Landed renovations have high variability.")
     : `${confDesc[computed.confidence]} Your actual cost depends on specific material choices and site conditions, which we'll walk through on the call.${intent === "special" ? " No hard ceiling at this tier - scope at this level depends on design direction and material choices." : ""}`;
 
+  // ── Lead-capture gate ──
+  // The estimate is gated. The moment this screen mounts the cost is hidden
+  // behind a blurred, blocking pop-up — the user can't read the number until
+  // they choose "Yes"/"Not now" AND submit their details. Only on submit do we
+  // set `revealed`, which closes the gate and un-blurs the range.
+  const [revealed, setRevealed] = useState(false);
+  const [gatePhase, setGatePhase] = useState<"ask" | "form">("ask");
+  const [mounted, setMounted] = useState(false);
+  const gateOpen = !revealed;
+
+  // The gate is portaled to <body> so it escapes the route wrapper's transform
+  // (which would otherwise pin `position: fixed` to the page, not the viewport).
+  // Only reference document.body after mount so the portal target always exists.
+  useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (revealed) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [revealed]);
+
   return (
     <div>
-      {/* Cost range hero */}
+      {/* Submission confirmation — shown once the gate is cleared. */}
+      {revealed && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "#eef5ef",
+            border: "1px solid #cfe3d2",
+            borderRadius: 10,
+            padding: "12px 16px",
+            marginBottom: 14,
+          }}
+        >
+          <span
+            style={{
+              flexShrink: 0,
+              width: 22,
+              height: 22,
+              background: "#5a9460",
+              color: C.white,
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Check size={13} strokeWidth={3} />
+          </span>
+          <span style={{ fontSize: 13, color: "#2f6b3a", fontFamily: sans, fontWeight: 600 }}>
+            Submitted — your guide is on the way. Here's your estimate.
+          </span>
+        </div>
+      )}
+
+      {/* Cost range hero — blurred and unreadable until the gate is cleared. */}
       <div
         style={{
           padding: "36px 28px",
@@ -1361,6 +1421,9 @@ function Screen5({
           borderRadius: 10,
           textAlign: "center",
           marginBottom: 20,
+          filter: revealed ? "none" : "blur(16px)",
+          userSelect: revealed ? "auto" : "none",
+          transition: "filter 0.45s ease",
         }}
       >
         <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#888", marginBottom: 14 }}>Your estimated range</div>
@@ -1503,73 +1566,126 @@ function Screen5({
         </div>
       </div>
 
-      <h2 style={{ fontFamily: serif, fontSize: 24, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
-        The real conversation starts with <Em>three firms built for your scope.</Em>
-      </h2>
-      <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 22 }}>
-        The range above is the starting point. The concierge call is where we extract specific scope, match you with aligned firms, and give you clarity on what your actual budget should be.
-      </p>
-
-      {/* Looking for designers? Yes/No gate — controls whether the lead enters
-          the concierge matching automation. "No" still gets the PDF but skips
-          firm matching. */}
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: C.black, marginBottom: 8, display: "block" }}>
-          Are you looking for designers?
-        </label>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[
-            { key: "yes", label: "Yes, match me with firms" },
-            { key: "no", label: "No, just send the guide" },
-          ].map((opt) => {
-            const active = lookingForDesigners === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setLookingForDesigners(opt.key)}
-                style={{
-                  flex: 1,
-                  padding: "12px 14px",
-                  background: active ? C.black : "#faf8f2",
-                  color: active ? C.white : C.black,
-                  border: `1px solid ${active ? C.black : C.creamBorder}`,
-                  borderRadius: 10,
-                  fontFamily: sans,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                }}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
-      <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
-      <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
-      {(() => {
-        const nameOk = leadName.trim().length > 0;
-        const phoneOk = /^[0-9]{8}$/.test(leadPhone);
-        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
-        const choiceOk = lookingForDesigners === "yes" || lookingForDesigners === "no";
-        const formValid = nameOk && phoneOk && emailOk && choiceOk;
-        const submitLabel = lookingForDesigners === "no"
-          ? (submitting ? "Sending guide…" : "Send my cost guide")
-          : (submitting ? "Submitting…" : "Submit and get matched");
-        return (
-          <BtnRow>
-            <BtnSecondary onClick={onBack}>Back</BtnSecondary>
-            <BtnPrimary onClick={onSubmit} disabled={!formValid || submitting}>
-              {submitLabel}
-            </BtnPrimary>
-          </BtnRow>
-        );
-      })()}
+      {/* Lead-capture gate (pop-up) — replaces the old inline bottom form.
+          Renders over a blurred backdrop and blocks until the user chooses. */}
+      {gateOpen && mounted && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            background: "rgba(24, 22, 18, 0.55)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            animation: "cgGateFade 0.25s ease-out",
+          }}
+        >
+          <style>{`@keyframes cgGateFade{from{opacity:0}to{opacity:1}}@keyframes cgGatePop{from{opacity:0;transform:translateY(10px) scale(0.98)}to{opacity:1;transform:none}}`}</style>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              background: C.cream,
+              border: `1px solid ${C.creamBorder}`,
+              borderRadius: 16,
+              padding: "30px 28px",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.35)",
+              animation: "cgGatePop 0.3s ease-out",
+              maxHeight: "calc(100vh - 40px)",
+              overflowY: "auto",
+            }}
+          >
+            {gatePhase === "ask" ? (
+              <>
+                <h2 style={{ fontFamily: serif, fontSize: 26, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
+                  Find firms built for <Em>your scope.</Em>
+                </h2>
+                <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 24 }}>
+                  The range above is your starting point. Want us to match you with three firms aligned to your scope and budget?
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setLookingForDesigners("yes"); setGatePhase("form"); }}
+                    style={{
+                      flex: 1,
+                      padding: "15px 16px",
+                      background: C.black,
+                      color: C.white,
+                      border: `1px solid ${C.black}`,
+                      borderRadius: 10,
+                      fontFamily: sans,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setLookingForDesigners("no"); setGatePhase("form"); }}
+                    style={{
+                      flex: 1,
+                      padding: "15px 16px",
+                      background: "#faf8f2",
+                      color: C.black,
+                      border: `1px solid ${C.creamBorder}`,
+                      borderRadius: 10,
+                      fontFamily: sans,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 style={{ fontFamily: serif, fontSize: 22, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
+                  {lookingForDesigners === "no"
+                    ? <>Where should we <Em>send your guide?</Em></>
+                    : <>The real conversation starts with <Em>three firms built for your scope.</Em></>}
+                </h2>
+                <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 20 }}>
+                  {lookingForDesigners === "no"
+                    ? "We'll email your full PDF cost breakdown within the hour — no firm matching."
+                    : "The concierge call is where we extract specific scope, match you with aligned firms, and give you clarity on what your actual budget should be."}
+                </p>
+                <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
+                <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
+                <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
+                {(() => {
+                  const nameOk = leadName.trim().length > 0;
+                  const phoneOk = /^[0-9]{8}$/.test(leadPhone);
+                  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
+                  const formValid = nameOk && phoneOk && emailOk;
+                  const submitLabel = lookingForDesigners === "no"
+                    ? (submitting ? "Sending guide…" : "Send my cost guide")
+                    : (submitting ? "Submitting…" : "Submit and get matched");
+                  return (
+                    <BtnRow>
+                      <BtnSecondary onClick={() => setGatePhase("ask")}>Back</BtnSecondary>
+                      <BtnPrimary onClick={async () => { await onSubmit(); setRevealed(true); }} disabled={!formValid || submitting}>
+                        {submitLabel}
+                      </BtnPrimary>
+                    </BtnRow>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Trust bar */}
       <div style={{ marginTop: 18, padding: "16px 18px", background: "#faf8f2", border: `1px solid ${C.creamBorder}`, borderRadius: 8, textAlign: "center" }}>

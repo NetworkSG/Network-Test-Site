@@ -38,6 +38,7 @@ const LazyMoodBoardPage = lazy(() => import("./components/mood-board/MoodBoardPa
 const LazyFirmOnboardingPage = lazy(() => import("./components/firm-onboarding/FirmOnboardingPage").then((m) => ({ default: m.FirmOnboardingPage })));
 const LazyProjectSubmissionPage = lazy(() => import("./components/firm-onboarding/ProjectSubmissionPage").then((m) => ({ default: m.ProjectSubmissionPage })));
 const LazyQanvastImportTest = lazy(() => import("./components/qanvast-import/QanvastImportTest").then((m) => ({ default: m.QanvastImportTest })));
+const LazyRenopediaImportTest = lazy(() => import("./components/renopedia-import/RenopediaImportTest").then((m) => ({ default: m.RenopediaImportTest })));
 const LazyPrivacyPolicy = lazy(() => import("./components/PrivacyPolicy").then((m) => ({ default: m.PrivacyPolicy })));
 const LazyEscrow = lazy(() => import("./components/Escrow").then((m) => ({ default: m.Escrow })));
 const LazyPinterestDownloader = lazy(() => import("./components/PinterestDownloader").then((m) => ({ default: m.PinterestDownloader })));
@@ -129,6 +130,7 @@ export const router = createBrowserRouter([
   { path: "/firm-onboarding", element: createElement(LazyRoute, { component: LazyFirmOnboardingPage }) },
   { path: "/firm-onboarding/project", element: createElement(LazyRoute, { component: LazyProjectSubmissionPage }) },
   { path: "/project-import", element: createElement(LazyRoute, { component: LazyQanvastImportTest }) },
+  { path: "/renopedia-import", element: createElement(LazyRoute, { component: LazyRenopediaImportTest }) },
   { path: "/privacy-policy", element: createElement(LazyRoute, { component: LazyPrivacyPolicy }) },
   { path: "/escrow", element: createElement(LazyRoute, { component: LazyEscrow }) },
   { path: "/tools/pinterest-downloader", element: createElement(LazyRoute, { component: LazyPinterestDownloader }) },

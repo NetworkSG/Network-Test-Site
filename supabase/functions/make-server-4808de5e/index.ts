@@ -3904,6 +3904,266 @@ app.post("/make-server-4808de5e/qanvast-scrape", async (c) => {
   }
 });
 
+// ── Renopedia (renopedia.sg) project scraper ──────────────────────────────
+// Renopedia is a WordPress + Elementor site. Each inspiration page lives at
+// /inspirations/<slug>/ and renders: og:title/description, a JSON-LD WebPage,
+// a "Designed by <Firm>" block (with a /designers/<slug>/ link), and a gallery
+// whose photos are lazy-loaded via `data-bg="…"` attributes and inline
+// `background-image:url(…)` styles (not <img src>). Cost/size/year are usually
+// absent, so we extract them best-effort and otherwise leave them blank. Output
+// shape matches qanvast-scrape's `imported[]` so the same submit flow can save it.
+app.post("/make-server-4808de5e/renopedia-scrape", async (c) => {
+  const started = Date.now();
+  try {
+    if (!(await verifyAuth(c))) return c.json({ ok: false, message: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "default");
+    if (!rl.allowed) return c.json({ ok: false, message: "Too many requests" }, 429);
+
+    const body = await c.req.json().catch(() => null);
+    const rawUrl = typeof body?.url === "string" ? body.url.trim() : "";
+    if (!rawUrl) return c.json({ ok: false, message: "Missing url" }, 400);
+
+    let parsed: URL;
+    try { parsed = new URL(rawUrl); } catch {
+      return c.json({ ok: false, message: "Invalid URL" }, 400);
+    }
+    if (!/(^|\.)renopedia\.(sg|com\.sg)$/i.test(parsed.hostname)) {
+      return c.json({ ok: false, message: "Only renopedia.sg URLs allowed" }, 400);
+    }
+
+    // Fetch server-side with a realistic UA.
+    // Renopedia sits behind a server-side page cache that returns HTTP 202
+    // ("Accepted — cache being generated") on the first hit from a cold IP, then
+    // 200 with the full HTML once the cache is warm. Datacenter IPs (like this
+    // edge runtime) reliably see the 202 first, so retry a few times until we get
+    // a 200 with real content before giving up.
+    const fetchOnce = async (): Promise<{ status: number; body: string }> => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(parsed.toString(), {
+          signal: controller.signal,
+          redirect: "follow",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-SG,en-US;q=0.9,en;q=0.8",
+          },
+        });
+        return { status: res.status, body: await res.text() };
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
+    let html = "";
+    let httpStatus = 0;
+    const MAX_ATTEMPTS = 8;
+    try {
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const r = await fetchOnce();
+        httpStatus = r.status;
+        html = r.body;
+        // 200 with a real document body — stop retrying.
+        if (httpStatus === 200 && /<\/html>/i.test(html) && /og:title|<title>/i.test(html)) break;
+        // 202 (cache warming) or an empty/interstitial 200 — back off and retry.
+        // Escalating delay gives the upstream's cache worker time to finish
+        // generating the page (heavier pages take a few seconds).
+        if (httpStatus === 202 || (httpStatus === 200 && html.length < 2000)) {
+          if (attempt < MAX_ATTEMPTS - 1) { await new Promise((res) => setTimeout(res, 1000 + attempt * 700)); continue; }
+        }
+        // Any other status: don't keep hammering.
+        break;
+      }
+    } catch (err: any) {
+      return c.json({ ok: false, message: "Fetch failed: " + (err?.message || String(err)), status: httpStatus, elapsedMs: Date.now() - started });
+    }
+
+    if (!html || httpStatus < 200 || httpStatus >= 400) {
+      return c.json({ ok: false, message: `Upstream responded ${httpStatus}`, status: httpStatus, elapsedMs: Date.now() - started, htmlPreview: html.slice(0, 500) });
+    }
+    // Persistent cache-warming interstitial — surface a clear error rather than
+    // saving an empty project.
+    if (httpStatus === 202 || !/og:title|<title>/i.test(html)) {
+      return c.json({ ok: false, message: `Renopedia returned a cache-warming page (status ${httpStatus}) after ${MAX_ATTEMPTS} tries — retry this URL in a moment.`, status: httpStatus, elapsedMs: Date.now() - started }, 502);
+    }
+
+    // Decode HTML entities found in attribute values (e.g. &#039; around bg urls).
+    const decodeEntities = (s: string) => s
+      .replace(/&#0?39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, "&")
+      .replace(/&#0?38;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">");
+
+    // ── OG tags + <title> ──
+    const ogTags: Record<string, string> = {};
+    const ogRe = /<meta[^>]+property=["']og:([a-zA-Z_:]+)["'][^>]+content=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = ogRe.exec(html))) ogTags[m[1]] = decodeEntities(m[2]);
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    const pageTitle = titleMatch ? decodeEntities(titleMatch[1].trim()) : "";
+    const metaDescMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
+    const metaDesc = metaDescMatch ? decodeEntities(metaDescMatch[1]) : "";
+
+    // ── JSON-LD (schema.org) ──
+    const jsonLd: any[] = [];
+    const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let lm: RegExpExecArray | null;
+    while ((lm = ldRe.exec(html))) { try { jsonLd.push(JSON.parse(lm[1].trim())); } catch {} }
+    const flatLd: any[] = [];
+    const flattenLd = (n: any) => {
+      if (!n) return;
+      if (Array.isArray(n)) { n.forEach(flattenLd); return; }
+      if (typeof n !== "object") return;
+      flatLd.push(n);
+      if (n["@graph"]) flattenLd(n["@graph"]);
+    };
+    jsonLd.forEach(flattenLd);
+    const ldByType = (t: string) => flatLd.find((x) => String(x["@type"] || "").toLowerCase().includes(t.toLowerCase()));
+
+    // ── Gallery images ──
+    // Renopedia lazy-loads gallery photos via `data-bg="<url>"` and inline
+    // `background-image:url('<url>')`. Collect both, de-dupe, and drop chrome
+    // (site logo, firm logo, calculator banner, sized thumbnails like -300x150).
+    const imgSet = new Set<string>();
+    const pushImg = (raw: string) => {
+      const src = decodeEntities(raw).trim();
+      if (!/renopedia\.sg\/wp-content\/uploads\//i.test(src)) return;
+      if (!/\.(webp|jpe?g|png)(?:\?|$)/i.test(src)) return;
+      if (/logo|icon|favicon|avatar|placeholder|calculator|home-renovation-singapore-\d|-\d{2,4}x\d{2,4}\./i.test(src)) return;
+      imgSet.add(src);
+    };
+    let dm: RegExpExecArray | null;
+    const dataBgRe = /data-bg=["']([^"']+)["']/gi;
+    while ((dm = dataBgRe.exec(html))) pushImg(dm[1]);
+    const bgUrlRe = /background-image\s*:\s*url\(\s*(?:&#0?39;|&quot;|["'])?([^"')]+?)(?:&#0?39;|&quot;|["'])?\s*\)/gi;
+    while ((dm = bgUrlRe.exec(html))) pushImg(dm[1]);
+    // Also any plain <img src> uploads (covers non-lazy galleries / og fallback).
+    const imgTagRe = /<img[^>]+src=["']([^"']+)["']/gi;
+    while ((dm = imgTagRe.exec(html))) pushImg(dm[1]);
+    const images = Array.from(imgSet);
+
+    // ── Firm: "Designed by <b>Firm Name</b>" + /designers/<slug>/ link ──
+    let firmName = "";
+    let firmUrl = "";
+    const designedByRe = /Designed by<\/p>\s*<p>\s*<b>\s*([^<]+?)\s*<\/b>/i;
+    const dby = html.match(designedByRe);
+    if (dby) firmName = decodeEntities(dby[1]).trim();
+    if (!firmName) {
+      const alt = html.match(/Designed by[\s\S]{0,80}?<b>\s*([^<]+?)\s*<\/b>/i);
+      if (alt) firmName = decodeEntities(alt[1]).trim();
+    }
+    const firmLink = html.match(/href=["'](https?:\/\/renopedia\.sg\/designers\/[^"'#?]+)["']/i);
+    if (firmLink) firmUrl = firmLink[1];
+    if (!firmName && firmUrl) {
+      const slug = firmUrl.replace(/\/+$/, "").split("/").pop() || "";
+      firmName = slug.replace(/-/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+    }
+
+    // ── Heuristics: style + property type from title/description/url ──
+    const stripTags = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const htmlText = stripTags(html);
+    const title = ogTags.title || pageTitle.replace(/\s*[|–-]\s*Renopedia.*$/i, "").trim();
+    const description = ogTags.description || metaDesc || "";
+    const haystack = `${title} ${description} ${parsed.pathname.replace(/-/g, " ")}`;
+
+    const STYLE_WORDS = [
+      "Scandinavian", "Contemporary", "Modern", "Minimalist", "Industrial",
+      "Japandi", "Muji", "Classic", "Eclectic", "Vintage", "Bohemian",
+      "Mediterranean", "Transitional", "Mid-Century Modern", "Mid-Century",
+      "Resort", "Tropical", "Rustic", "Luxury", "Coastal", "Traditional", "Retro",
+    ];
+    const detectStyle = (h: string): string => {
+      for (const w of STYLE_WORDS) {
+        if (new RegExp(`\\b${w.replace(/\s/g, "\\s")}\\b`, "i").test(h || "")) return w;
+      }
+      return "";
+    };
+
+    const classifyPropertyType = (text: string): { propertyType: string; propertySubType: string } => {
+      const t = text.toLowerCase();
+      if (/\bhdb\b|\bbto\b|\b\d-?\s*room\b|executive\s+apartment|maisonette|\bdbss\b/.test(t)) {
+        const sub = (text.match(/\bBTO\b/i) || text.match(/\bResale\b/i) || text.match(/\b\d-?\s*Room\b/i) || text.match(/\bMaisonette\b/i) || [""])[0];
+        return { propertyType: "HDB", propertySubType: typeof sub === "string" ? sub.trim() : "" };
+      }
+      if (/penthouse|\b\d-bedroom\b|\bcondo(minium)?\b|\bapartment\b|\bec\b|executive\s+condo|duplex/.test(t)) {
+        const sub = (text.match(/\bPenthouse\b/i) || text.match(/\bDuplex\b/i) || text.match(/\b\d-Bedroom\b/i) || text.match(/\bStudio\b/i) || [""])[0];
+        return { propertyType: "Condominium", propertySubType: typeof sub === "string" ? sub.trim() : "" };
+      }
+      if (/\bterrace\b|semi[-\s]?detached|\bbungalow\b|\bgcb\b|good\s+class\s+bungalow|\blanded\b|\bdetached\b/.test(t)) {
+        let sub = "";
+        if (/good\s+class/i.test(text)) sub = "Good Class Bungalow";
+        else if (/bungalow/i.test(text)) sub = "Bungalow";
+        else if (/semi[-\s]?detached/i.test(text)) sub = "Semi-Detached";
+        else if (/terrace/i.test(text)) sub = "Terrace";
+        return { propertyType: "Landed", propertySubType: sub };
+      }
+      if (/\bcommercial\b|\boffice\b|\bretail\b|\bf&b\b|restaurant|\bcafe\b/.test(t)) {
+        return { propertyType: "Commercial", propertySubType: "" };
+      }
+      return { propertyType: "", propertySubType: "" };
+    };
+
+    // Best-effort cost / size / year from visible page text.
+    const budgetMatch = htmlText.match(/\$\s?[\d,]{3,}(?:\s*[-–]\s*\$?\s?[\d,]{3,})?/);
+    const sizeMatch = htmlText.match(/\b[\d,]{2,6}\s*(?:sqft|sq\.?\s*ft|sqm|m²)\b/i);
+    const splitSize = (s: string | undefined): { num: string; unit: string } => {
+      if (!s) return { num: "", unit: "" };
+      const mm = s.match(/^([\d,]+)\s*(sqft|sq\.?\s*ft|sqm|m²)?/i);
+      if (!mm) return { num: "", unit: "" };
+      const unitRaw = (mm[2] || "sqft").toLowerCase().replace(/\s|\./g, "");
+      const unit = unitRaw === "m²" ? "m²" : unitRaw === "sqm" ? "sqm" : "sqft";
+      return { num: mm[1], unit };
+    };
+    const sz = splitSize(sizeMatch ? sizeMatch[0] : undefined);
+
+    const { propertyType, propertySubType } = classifyPropertyType(haystack);
+    const style = detectStyle(haystack);
+
+    const imported = [{
+      title: title.slice(0, 120),
+      location: "",
+      cost: budgetMatch ? budgetMatch[0].replace(/\s/g, "") : "",
+      size: sz.num,
+      sizeUnit: sz.unit,
+      year: "",
+      propertyType,
+      propertySubType,
+      style,
+      worksIncluded: [] as string[],
+      driveUrl: "",
+      images,
+      floorPlan: "",
+      sourceUrl: rawUrl,
+    }];
+
+    return c.json({
+      ok: true,
+      url: rawUrl,
+      kind: "project",
+      status: httpStatus,
+      elapsedMs: Date.now() - started,
+      firm: firmName ? { name: firmName, url: firmUrl || undefined } : null,
+      imported,
+      raw: {
+        imageCount: images.length,
+        firmName,
+        firmUrl,
+        ogTags,
+        pageTitle,
+        jsonLdCount: jsonLd.length,
+        detected: { style, propertyType, propertySubType, cost: imported[0].cost, size: imported[0].size },
+      },
+    });
+  } catch (err: any) {
+    console.log("renopedia-scrape error:", err);
+    return c.json({ ok: false, message: "Scrape failed: " + (err?.message || String(err)), elapsedMs: Date.now() - started }, 500);
+  }
+});
+
 app.post("/make-server-4808de5e/firm-onboarding/airtable-lookup", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
