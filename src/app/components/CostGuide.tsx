@@ -1376,8 +1376,8 @@ function Screen5({
 
   return (
     <div>
-      {/* Submission confirmation — shown once the gate is cleared. */}
-      {revealed && (
+      {/* Submission confirmation — only for the "Yes" path that actually submitted. */}
+      {revealed && lookingForDesigners === "yes" && (
         <div
           style={{
             display: "flex",
@@ -1607,58 +1607,68 @@ function Screen5({
               The range above is your starting point. Want us to match you with three firms aligned to your scope and budget?
             </p>
 
-            {/* Yes / Not now — still required, but the form is shown alongside. */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-              {[
-                { key: "yes", label: "Yes" },
-                { key: "no", label: "Not now" },
-              ].map((opt) => {
-                const active = lookingForDesigners === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setLookingForDesigners(opt.key as "yes" | "no")}
-                    style={{
-                      flex: 1,
-                      padding: "13px 16px",
-                      background: active ? C.black : "#faf8f2",
-                      color: active ? C.white : C.black,
-                      border: `1px solid ${active ? C.black : C.creamBorder}`,
-                      borderRadius: 10,
-                      fontFamily: sans,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
+            {/* "Yes" reveals the contact form; "Not now" skips it and unlocks the estimate. */}
+            <div style={{ display: "flex", gap: 10, marginBottom: lookingForDesigners === "yes" ? 18 : 0 }}>
+              <button
+                type="button"
+                onClick={() => setLookingForDesigners("yes")}
+                style={{
+                  flex: 1,
+                  padding: "13px 16px",
+                  background: lookingForDesigners === "yes" ? C.black : "#faf8f2",
+                  color: lookingForDesigners === "yes" ? C.white : C.black,
+                  border: `1px solid ${lookingForDesigners === "yes" ? C.black : C.creamBorder}`,
+                  borderRadius: 10,
+                  fontFamily: sans,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLookingForDesigners("no"); setRevealed(true); }}
+                style={{
+                  flex: 1,
+                  padding: "13px 16px",
+                  background: "#faf8f2",
+                  color: C.black,
+                  border: `1px solid ${C.creamBorder}`,
+                  borderRadius: 10,
+                  fontFamily: sans,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                Not now
+              </button>
             </div>
 
-            <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
-            <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
-            <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
-            {(() => {
-              const nameOk = leadName.trim().length > 0;
-              const phoneOk = /^[0-9]{8}$/.test(leadPhone);
-              const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
-              const choiceOk = lookingForDesigners === "yes" || lookingForDesigners === "no";
-              const formValid = nameOk && phoneOk && emailOk && choiceOk;
-              const submitLabel = lookingForDesigners === "no"
-                ? (submitting ? "Sending guide…" : "Send my cost guide")
-                : (submitting ? "Submitting…" : "Submit and get matched");
-              return (
-                <div style={{ display: "flex", marginTop: 22 }}>
-                  <BtnPrimary onClick={async () => { await onSubmit(); setRevealed(true); }} disabled={!formValid || submitting}>
-                    {submitLabel}
-                  </BtnPrimary>
-                </div>
-              );
-            })()}
+            {lookingForDesigners === "yes" && (
+              <>
+                <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
+                <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
+                <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
+                {(() => {
+                  const nameOk = leadName.trim().length > 0;
+                  const phoneOk = /^[0-9]{8}$/.test(leadPhone);
+                  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
+                  const formValid = nameOk && phoneOk && emailOk;
+                  return (
+                    <div style={{ display: "flex", marginTop: 22 }}>
+                      <BtnPrimary onClick={async () => { await onSubmit(); setRevealed(true); }} disabled={!formValid || submitting}>
+                        {submitting ? "Submitting…" : "Submit and get matched"}
+                      </BtnPrimary>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
           </div>
         </div>,
         document.body
