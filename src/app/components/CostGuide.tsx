@@ -1359,7 +1359,6 @@ function Screen5({
   // they choose "Yes"/"Not now" AND submit their details. Only on submit do we
   // set `revealed`, which closes the gate and un-blurs the range.
   const [revealed, setRevealed] = useState(false);
-  const [gatePhase, setGatePhase] = useState<"ask" | "form">("ask");
   const [mounted, setMounted] = useState(false);
   const gateOpen = !revealed;
 
@@ -1601,87 +1600,65 @@ function Screen5({
               overflowY: "auto",
             }}
           >
-            {gatePhase === "ask" ? (
-              <>
-                <h2 style={{ fontFamily: serif, fontSize: 26, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
-                  Find firms built for <Em>your scope.</Em>
-                </h2>
-                <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 24 }}>
-                  The range above is your starting point. Want us to match you with three firms aligned to your scope and budget?
-                </p>
-                <div style={{ display: "flex", gap: 10 }}>
+            <h2 style={{ fontFamily: serif, fontSize: 26, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
+              Find firms built for <Em>your scope.</Em>
+            </h2>
+            <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 20 }}>
+              The range above is your starting point. Want us to match you with three firms aligned to your scope and budget?
+            </p>
+
+            {/* Yes / Not now — still required, but the form is shown alongside. */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+              {[
+                { key: "yes", label: "Yes" },
+                { key: "no", label: "Not now" },
+              ].map((opt) => {
+                const active = lookingForDesigners === opt.key;
+                return (
                   <button
+                    key={opt.key}
                     type="button"
-                    onClick={() => { setLookingForDesigners("yes"); setGatePhase("form"); }}
+                    onClick={() => setLookingForDesigners(opt.key as "yes" | "no")}
                     style={{
                       flex: 1,
-                      padding: "15px 16px",
-                      background: C.black,
-                      color: C.white,
-                      border: `1px solid ${C.black}`,
+                      padding: "13px 16px",
+                      background: active ? C.black : "#faf8f2",
+                      color: active ? C.white : C.black,
+                      border: `1px solid ${active ? C.black : C.creamBorder}`,
                       borderRadius: 10,
                       fontFamily: sans,
                       fontSize: 14,
                       fontWeight: 600,
                       cursor: "pointer",
+                      transition: "all 0.15s",
                     }}
                   >
-                    Yes
+                    {opt.label}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => { setLookingForDesigners("no"); setGatePhase("form"); }}
-                    style={{
-                      flex: 1,
-                      padding: "15px 16px",
-                      background: "#faf8f2",
-                      color: C.black,
-                      border: `1px solid ${C.creamBorder}`,
-                      borderRadius: 10,
-                      fontFamily: sans,
-                      fontSize: 14,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Not now
-                  </button>
+                );
+              })}
+            </div>
+
+            <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
+            <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
+            <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
+            {(() => {
+              const nameOk = leadName.trim().length > 0;
+              const phoneOk = /^[0-9]{8}$/.test(leadPhone);
+              const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
+              const choiceOk = lookingForDesigners === "yes" || lookingForDesigners === "no";
+              const formValid = nameOk && phoneOk && emailOk && choiceOk;
+              const submitLabel = lookingForDesigners === "no"
+                ? (submitting ? "Sending guide…" : "Send my cost guide")
+                : (submitting ? "Submitting…" : "Submit and get matched");
+              return (
+                <div style={{ display: "flex", marginTop: 22 }}>
+                  <BtnPrimary onClick={async () => { await onSubmit(); setRevealed(true); }} disabled={!formValid || submitting}>
+                    {submitLabel}
+                  </BtnPrimary>
                 </div>
-              </>
-            ) : (
-              <>
-                <h2 style={{ fontFamily: serif, fontSize: 22, fontWeight: 500, lineHeight: 1.2, letterSpacing: "-0.5px", color: C.black, marginBottom: 10 }}>
-                  {lookingForDesigners === "no"
-                    ? <>Where should we <Em>send your guide?</Em></>
-                    : <>The real conversation starts with <Em>three firms built for your scope.</Em></>}
-                </h2>
-                <p style={{ fontSize: 14, color: C.gray, lineHeight: 1.6, marginBottom: 20 }}>
-                  {lookingForDesigners === "no"
-                    ? "We'll email your full PDF cost breakdown within the hour — no firm matching."
-                    : "The concierge call is where we extract specific scope, match you with aligned firms, and give you clarity on what your actual budget should be."}
-                </p>
-                <LeadInput label="Full name" value={leadName} onChange={setLeadName} placeholder="Your name" />
-                <PhoneInput label="WhatsApp number" value={leadPhone} onChange={setLeadPhone} />
-                <LeadInput label="Email" type="email" value={leadEmail} onChange={setLeadEmail} placeholder="you@example.com" />
-                {(() => {
-                  const nameOk = leadName.trim().length > 0;
-                  const phoneOk = /^[0-9]{8}$/.test(leadPhone);
-                  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail.trim());
-                  const formValid = nameOk && phoneOk && emailOk;
-                  const submitLabel = lookingForDesigners === "no"
-                    ? (submitting ? "Sending guide…" : "Send my cost guide")
-                    : (submitting ? "Submitting…" : "Submit and get matched");
-                  return (
-                    <BtnRow>
-                      <BtnSecondary onClick={() => setGatePhase("ask")}>Back</BtnSecondary>
-                      <BtnPrimary onClick={async () => { await onSubmit(); setRevealed(true); }} disabled={!formValid || submitting}>
-                        {submitLabel}
-                      </BtnPrimary>
-                    </BtnRow>
-                  );
-                })()}
-              </>
-            )}
+              );
+            })()}
           </div>
         </div>,
         document.body
