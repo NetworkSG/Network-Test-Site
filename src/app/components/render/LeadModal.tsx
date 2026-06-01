@@ -28,7 +28,6 @@ const TIMELINE_OPTIONS = [
   "Within 3 months",
   "3 – 6 months",
   "6 – 12 months",
-  "Just exploring",
 ];
 
 type Props = {
