@@ -150,7 +150,7 @@ export function RenderLanding() {
     <>
     <Seo
       title="AI Room Designer | Network — See Your Renovation Before You Renovate"
-      description="Free AI room designer for Singapore homeowners. Upload a photo, generate styled renders in minutes, and share with your matched interior designer."
+      description="Free AI room designer for Singapore homeowners. Upload a photo, get a photorealistic render in about a minute, then get matched with a verified interior designer who can build it."
       canonical="/render-tool"
     />
     <ReactLenis root options={{ lerp: 0.08, duration: 1.2, smoothWheel: true }}>
@@ -179,14 +179,14 @@ export function RenderLanding() {
                     letterSpacing: "-0.03em",
                   }}
                 >
-                  See your dream home
+                  See your space restyled
                   <br />
-                  <span className="italic text-[#9a9790]">before you build it.</span>
+                  <span className="italic text-[#9a9790]">before you renovate.</span>
                 </h1>
                 <p className="mt-6 text-[16px] md:text-[17px] text-[#6b6860] leading-[1.6] max-w-[520px]">
-                  Upload your floor plan or reference photo, describe the look
-                  you want, and get a photorealistic 3D render in about a minute.
-                  No subscriptions, no credit card — five free renders a day.
+                  Upload a photo of your room, describe the look you want, and
+                  get a photorealistic render in about a minute. Free — no
+                  subscription, no credit card.
                 </p>
                 <div className="mt-8 flex flex-col sm:flex-row gap-3">
                   <button
@@ -209,8 +209,8 @@ export function RenderLanding() {
                   {/* Browse designers button — hidden for now */}
                 </div>
                 <p className="mt-6 text-[12px] text-[#9a9790] leading-[1.5]">
-                  5 renders per day · Interior design scenes only · Your prompts
-                  stay private
+                  One free render · Interior scenes only · Your prompts stay
+                  private
                 </p>
               </FadeIn>
 
@@ -256,8 +256,8 @@ export function RenderLanding() {
                 },
                 {
                   n: "03",
-                  t: "Render and refine",
-                  d: "Get your first render in ~60 seconds. Refine with follow-up prompts until it's right.",
+                  t: "See it, then build it",
+                  d: "Your photorealistic render lands in about 60 seconds. Love it? Send it to a verified designer who can make it real.",
                 },
               ].map((step, i) => (
                 <FadeIn key={step.n} delay={i * 0.1}>
@@ -345,7 +345,7 @@ export function RenderLanding() {
               {[
                 {
                   q: "How many renders do I get?",
-                  a: "Five per day, per browser. Adjustments count as new renders. The quota resets at midnight SGT.",
+                  a: "One free render per day, per browser — it resets at midnight SGT. It's enough to lock your direction; from there, a matched designer takes it further.",
                 },
                 {
                   q: "What kinds of prompts are allowed?",

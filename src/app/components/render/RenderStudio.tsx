@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
-import { sanitizeInput } from "@/app/utils/sanitize";
+import { sanitizeInput, sanitizeEmail, isValidEmail, isValidPhone } from "@/app/utils/sanitize";
+import { trackLead } from "@/app/utils/metaPixel";
 
 // ─── API helpers ─────────────────────────────────────────────────
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
@@ -177,6 +179,11 @@ export function RenderStudio() {
   const [suggestingPrompt, setSuggestingPrompt] = useState(false);
   const [sentToDesigner, setSentToDesigner] = useState(false);
 
+  // Result gate: after a render completes, the image stays blurred behind a
+  // "find firms" pop-up (mirrors the Cost Guide gate). The user must choose
+  // "Yes" (→ contact form → matched) or "Not now" before the render is shown.
+  const [resultGateAnswered, setResultGateAnswered] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const adjustRef = useRef<HTMLTextAreaElement>(null);
@@ -202,8 +209,10 @@ export function RenderStudio() {
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
-        if (typeof data.remaining === "number") setRendersRemaining(data.remaining);
-        if (typeof data.limit === "number") setRendersLimit(data.limit);
+        // Public tool is capped at a single render — clamp whatever the
+        // backend reports so the UI enforces 1 even before the cap deploys.
+        setRendersLimit(1);
+        setRendersRemaining(typeof data.remaining === "number" && data.remaining <= 0 ? 0 : 1);
       } catch {
         /* non-fatal */
       }
@@ -258,6 +267,7 @@ export function RenderStudio() {
               },
             ].slice(-6);
           });
+          setRendersRemaining(0); // one render only — lock further generates
           setPhase("result");
         } else if (data.status === "failed") {
           setError("Render failed. Please try a different prompt.");
@@ -327,7 +337,7 @@ export function RenderStudio() {
     if (!uploadedImageUrl || !userPrompt.trim() || phase === "generating") return;
     if (rendersRemaining !== null && rendersRemaining <= 0) {
       setError(
-        `You've used all ${rendersLimit} renders today. Come back tomorrow, or send one of your renders to a designer for feedback.`,
+        "That's your free render for today. Come back tomorrow, or send this one to a designer for real-world feedback.",
       );
       return;
     }
@@ -335,6 +345,8 @@ export function RenderStudio() {
     setError(null);
     setCurrentTaskId(null);
     setCurrentResultUrl(null);
+    setResultGateAnswered(false);
+    setSentToDesigner(false);
     setPhase("generating");
 
     try {
@@ -355,10 +367,8 @@ export function RenderStudio() {
         return;
       }
       setCurrentTaskId(data.taskId);
-      if (typeof data.rendersRemaining === "number") {
-        setRendersRemaining(data.rendersRemaining);
-      }
-      if (typeof data.rendersLimit === "number") setRendersLimit(data.rendersLimit);
+      // Render cap is fixed at 1 on the client; the completion handler zeroes
+      // the remaining count, so we don't echo the backend's per-call numbers.
     } catch {
       setError("Network error. Please try again.");
       setPhase("idle");
@@ -370,7 +380,7 @@ export function RenderStudio() {
     if (!uploadedImageUrl || !adjustmentDraft.trim() || phase === "generating") return;
     if (rendersRemaining !== null && rendersRemaining <= 0) {
       setError(
-        `You've used all ${rendersLimit} renders today. Come back tomorrow, or send one of your renders to a designer for feedback.`,
+        "That's your free render for today. Come back tomorrow, or send this one to a designer for real-world feedback.",
       );
       return;
     }
@@ -379,6 +389,8 @@ export function RenderStudio() {
     const prevTaskId = currentTaskId;
     setCurrentTaskId(null);
     setCurrentResultUrl(null);
+    setResultGateAnswered(false);
+    setSentToDesigner(false);
     setPhase("generating");
 
     try {
@@ -401,9 +413,6 @@ export function RenderStudio() {
         return;
       }
       setCurrentTaskId(data.taskId);
-      if (typeof data.rendersRemaining === "number") {
-        setRendersRemaining(data.rendersRemaining);
-      }
       setAdjustmentDraft("");
     } catch {
       setError("Network error. Please try again.");
@@ -419,23 +428,6 @@ export function RenderStudio() {
     rendersRemaining,
     rendersLimit,
   ]);
-
-  // ── Reset to home ──────────────────────────────────────────────
-  const handleReset = useCallback(() => {
-    setPhase("home");
-    setUploadedImageUrl(null);
-    setLocalPreview(null);
-    setOriginalFileName(null);
-    setCurrentTaskId(null);
-    setCurrentResultUrl(null);
-    setHistory([]);
-    setUserPrompt("");
-    setAdjustmentDraft("");
-    setHints({});
-    setShowHints(false);
-    setError(null);
-    setSentToDesigner(false);
-  }, []);
 
   // Auto-submit "Send to designer" using contact info saved during gate sign-up
   const handleSendToDesigner = useCallback(async () => {
@@ -509,7 +501,7 @@ export function RenderStudio() {
   const hasResult = phase === "result" && currentResultUrl;
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-64px)]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div className="flex-1 flex flex-col min-h-0" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* ── MAIN CONTENT AREA ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-40 pt-8">
         <AnimatePresence mode="wait">
@@ -540,8 +532,8 @@ export function RenderStudio() {
                 What should we render?
               </h1>
               <p className="mt-4 text-[15px] text-[#6b6860] leading-[1.6] max-w-[480px] mx-auto">
-                Upload a floor plan or reference photo, describe the interior you imagine,
-                and get a photorealistic render in about a minute.
+                Upload a photo, describe the interior you imagine, and get a photorealistic
+                render in about a minute — you've got one, so make it count.
               </p>
 
               {phase === "uploading" && (
@@ -629,7 +621,7 @@ export function RenderStudio() {
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="w-full max-w-[800px]"
             >
-              {/* Main result image */}
+              {/* Main result image — kept blurred until the gate is cleared. */}
               <div className="relative rounded-[16px] overflow-hidden border border-[#e5e1d6] shadow-[0_2px_20px_rgba(0,0,0,0.06)]">
                 <motion.img
                   key={currentResultUrl}
@@ -639,6 +631,12 @@ export function RenderStudio() {
                   initial={{ opacity: 0, scale: 1.02 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5 }}
+                  style={{
+                    filter: resultGateAnswered ? "none" : "blur(22px)",
+                    transform: resultGateAnswered ? "none" : "scale(1.05)",
+                    transition: "filter 0.5s ease",
+                    userSelect: "none",
+                  }}
                 />
               </div>
 
@@ -692,12 +690,6 @@ export function RenderStudio() {
                     )}
                   </button>
                 )}
-                <button
-                  onClick={handleReset}
-                  className="h-[48px] px-5 rounded-[12px] border border-[#d8d3c8] bg-white text-[13px] text-[#6b6860] hover:bg-[#f5f1e8] transition"
-                >
-                  Start over
-                </button>
               </div>
             </motion.div>
           )}
@@ -929,7 +921,223 @@ export function RenderStudio() {
           </div>
         </div>
       </div>
+
+      {/* Result gate — blurs the render behind a "find firms" pop-up. */}
+      <ResultGate
+        open={phase === "result" && !!currentResultUrl && !resultGateAnswered}
+        taskId={currentTaskId}
+        onReveal={(submitted) => {
+          setResultGateAnswered(true);
+          if (submitted) setSentToDesigner(true);
+        }}
+      />
     </div>
+  );
+}
+
+// ─── Result gate (mirrors the Cost Guide lead pop-up) ──────────────
+// Shown over the blurred render once it finishes. "Yes" expands a contact
+// form (prefilled from the entry-gate sign-up) that sends the render to a
+// designer; "Not now" just unlocks the render. Either way the user must act.
+function ResultGate({
+  open,
+  taskId,
+  onReveal,
+}: {
+  open: boolean;
+  taskId: string | null;
+  onReveal: (submitted: boolean) => void;
+}) {
+  const [choice, setChoice] = useState<"" | "yes" | "no">("");
+  const [name, setName] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Prefill from the entry-gate contact each time the gate opens.
+  useEffect(() => {
+    if (!open) return;
+    setChoice("");
+    setError(null);
+    try {
+      const raw = sessionStorage.getItem("render-gate-contact");
+      if (raw) {
+        const c = JSON.parse(raw);
+        setName(c.name || "");
+        setWhatsapp(c.whatsapp || "");
+        setEmail(c.email || "");
+      }
+    } catch { /* noop */ }
+  }, [open]);
+
+  // Lock body scroll while open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  const canSubmit =
+    name.trim().length >= 2 &&
+    isValidPhone(whatsapp.trim()) &&
+    isValidEmail(email.trim()) &&
+    !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !taskId) return;
+    setSubmitting(true);
+    setError(null);
+    let stored: Record<string, string> = {};
+    try {
+      const raw = sessionStorage.getItem("render-gate-contact");
+      if (raw) stored = JSON.parse(raw);
+    } catch { /* noop */ }
+    try {
+      const res = await fetch(`${API_BASE}/render-lead-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+        body: JSON.stringify({
+          taskId,
+          name: sanitizeInput(name, 100),
+          whatsapp: sanitizeInput(whatsapp, 20),
+          email: sanitizeEmail(email),
+          propertyType: stored.propertyType || undefined,
+          budget: stored.budget || undefined,
+          timeline: stored.timeline || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Something went wrong. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+      trackLead("render-tool-submit");
+      onReveal(true);
+    } catch {
+      setError("Network error. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="result-gate"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-5 font-['DM_Sans',sans-serif]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="absolute inset-0 bg-[rgba(24,22,18,0.55)] backdrop-blur-[10px]" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-full max-w-[440px] max-h-[90vh] overflow-y-auto bg-[#f0ede6] border border-[#d8d3c8] rounded-[16px] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.35)]"
+          >
+            <h2
+              className="text-[#0f0f0d] leading-[1.2]"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: 26, fontWeight: 500, letterSpacing: "-0.5px" }}
+            >
+              Find firms built for{" "}
+              <span style={{ fontStyle: "italic", color: "#6b6860" }}>your scope.</span>
+            </h2>
+            <p className="text-[14px] text-[#6b6860] leading-[1.6] mt-2.5 mb-5">
+              Love this render? Get matched with three firms who can bring it to life — aligned to your scope and budget.
+            </p>
+
+            {/* Yes reveals the form; Not now just unlocks the render. */}
+            <div className="flex gap-2.5" style={{ marginBottom: choice === "yes" ? 18 : 0 }}>
+              <button
+                type="button"
+                onClick={() => setChoice("yes")}
+                className="flex-1 h-[48px] rounded-[10px] text-[14px] font-semibold transition"
+                style={{
+                  background: choice === "yes" ? "#0f0f0d" : "#faf8f2",
+                  color: choice === "yes" ? "#fff" : "#0f0f0d",
+                  border: `1px solid ${choice === "yes" ? "#0f0f0d" : "#d8d3c8"}`,
+                }}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => onReveal(false)}
+                className="flex-1 h-[48px] rounded-[10px] text-[14px] font-semibold transition"
+                style={{ background: "#faf8f2", color: "#0f0f0d", border: "1px solid #d8d3c8" }}
+              >
+                Not now
+              </button>
+            </div>
+
+            {choice === "yes" && (
+              <div className="mt-1 space-y-3">
+                <GateField label="Full name">
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your name"
+                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
+                  />
+                </GateField>
+                <GateField label="WhatsApp (SG)">
+                  <input
+                    type="tel"
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    placeholder="8123 4567"
+                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
+                  />
+                </GateField>
+                <GateField label="Email">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@email.com"
+                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
+                  />
+                </GateField>
+                {error && (
+                  <div className="p-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[12px] text-[#991b1b] leading-[1.5]">
+                    {error}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!canSubmit}
+                  className="w-full h-[48px] rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-semibold hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed mt-1"
+                >
+                  {submitting ? "Submitting…" : "Submit and get matched"}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+function GateField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] text-[#6b6860] font-medium uppercase tracking-wider">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
   );
 }
 

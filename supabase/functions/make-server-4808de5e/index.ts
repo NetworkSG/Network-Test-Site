@@ -358,10 +358,11 @@ async function checkDailyRenderCap(): Promise<{ allowed: boolean; used: number }
   return { allowed: true, used: current + 1 };
 }
 
-// --- Per-IP daily render cap (5 renders per IP per day for the public AI Render landing page) ---
-// Bumped from 3 → 5 as part of the user-prompted render revamp. Adjustments also
-// re-enter /render-task and deduct from the same cap, so a user gets 5 render ops total.
-const IP_DAILY_RENDER_CAP = 5;
+// --- Per-IP daily render cap (1 render per IP per day for the public AI Render landing page) ---
+// Lowered to 1 so the ad-driven public tool gives a single render, then gates the
+// result behind the "find firms" lead pop-up. Adjustments also re-enter
+// /render-task and deduct from the same cap, so a user gets 1 render op total.
+const IP_DAILY_RENDER_CAP = 1;
 async function checkIpDailyRenderCap(ip: string): Promise<{ allowed: boolean; used: number; limit: number }> {
   const today = new Date().toISOString().slice(0, 10);
   const key = `render-ip-daily:${ip}:${today}`;
