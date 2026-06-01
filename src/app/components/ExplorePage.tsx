@@ -968,6 +968,11 @@ export function ExplorePage() {
           unifiedCols[shortest].h += aspect + 6;
         }
 
+        // The "flow around the card" 6-col masonry only makes sense on desktop,
+        // where the card is absolutely positioned over the left half. Below lg
+        // (1024px) the card stacks full-width, so use a plain responsive masonry.
+        const isWide = colCount >= 4;
+
         return (
         <div className="max-w-[1400px] mx-auto px-6 md:px-10 pt-[90px] md:pt-[100px] pb-16" style={{ fontFamily: sans }}>
           {/* Top action bar */}
@@ -983,11 +988,11 @@ export function ExplorePage() {
 
           {/* Unified Pinterest layout: project card absolute over left half,
               one 6-col masonry that flows around it with no empty gaps. */}
-          <div className="relative max-[900px]:static">
+          <div className="relative">
 
-            {/* PROJECT CARD — absolute on lg+, normal flow on mobile */}
+            {/* PROJECT CARD — absolute over left half on lg+, full-width stacked below lg */}
             <div ref={projectCardRef}
-              className="lg:absolute lg:top-0 lg:left-0 w-[calc(50%-8px)] max-[900px]:w-full max-[900px]:mb-4 overflow-hidden flex flex-col z-[1]"
+              className="lg:absolute lg:top-0 lg:left-0 w-full lg:w-[calc(50%-8px)] mb-4 lg:mb-0 overflow-hidden flex flex-col z-[1]"
               style={{ background: C.white, borderRadius: 24, border: `1px solid ${C.creamBorder}`, boxShadow: "0 4px 24px rgba(15,15,13,0.05)" }}>
 
               {/* Single clicked image — preload smaller WebP, reveal once loaded */}
@@ -1114,26 +1119,43 @@ export function ExplorePage() {
               </div>
             </div>
 
-            {/* UNIFIED 6-COL MASONRY — left 3 cols start below the card, right 3 start at top */}
-            <div className="flex gap-4">
-              {unifiedCols.map((col, ci) => (
-                <div key={ci} className="flex-1 min-w-0"
-                  style={{ paddingTop: ci < 3 && projectCardHeight > 0 ? projectCardHeight + 16 : 0 }}>
-                  {col.items.map(pin => (
+            {isWide ? (
+              /* lg+: 6-col masonry that flows around the absolute card (left 3 cols offset by card height) */
+              <>
+                <div className="flex gap-4">
+                  {unifiedCols.map((col, ci) => (
+                    <div key={ci} className="flex-1 min-w-0"
+                      style={{ paddingTop: ci < 3 && projectCardHeight > 0 ? projectCardHeight + 16 : 0 }}>
+                      {col.items.map(pin => (
+                        <Pin key={pin.pinId} project={pin.project} image={pin.image} saved={savedIds.has(pin.project.projectId)} onSave={() => toggleSave(pin.project, pin.image)} onOpen={() => openInModal(pin.project, pin.imageIndex)} />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {hasMore && (
+                  <div className="flex gap-4 mt-4">
+                    {Array.from({ length: 6 }).map((_, ci) => (
+                      <div key={ci} className="flex-1 min-w-0">
+                        {Array.from({ length: 2 }).map((_, si) => <PinSkeleton key={si} index={ci * 7 + si} />)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* below lg: card is stacked on top, plain responsive CSS-columns masonry below it */
+              <>
+                <div className="columns-2 sm:columns-3 gap-4">
+                  {allMorePins.map(pin => (
                     <Pin key={pin.pinId} project={pin.project} image={pin.image} saved={savedIds.has(pin.project.projectId)} onSave={() => toggleSave(pin.project, pin.image)} onOpen={() => openInModal(pin.project, pin.imageIndex)} />
                   ))}
                 </div>
-              ))}
-            </div>
-            {/* Loading skeletons for the next batch (shown only when more pins are still available) */}
-            {hasMore && (
-              <div className="flex gap-4 mt-4">
-                {Array.from({ length: 6 }).map((_, ci) => (
-                  <div key={ci} className="flex-1 min-w-0">
-                    {Array.from({ length: 2 }).map((_, si) => <PinSkeleton key={si} index={ci * 7 + si} />)}
+                {hasMore && (
+                  <div className="columns-2 sm:columns-3 gap-4 mt-4">
+                    {Array.from({ length: 6 }).map((_, si) => <PinSkeleton key={si} index={si} />)}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
             {/* Sentinel for infinite scroll — when this enters the viewport, load more pins */}
             <div ref={moreSentinelRef} aria-hidden style={{ height: 1, width: "100%" }} />
