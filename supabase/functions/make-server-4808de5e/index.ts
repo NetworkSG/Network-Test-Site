@@ -1047,6 +1047,7 @@ const ALLOWED_ORIGINS = [
   "https://orangenetworkstudios.com",
   "https://test-site.networksg.net",
   "https://www.test-site.networksg.net",
+  "https://site-admin.networksg.net",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
