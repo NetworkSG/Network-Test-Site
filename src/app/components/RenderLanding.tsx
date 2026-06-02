@@ -225,9 +225,10 @@ export function RenderLanding() {
         </section>
 
         {/* ── HOW IT WORKS ──────────────────────────────── */}
-        <section className="py-20 md:py-24 bg-white border-y border-[#e5e1d6]">
-          <div className="max-w-[1200px] mx-auto px-6">
-            <FadeIn className="text-center mb-14">
+        {/* Illustrations have transparent backgrounds, so they blend on the page cream. */}
+        <section className="py-20 md:py-24" style={{ background: "#f0ede6" }}>
+          <div className="max-w-[1100px] mx-auto px-6">
+            <FadeIn className="text-center mb-14 md:mb-20">
               <p className="text-[12px] text-[#6b6860] uppercase tracking-wider font-medium mb-3">
                 How it works
               </p>
@@ -242,44 +243,63 @@ export function RenderLanding() {
                 Three steps to a photorealistic render.
               </h2>
             </FadeIn>
-            <div className="grid md:grid-cols-3 gap-6">
+            {/* One row per step — illustration + copy, alternating sides on desktop,
+                separated by a subtle hairline. */}
+            <div>
               {[
                 {
                   n: "01",
                   t: "Upload your reference",
                   d: "Floor plan, moodboard, or any room photo. JPG, PNG, or WebP up to 20MB.",
+                  img: "/render-step-upload.png",
                 },
                 {
                   n: "02",
                   t: "Describe your interior",
                   d: "Tell us the style, materials, and mood. Our prompt filter keeps it design-focused.",
+                  img: "/render-step-describe.png",
                 },
                 {
                   n: "03",
                   t: "See it, then build it",
                   d: "Your photorealistic render lands in about 60 seconds. Love it? Send it to a verified designer who can make it real.",
+                  img: "/render-step-build.png",
                 },
               ].map((step, i) => (
-                <FadeIn key={step.n} delay={i * 0.1}>
-                  <div className="h-full p-7 rounded-[16px] bg-[#fafaf8] border border-[#e5e1d6]">
-                    <div
-                      className="text-[56px] text-[#d8d3c8] leading-[0.9] mb-4"
-                      style={{
-                        fontFamily: "'EB Garamond', Georgia, serif",
-                        fontWeight: 400,
-                      }}
-                    >
-                      {step.n}
+                <FadeIn
+                  key={step.n}
+                  delay={i * 0.05}
+                  className={i > 0 ? "mt-10 md:mt-14 pt-10 md:pt-14 border-t border-[#cfc8ba]" : ""}
+                >
+                  <div className="grid md:grid-cols-2 gap-6 md:gap-14 items-center">
+                    {/* Illustration (cream bg blends into the section) */}
+                    <div className={i % 2 === 1 ? "md:order-2" : ""}>
+                      <img
+                        src={step.img}
+                        alt={step.t}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full max-w-[380px] mx-auto"
+                      />
                     </div>
-                    <h3
-                      className="text-[22px] text-[#0f0f0d] font-normal leading-[1.2] mb-3"
-                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                    >
-                      {step.t}
-                    </h3>
-                    <p className="text-[14px] text-[#6b6860] leading-[1.6]">
-                      {step.d}
-                    </p>
+                    {/* Copy */}
+                    <div className={i % 2 === 1 ? "md:order-1" : ""}>
+                      <div
+                        className="text-[56px] md:text-[72px] text-[#d8d3c8] leading-[0.9] mb-3"
+                        style={{ fontFamily: "'EB Garamond', Georgia, serif", fontWeight: 400 }}
+                      >
+                        {step.n}
+                      </div>
+                      <h3
+                        className="text-[26px] md:text-[32px] text-[#0f0f0d] font-normal leading-[1.15] mb-3"
+                        style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                      >
+                        {step.t}
+                      </h3>
+                      <p className="text-[15px] text-[#6b6860] leading-[1.65] max-w-[420px]">
+                        {step.d}
+                      </p>
+                    </div>
                   </div>
                 </FadeIn>
               ))}
@@ -319,6 +339,13 @@ export function RenderLanding() {
               >
                 Get matched with a designer
               </button>
+              <img
+                src="/render-finish.png"
+                alt="A homeowner and a Network designer turning an AI render into a real plan"
+                loading="lazy"
+                decoding="async"
+                className="w-full max-w-[360px] mx-auto mt-12"
+              />
             </FadeIn>
           </div>
         </section>
