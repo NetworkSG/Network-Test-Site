@@ -10,6 +10,8 @@ import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { Seo } from "./shared/Seo";
 import { trackLead } from "../utils/metaPixel";
 
+import { recordAttribution } from "../utils/attribution";
+
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
 // ═══════════════════════════════════════════════════════════
@@ -810,6 +812,7 @@ export function CostGuide() {
               }
               setSubmitting(false);
               trackLead("cost-guide-quote");
+              recordAttribution("cost-guide", leadEmail);
               // Stay on Screen5 — submitting reveals the gated estimate inline
               // (the gate's own handler flips `revealed`), so we no longer jump
               // to the standalone confirmation screen.
@@ -2418,6 +2421,25 @@ async function openCostGuidePdf(d: PdfData) {
         },
       }),
     });
+
+    // Persist a structured lead so it shows in the admin Lead Magnets table +
+    // metrics. The PDF/Zapier flow above doesn't store lead data on its own.
+    // Fire-and-forget — never block or fail the user's submission.
+    fetch(`https://${projectId}.supabase.co/functions/v1/cost-guide-capture`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({
+        name: d.lead.name || "",
+        email: d.lead.email || "",
+        whatsapp: d.lead.phone || "",
+        propertyType: d.property ? (PROPERTY_LABEL[d.property] || d.property) : "",
+        propertyStatus: d.newResale === "new" ? "New" : "Resale",
+        unitType: d.unitType || "",
+        timeline: d.journey ? JOURNEY_LABEL[d.journey] : "",
+        budget: budgetRange,
+        lookingForDesigners: d.lookingForDesigners || "",
+      }),
+    }).catch(() => {});
   } catch (err) {
     console.error("Cost guide submit failed:", err);
     throw err;

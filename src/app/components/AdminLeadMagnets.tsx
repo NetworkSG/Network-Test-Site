@@ -251,7 +251,10 @@ export function AdminLeadMagnets() {
     load();
   }, [load]);
 
-  const clarityId = (import.meta as any).env?.VITE_CLARITY_ID as string | undefined;
+  // PostHog session recording status (key has a built-in default, so it's always on).
+  const posthogKey = ((import.meta as any).env?.VITE_POSTHOG_KEY as string | undefined) || "phc_Cwzs6mc4somZj2hGrxSjdHcTb5K3vbuqbBwfsuLfu5yB";
+  const posthogHost = ((import.meta as any).env?.VITE_POSTHOG_HOST as string | undefined) || "https://us.i.posthog.com";
+  const posthogApp = posthogHost.replace("i.posthog.com", "posthog.com");
 
   return (
     <div className="max-w-[1280px] mx-auto">
@@ -302,28 +305,28 @@ export function AdminLeadMagnets() {
         </div>
       ) : null}
 
-      {/* Session recording — Microsoft Clarity */}
+      {/* Session recording — PostHog */}
       <div className="mt-10 p-5 bg-white border border-[#e8eaed] rounded-2xl">
         <div className="flex items-start gap-4">
           <div className="size-[40px] rounded-xl bg-[#fef3c7] flex items-center justify-center shrink-0">
             <Eye className="size-[18px] text-[#d97706]" strokeWidth={1.75} />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-[15px] text-[#101828] leading-tight">Session Recording · Microsoft Clarity</h3>
+            <h3 className="font-semibold text-[15px] text-[#101828] leading-tight">Session Recording · PostHog</h3>
             <p className="text-[12px] text-[#6a7282] mt-1 leading-relaxed">
-              Heatmaps and session replays for behavioral insight.{" "}
-              {clarityId
+              Session replays, heatmaps, and product analytics.{" "}
+              {posthogKey
                 ? "Active on this build."
-                : "Not configured — set VITE_CLARITY_ID in your environment to enable."}
+                : "Not configured — set VITE_POSTHOG_KEY in your environment to enable."}
             </p>
-            {clarityId && (
+            {posthogKey && (
               <a
-                href={`https://clarity.microsoft.com/projects/view/${clarityId}/dashboard`}
+                href={`${posthogApp}/replay`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 mt-3 text-[12px] font-medium text-[#3b82f6] hover:text-[#2563eb]"
               >
-                Open Clarity dashboard
+                Open PostHog replays
                 <ExternalLink className="size-3.5" />
               </a>
             )}
