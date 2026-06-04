@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sanitizeInput, sanitizeEmail, isValidEmail, isValidPhone } from "@/app/utils/sanitize";
@@ -180,14 +179,7 @@ export function RenderStudio() {
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [sendingToDesigner, setSendingToDesigner] = useState(false);
   const [suggestingPrompt, setSuggestingPrompt] = useState(false);
-  const [sentToDesigner, setSentToDesigner] = useState(false);
-
-  // Result gate: after a render completes, the image stays blurred behind a
-  // "find firms" pop-up (mirrors the Cost Guide gate). The user must choose
-  // "Yes" (→ contact form → matched) or "Not now" before the render is shown.
-  const [resultGateAnswered, setResultGateAnswered] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -281,19 +273,30 @@ export function RenderStudio() {
           if (!noRenderLimit) setRendersRemaining(0); // one render only — lock further generates
           setPhase("result");
 
-          // Forward the "wants match" lead to Zapier — only once the render has
-          // actually completed (not at the gate, not at render start). Once per
-          // session, and only when they answered "Yes" on Finding an ID.
+          // Auto-send the finished render to a designer — only once the render
+          // has completed, only when they answered "Yes" on the first form, once
+          // per session. Routes through /render-lead-submit so the watermarked
+          // render image + Quote Request + Zapier render-lead all fire, exactly
+          // like the old post-render modal did — just without re-asking.
           try {
             if (!sessionStorage.getItem("render-gate-lead-sent")) {
               const rawContact = sessionStorage.getItem("render-gate-contact");
               const contact = rawContact ? JSON.parse(rawContact) : null;
               if (contact && String(contact.findingId || "").toLowerCase().startsWith("yes")) {
                 sessionStorage.setItem("render-gate-lead-sent", "1");
-                fetch(`${API_BASE}/render-gate-lead`, {
+                fetch(`${API_BASE}/render-lead-submit`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-                  body: JSON.stringify(contact),
+                  body: JSON.stringify({
+                    taskId: currentTaskId,
+                    name: contact.name,
+                    whatsapp: contact.whatsapp,
+                    email: contact.email,
+                    propertyType: contact.propertyType || undefined,
+                    budget: contact.budget || undefined,
+                    timeline: contact.timeline || undefined,
+                    findingId: contact.findingId || undefined,
+                  }),
                 }).catch(() => {});
               }
             }
@@ -374,8 +377,6 @@ export function RenderStudio() {
     setError(null);
     setCurrentTaskId(null);
     setCurrentResultUrl(null);
-    setResultGateAnswered(false);
-    setSentToDesigner(false);
     setPhase("generating");
 
     try {
@@ -418,8 +419,6 @@ export function RenderStudio() {
     const prevTaskId = currentTaskId;
     setCurrentTaskId(null);
     setCurrentResultUrl(null);
-    setResultGateAnswered(false);
-    setSentToDesigner(false);
     setPhase("generating");
 
     try {
@@ -457,48 +456,6 @@ export function RenderStudio() {
     rendersRemaining,
     rendersLimit,
   ]);
-
-  // Auto-submit "Send to designer" using contact info saved during gate sign-up
-  const handleSendToDesigner = useCallback(async () => {
-    if (!currentTaskId || sendingToDesigner || sentToDesigner) return;
-    let contact: Record<string, string> = {};
-    try {
-      const raw = sessionStorage.getItem("render-gate-contact");
-      if (raw) contact = JSON.parse(raw);
-    } catch { /* noop */ }
-    if (!contact.name || !contact.email || !contact.whatsapp) {
-      setError("Missing contact info. Please go back and fill in the form.");
-      return;
-    }
-    setSendingToDesigner(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/render-lead-submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-        body: JSON.stringify({
-          taskId: currentTaskId,
-          name: contact.name,
-          whatsapp: contact.whatsapp,
-          email: contact.email,
-          propertyType: contact.propertyType || undefined,
-          budget: contact.budget || undefined,
-          timeline: contact.timeline || undefined,
-          findingId: contact.findingId || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Failed to send. Please try again.");
-      } else {
-        setSentToDesigner(true);
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setSendingToDesigner(false);
-    }
-  }, [currentTaskId, sendingToDesigner, sentToDesigner]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
@@ -651,7 +608,7 @@ export function RenderStudio() {
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               className="w-full max-w-[800px]"
             >
-              {/* Main result image — kept blurred until the gate is cleared. */}
+              {/* Main result image */}
               <div className="relative rounded-[16px] overflow-hidden border border-[#e5e1d6] shadow-[0_2px_20px_rgba(0,0,0,0.06)]">
                 <motion.img
                   key={currentResultUrl}
@@ -661,12 +618,7 @@ export function RenderStudio() {
                   initial={{ opacity: 0, scale: 1.02 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5 }}
-                  style={{
-                    filter: resultGateAnswered ? "none" : "blur(22px)",
-                    transform: resultGateAnswered ? "none" : "scale(1.05)",
-                    transition: "filter 0.5s ease",
-                    userSelect: "none",
-                  }}
+                  style={{ userSelect: "none" }}
                 />
               </div>
 
@@ -696,31 +648,6 @@ export function RenderStudio() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
-                {sentToDesigner ? (
-                  <div className="h-[48px] px-6 rounded-[12px] bg-[#166534] text-white text-[14px] font-medium inline-flex items-center justify-center gap-2">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    Sent! We'll WhatsApp you within the day
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleSendToDesigner}
-                    disabled={sendingToDesigner}
-                    className="h-[48px] px-6 rounded-[12px] bg-[#0f0f0d] text-white text-[14px] font-medium hover:opacity-90 active:scale-[0.98] transition disabled:opacity-60 inline-flex items-center justify-center gap-2"
-                  >
-                    {sendingToDesigner ? "Sending..." : "Get matched"}
-                    {!sendingToDesigner && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                        <polyline points="12 5 19 12 12 19" />
-                      </svg>
-                    )}
-                  </button>
-                )}
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -952,223 +879,7 @@ export function RenderStudio() {
         </div>
       </div>
 
-      {/* Result gate — blurs the render behind a "find firms" pop-up. */}
-      <ResultGate
-        open={phase === "result" && !!currentResultUrl && !resultGateAnswered}
-        taskId={currentTaskId}
-        onReveal={(submitted) => {
-          setResultGateAnswered(true);
-          if (submitted) setSentToDesigner(true);
-        }}
-      />
     </div>
-  );
-}
-
-// ─── Result gate (mirrors the Cost Guide lead pop-up) ──────────────
-// Shown over the blurred render once it finishes. "Yes" expands a contact
-// form (prefilled from the entry-gate sign-up) that sends the render to a
-// designer; "Not now" just unlocks the render. Either way the user must act.
-function ResultGate({
-  open,
-  taskId,
-  onReveal,
-}: {
-  open: boolean;
-  taskId: string | null;
-  onReveal: (submitted: boolean) => void;
-}) {
-  const [choice, setChoice] = useState<"" | "yes" | "no">("");
-  const [name, setName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Prefill from the entry-gate contact each time the gate opens.
-  useEffect(() => {
-    if (!open) return;
-    setChoice("");
-    setError(null);
-    try {
-      const raw = sessionStorage.getItem("render-gate-contact");
-      if (raw) {
-        const c = JSON.parse(raw);
-        setName(c.name || "");
-        setWhatsapp(c.whatsapp || "");
-        setEmail(c.email || "");
-      }
-    } catch { /* noop */ }
-  }, [open]);
-
-  // Lock body scroll while open.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-
-  const canSubmit =
-    name.trim().length >= 2 &&
-    isValidPhone(whatsapp.trim()) &&
-    isValidEmail(email.trim()) &&
-    !submitting;
-
-  const handleSubmit = async () => {
-    if (!canSubmit || !taskId) return;
-    setSubmitting(true);
-    setError(null);
-    let stored: Record<string, string> = {};
-    try {
-      const raw = sessionStorage.getItem("render-gate-contact");
-      if (raw) stored = JSON.parse(raw);
-    } catch { /* noop */ }
-    try {
-      const res = await fetch(`${API_BASE}/render-lead-submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
-        body: JSON.stringify({
-          taskId,
-          name: sanitizeInput(name, 100),
-          whatsapp: sanitizeInput(whatsapp, 20),
-          email: sanitizeEmail(email),
-          propertyType: stored.propertyType || undefined,
-          budget: stored.budget || undefined,
-          timeline: stored.timeline || undefined,
-          findingId: stored.findingId || undefined,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.error || "Something went wrong. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-      trackLead("render-tool-submit");
-      onReveal(true);
-    } catch {
-      setError("Network error. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="result-gate"
-          className="fixed inset-0 z-[100] flex items-center justify-center p-5 font-['DM_Sans',sans-serif]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="absolute inset-0 bg-[rgba(24,22,18,0.55)] backdrop-blur-[10px]" />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-[440px] max-h-[90vh] overflow-y-auto bg-[#f0ede6] border border-[#d8d3c8] rounded-[16px] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.35)]"
-          >
-            <h2
-              className="text-[#0f0f0d] leading-[1.2]"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif", fontSize: 26, fontWeight: 500, letterSpacing: "-0.5px" }}
-            >
-              Find firms built for{" "}
-              <span style={{ fontStyle: "italic", color: "#6b6860" }}>your scope.</span>
-            </h2>
-            <p className="text-[14px] text-[#6b6860] leading-[1.6] mt-2.5 mb-5">
-              Love this render? Get matched with three firms who can bring it to life — aligned to your scope and budget.
-            </p>
-
-            {/* Yes reveals the form; Not now just unlocks the render. */}
-            <div className="flex gap-2.5" style={{ marginBottom: choice === "yes" ? 18 : 0 }}>
-              <button
-                type="button"
-                onClick={() => setChoice("yes")}
-                className="flex-1 h-[48px] rounded-[10px] text-[14px] font-semibold transition"
-                style={{
-                  background: choice === "yes" ? "#0f0f0d" : "#faf8f2",
-                  color: choice === "yes" ? "#fff" : "#0f0f0d",
-                  border: `1px solid ${choice === "yes" ? "#0f0f0d" : "#d8d3c8"}`,
-                }}
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                onClick={() => onReveal(false)}
-                className="flex-1 h-[48px] rounded-[10px] text-[14px] font-semibold transition"
-                style={{ background: "#faf8f2", color: "#0f0f0d", border: "1px solid #d8d3c8" }}
-              >
-                Not now
-              </button>
-            </div>
-
-            {choice === "yes" && (
-              <div className="mt-1 space-y-3">
-                <GateField label="Full name">
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
-                  />
-                </GateField>
-                <GateField label="WhatsApp (SG)">
-                  <input
-                    type="tel"
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                    placeholder="8123 4567"
-                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
-                  />
-                </GateField>
-                <GateField label="Email">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@email.com"
-                    className="w-full h-[44px] rounded-[10px] border border-[#d8d3c8] bg-white px-4 text-[13px] text-[#0f0f0d] focus:outline-none focus:border-[#0f0f0d]"
-                  />
-                </GateField>
-                {error && (
-                  <div className="p-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[12px] text-[#991b1b] leading-[1.5]">
-                    {error}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!canSubmit}
-                  className="w-full h-[48px] rounded-[10px] bg-[#0f0f0d] text-white text-[13px] font-semibold hover:opacity-90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed mt-1"
-                >
-                  {submitting ? "Submitting…" : "Submit and get matched"}
-                </button>
-              </div>
-            )}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
-  );
-}
-
-function GateField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] text-[#6b6860] font-medium uppercase tracking-wider">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
   );
 }
 
