@@ -5213,7 +5213,8 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
     }
 
     const body = await c.req.json();
-    const { name, whatsapp, email, propertyType, budget, timeline } = body || {};
+    const { name, whatsapp, email, propertyType, budget, timeline, findingId } = body || {};
+    const cleanFindingId = sanitizeString(findingId || "", 50);
 
     const cleanName = sanitizeString(name || "", 100);
     const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
@@ -5235,6 +5236,36 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
     }
     if (timeline && !ALLOWED_TIMELINES.includes(timeline)) {
       return c.json({ error: "Invalid timeline" }, 400);
+    }
+
+    // Only forward to Zapier when the visitor opted into matching ("Yes").
+    // "No, just exploring" stays a pure gate — validate, let them render, send nothing.
+    const wantsMatch = cleanFindingId.toLowerCase().startsWith("yes");
+    if (wantsMatch) {
+      try {
+        const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
+        if (zapierUrl) {
+          const zapierPayload = {
+            Name: cleanName,
+            Email: cleanEmail,
+            "Phone Number": cleanWhatsapp,
+            "Property Type": propertyType || "",
+            "Key Collection Date": timeline || "",
+            "Renovation Budget": budget || "",
+            "Looking for Designers": cleanFindingId,
+            "Lead Form": "Network 3D AI Render — Wants Match (gate)",
+            "Submitted At": new Date().toISOString(),
+          };
+          // Fire-and-forget so the user isn't blocked on the Zapier round-trip.
+          fetch(zapierUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(zapierPayload),
+          }).catch((zErr) => console.log("Zapier render-lead (gate) webhook error:", zErr));
+        }
+      } catch (zapErr) {
+        console.log("Zapier gate webhook exception:", zapErr);
+      }
     }
 
     return c.json({ success: true });

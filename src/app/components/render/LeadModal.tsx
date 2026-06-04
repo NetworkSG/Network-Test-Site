@@ -364,12 +364,26 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
               </div>
 
               <Field label="Finding an ID">
-                <Select
-                  value={findingId}
-                  onChange={setFindingId}
-                  options={FINDING_ID_OPTIONS}
-                  placeholder="Select..."
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  {FINDING_ID_OPTIONS.map((opt) => {
+                    const active = findingId === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setFindingId(opt)}
+                        aria-pressed={active}
+                        className={`min-h-[44px] py-2 rounded-[10px] border px-3 text-[12px] font-medium leading-[1.3] text-center transition ${
+                          active
+                            ? "bg-[#0f0f0d] text-white border-[#0f0f0d]"
+                            : "bg-white text-[#0f0f0d] border-[#d8d3c8] hover:border-[#0f0f0d]"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
               </Field>
 
               {error && (
