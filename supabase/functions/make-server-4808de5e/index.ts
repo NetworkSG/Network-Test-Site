@@ -4552,8 +4552,11 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
     // total kie.ai spend stays bounded even if the Origin header is spoofed.
     const reqOrigin = c.req.header("Origin") || "";
     const isLocalhostOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
+    // Default to an "unlimited" cap for localhost so the success response below
+    // (rendersUsed/rendersRemaining/rendersLimit) still has a value to report.
+    let ipCap = { allowed: true, used: 0, limit: IP_DAILY_RENDER_CAP };
     if (!isLocalhostOrigin) {
-      const ipCap = await checkIpDailyRenderCap(ip);
+      ipCap = await checkIpDailyRenderCap(ip);
       if (!ipCap.allowed) {
         securityLog("ip_daily_render_cap", "warn", ip, "/render-task", { used: ipCap.used, limit: ipCap.limit });
         return c.json({
