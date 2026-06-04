@@ -217,7 +217,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-[460px] max-h-[90vh] overflow-y-auto bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-8 shadow-[0_30px_60px_rgba(0,0,0,0.18)]"
+            className="relative w-full max-w-[520px] max-h-[90vh] overflow-y-auto bg-[#fafaf8] border border-[#d8d3c8] rounded-[16px] p-8 shadow-[0_30px_60px_rgba(0,0,0,0.18)]"
           >
             <button
               onClick={() => handleClose(false)}
