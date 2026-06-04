@@ -4546,16 +4546,23 @@ app.post("/make-server-4808de5e/render-task", async (c) => {
       return c.json({ error: "Daily render limit reached. Please try again tomorrow." }, 429);
     }
 
-    // Per-IP daily cap (5 per IP per day — shared across initial renders + adjustments)
-    const ipCap = await checkIpDailyRenderCap(ip);
-    if (!ipCap.allowed) {
-      securityLog("ip_daily_render_cap", "warn", ip, "/render-task", { used: ipCap.used, limit: ipCap.limit });
-      return c.json({
-        error: `You've used all ${ipCap.limit} renders for today. Try again tomorrow, or send one of your renders to a designer for real-world feedback.`,
-        remaining: 0,
-        used: ipCap.used,
-        limit: ipCap.limit,
-      }, 429);
+    // Per-IP daily cap (5 per IP per day — shared across initial renders + adjustments).
+    // Skipped for local dev (Origin = localhost) so we can iterate without hitting
+    // the cap. The global daily cap + per-minute rate limit above still apply, so
+    // total kie.ai spend stays bounded even if the Origin header is spoofed.
+    const reqOrigin = c.req.header("Origin") || "";
+    const isLocalhostOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
+    if (!isLocalhostOrigin) {
+      const ipCap = await checkIpDailyRenderCap(ip);
+      if (!ipCap.allowed) {
+        securityLog("ip_daily_render_cap", "warn", ip, "/render-task", { used: ipCap.used, limit: ipCap.limit });
+        return c.json({
+          error: `You've used all ${ipCap.limit} renders for today. Try again tomorrow, or send one of your renders to a designer for real-world feedback.`,
+          remaining: 0,
+          used: ipCap.used,
+          limit: ipCap.limit,
+        }, 429);
+      }
     }
 
     const body = await c.req.json();

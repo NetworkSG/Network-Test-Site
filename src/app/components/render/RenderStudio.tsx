@@ -172,6 +172,11 @@ export function RenderStudio() {
 
   const [rendersRemaining, setRendersRemaining] = useState<number | null>(null);
   const [rendersLimit, setRendersLimit] = useState<number>(5);
+  // Local dev (vite dev server or a localhost host) lifts the render cap so we
+  // can iterate freely. Production deploys keep the normal per-day limit.
+  const noRenderLimit =
+    (import.meta as any).env?.DEV === true ||
+    (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname));
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -209,6 +214,12 @@ export function RenderStudio() {
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
+        if (noRenderLimit) {
+          // Local dev: no cap, so the UI never locks while iterating.
+          setRendersLimit(999);
+          setRendersRemaining(999);
+          return;
+        }
         // Public tool is capped at a single render — clamp whatever the
         // backend reports so the UI enforces 1 even before the cap deploys.
         setRendersLimit(1);
@@ -220,7 +231,7 @@ export function RenderStudio() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [noRenderLimit]);
 
   // ── Elapsed timer while generating ───────────────────────────────
   useEffect(() => {
@@ -267,7 +278,7 @@ export function RenderStudio() {
               },
             ].slice(-6);
           });
-          setRendersRemaining(0); // one render only — lock further generates
+          if (!noRenderLimit) setRendersRemaining(0); // one render only — lock further generates
           setPhase("result");
 
           // Forward the "wants match" lead to Zapier — only once the render has
@@ -302,7 +313,7 @@ export function RenderStudio() {
       active = false;
       clearInterval(interval);
     };
-  }, [phase, currentTaskId, userPrompt]);
+  }, [phase, currentTaskId, userPrompt, noRenderLimit]);
 
   // ── Handle file select ──────────────────────────────────────────
   const handleFile = useCallback(async (file: File) => {
