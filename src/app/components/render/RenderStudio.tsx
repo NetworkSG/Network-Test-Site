@@ -180,6 +180,9 @@ export function RenderStudio() {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [suggestingPrompt, setSuggestingPrompt] = useState(false);
+  // True once a render completes for someone who opted into matching ("Yes" on
+  // the first form) — drives the "we'll contact you within 24h" confirmation.
+  const [matched, setMatched] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -279,10 +282,16 @@ export function RenderStudio() {
           // render image + Quote Request + Zapier render-lead all fire, exactly
           // like the old post-render modal did — just without re-asking.
           try {
-            if (!sessionStorage.getItem("render-gate-lead-sent")) {
-              const rawContact = sessionStorage.getItem("render-gate-contact");
-              const contact = rawContact ? JSON.parse(rawContact) : null;
-              if (contact && String(contact.findingId || "").toLowerCase().startsWith("yes")) {
+            const rawContact = sessionStorage.getItem("render-gate-contact");
+            const contact = rawContact ? JSON.parse(rawContact) : null;
+            const wantsMatch =
+              !!contact && String(contact.findingId || "").toLowerCase().startsWith("yes");
+            if (wantsMatch) {
+              // Show the "we'll contact you" confirmation for opted-in users
+              // (even on a repeat render this session).
+              setMatched(true);
+              // Send the lead + finished render once per session.
+              if (!sessionStorage.getItem("render-gate-lead-sent")) {
                 sessionStorage.setItem("render-gate-lead-sent", "1");
                 fetch(`${API_BASE}/render-lead-submit`, {
                   method: "POST",
@@ -621,6 +630,21 @@ export function RenderStudio() {
                   style={{ userSelect: "none" }}
                 />
               </div>
+
+              {/* Match confirmation — only for visitors who opted in on the first form */}
+              {matched && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.2 }}
+                  className="mt-5 flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-[12px] bg-[#f0f7f1] border border-[#cfe6d4] text-[#166534] text-[14px] font-medium text-center"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  You're all set — a NETWORK designer will WhatsApp you within 24 hours.
+                </motion.div>
+              )}
 
               {/* History strip */}
               {history.length > 1 && (
