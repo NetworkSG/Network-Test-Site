@@ -455,6 +455,7 @@ export function RenderStudio() {
           propertyType: contact.propertyType || undefined,
           budget: contact.budget || undefined,
           timeline: contact.timeline || undefined,
+          findingId: contact.findingId || undefined,
         }),
       });
       if (!res.ok) {
@@ -1006,6 +1007,7 @@ function ResultGate({
           propertyType: stored.propertyType || undefined,
           budget: stored.budget || undefined,
           timeline: stored.timeline || undefined,
+          findingId: stored.findingId || undefined,
         }),
       });
       if (!res.ok) {

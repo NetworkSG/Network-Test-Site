@@ -10,6 +10,7 @@ import {
   isValidPhone,
 } from "@/app/utils/sanitize";
 import { trackLead } from "@/app/utils/metaPixel";
+import { recordAttribution } from "@/app/utils/attribution";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808de5e`;
 
@@ -28,6 +29,10 @@ const TIMELINE_OPTIONS = [
   "Within 3 months",
   "3 – 6 months",
   "6 – 12 months",
+];
+const FINDING_ID_OPTIONS = [
+  "Yes, match me with designers",
+  "No, just exploring",
 ];
 
 type Props = {
@@ -48,6 +53,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
   const [propertyType, setPropertyType] = useState("");
   const [budget, setBudget] = useState("");
   const [timeline, setTimeline] = useState("");
+  const [findingId, setFindingId] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -60,6 +66,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
     propertyType !== "" &&
     budget !== "" &&
     timeline !== "" &&
+    findingId !== "" &&
     !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,6 +91,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
             propertyType,
             budget,
             timeline,
+            findingId,
           }),
         });
         const data = await res.json();
@@ -103,11 +111,13 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
               propertyType,
               budget,
               timeline,
+              findingId,
             }),
           );
         } catch { /* non-fatal */ }
         // Navigate to studio page
         trackLead("render-tool-gate");
+        recordAttribution("render-tool", sanitizeEmail(email));
         setSubmitted(true);
         setTimeout(() => navigate("/render-tool/studio"), 800);
       } catch {
@@ -131,6 +141,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
             propertyType,
             budget,
             timeline,
+            findingId,
           }),
         });
         const data = await res.json();
@@ -157,6 +168,7 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
         setPropertyType("");
         setBudget("");
         setTimeline("");
+        setFindingId("");
         setSubmitting(false);
         setSubmitted(false);
         setError(null);
@@ -350,6 +362,15 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
                   />
                 </Field>
               </div>
+
+              <Field label="Finding an ID">
+                <Select
+                  value={findingId}
+                  onChange={setFindingId}
+                  options={FINDING_ID_OPTIONS}
+                  placeholder="Select..."
+                />
+              </Field>
 
               {error && (
                 <div className="p-3 rounded-[8px] bg-[#fef2f2] border border-[#fecaca] text-[12px] text-[#991b1b] leading-[1.5]">

@@ -1048,6 +1048,7 @@ const ALLOWED_ORIGINS = [
   "https://test-site.networksg.net",
   "https://www.test-site.networksg.net",
   "https://site-admin.networksg.net",
+  "https://network-website-admin.vercel.app",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
@@ -5259,7 +5260,8 @@ app.post("/make-server-4808de5e/render-lead-submit", async (c) => {
     }
 
     const body = await c.req.json();
-    const { taskId, name, whatsapp, email, propertyType, budget, timeline } = body || {};
+    const { taskId, name, whatsapp, email, propertyType, budget, timeline, findingId } = body || {};
+    const cleanFindingId = sanitizeString(findingId || "", 50);
 
     if (!taskId || typeof taskId !== "string" || !/^[a-zA-Z0-9_\-]{1,200}$/.test(taskId)) {
       return c.json({ error: "Invalid task ID" }, 400);
@@ -5324,7 +5326,7 @@ app.post("/make-server-4808de5e/render-lead-submit", async (c) => {
         "Property Type": propertyType || "",
         "Key Collection Date": timeline || "",
         "Renovation Budget": budget || "",
-        "Inquiry": `Network 3D AI Render — ${promptSummary}`,
+        "Inquiry": `Network 3D AI Render — ${promptSummary}${cleanFindingId ? ` | Finding an ID: ${cleanFindingId}` : ""}`,
         "Lead Form": "Network 3D AI Render",
         "3D Render Image": watermarkedUrl,
         "Created Date": new Date().toISOString(),
@@ -5356,6 +5358,7 @@ app.post("/make-server-4808de5e/render-lead-submit", async (c) => {
           "Property Type": propertyType || "",
           "Key Collection Date": timeline || "",
           "Renovation Budget": budget || "",
+          "Looking for Designers": cleanFindingId,
           "User Prompt": task.userPrompt || "",
           "Adjustment Prompt": task.adjustmentPrompt || "",
           "3D Render Image": watermarkedUrl,
