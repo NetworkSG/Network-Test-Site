@@ -5213,8 +5213,7 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
     }
 
     const body = await c.req.json();
-    const { name, whatsapp, email, propertyType, budget, timeline, findingId } = body || {};
-    const cleanFindingId = sanitizeString(findingId || "", 50);
+    const { name, whatsapp, email, propertyType, budget, timeline } = body || {};
 
     const cleanName = sanitizeString(name || "", 100);
     const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
@@ -5238,14 +5237,53 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
       return c.json({ error: "Invalid timeline" }, 400);
     }
 
-    // Only forward to Zapier when the visitor opted into matching ("Yes").
-    // "No, just exploring" stays a pure gate — validate, let them render, send nothing.
-    const wantsMatch = cleanFindingId.toLowerCase().startsWith("yes");
-    if (wantsMatch) {
-      try {
-        const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
-        if (zapierUrl) {
-          const zapierPayload = {
+    // NOTE: no Zapier send here. The "wants match" lead is forwarded later via
+    // /render-gate-lead, only after the visitor actually starts a render.
+    return c.json({ success: true });
+  } catch (err) {
+    console.log("Unexpected error in /render-lead-gate:", err);
+    return c.json({ error: "Unexpected server error" }, 500);
+  }
+});
+
+// POST /render-gate-lead — fired from the studio AFTER the visitor actually
+// kicks off their first render (not at the gate). Forwards "wants match" leads
+// to the render-lead Zapier hook. Sends nothing for "No, just exploring".
+app.post("/make-server-4808de5e/render-gate-lead", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "render-task");
+    if (!rl.allowed) {
+      return c.json({ error: "Too many requests. Please wait a moment." }, 429);
+    }
+
+    const body = await c.req.json();
+    const { name, whatsapp, email, propertyType, budget, timeline, findingId } = body || {};
+    const cleanFindingId = sanitizeString(findingId || "", 50);
+
+    // Only "Yes, match me with designers" forwards a lead. No-op otherwise.
+    if (!cleanFindingId.toLowerCase().startsWith("yes")) {
+      return c.json({ success: true, sent: false });
+    }
+
+    const cleanName = sanitizeString(name || "", 100);
+    const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
+    const cleanWhatsapp = sanitizeString(whatsapp || "", 20);
+    if (!cleanName || cleanName.length < 2 || !isValidEmail(cleanEmail) || !isValidWhatsapp(cleanWhatsapp)) {
+      return c.json({ error: "Invalid lead" }, 400);
+    }
+
+    try {
+      const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
+      if (zapierUrl) {
+        // Fire-and-forget so the user isn't blocked on the Zapier round-trip.
+        fetch(zapierUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             Name: cleanName,
             Email: cleanEmail,
             "Phone Number": cleanWhatsapp,
@@ -5253,24 +5291,18 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
             "Key Collection Date": timeline || "",
             "Renovation Budget": budget || "",
             "Looking for Designers": cleanFindingId,
-            "Lead Form": "Network 3D AI Render — Wants Match (gate)",
+            "Lead Form": "Network 3D AI Render — Wants Match (started render)",
             "Submitted At": new Date().toISOString(),
-          };
-          // Fire-and-forget so the user isn't blocked on the Zapier round-trip.
-          fetch(zapierUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(zapierPayload),
-          }).catch((zErr) => console.log("Zapier render-lead (gate) webhook error:", zErr));
-        }
-      } catch (zapErr) {
-        console.log("Zapier gate webhook exception:", zapErr);
+          }),
+        }).catch((zErr) => console.log("Zapier render-gate-lead webhook error:", zErr));
       }
+    } catch (zapErr) {
+      console.log("Zapier render-gate-lead exception:", zapErr);
     }
 
-    return c.json({ success: true });
+    return c.json({ success: true, sent: true });
   } catch (err) {
-    console.log("Unexpected error in /render-lead-gate:", err);
+    console.log("Unexpected error in /render-gate-lead:", err);
     return c.json({ error: "Unexpected server error" }, 500);
   }
 });

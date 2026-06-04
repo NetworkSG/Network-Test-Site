@@ -369,6 +369,23 @@ export function RenderStudio() {
       setCurrentTaskId(data.taskId);
       // Render cap is fixed at 1 on the client; the completion handler zeroes
       // the remaining count, so we don't echo the backend's per-call numbers.
+
+      // Forward the "wants match" lead to Zapier — only now that the visitor has
+      // actually started a render, not at the gate. Once per session, "Yes" only.
+      try {
+        if (!sessionStorage.getItem("render-gate-lead-sent")) {
+          const rawContact = sessionStorage.getItem("render-gate-contact");
+          const contact = rawContact ? JSON.parse(rawContact) : null;
+          if (contact && String(contact.findingId || "").toLowerCase().startsWith("yes")) {
+            sessionStorage.setItem("render-gate-lead-sent", "1");
+            fetch(`${API_BASE}/render-gate-lead`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...AUTH_HEADERS },
+              body: JSON.stringify(contact),
+            }).catch(() => {});
+          }
+        }
+      } catch { /* non-fatal */ }
     } catch {
       setError("Network error. Please try again.");
       setPhase("idle");
