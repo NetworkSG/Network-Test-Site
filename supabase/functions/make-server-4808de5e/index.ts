@@ -5207,10 +5207,14 @@ app.post("/make-server-4808de5e/render-suggest-prompt", async (c) => {
   }
 });
 
-// POST /render-lead-gate — called BEFORE the user accesses the render studio.
-// Validates contact info only. No database writes or webhooks here.
-// All data submission happens later via /render-lead-submit when user
-// clicks "Send to designer" after generating a render.
+// POST /render-lead-gate — called the moment the visitor clicks "Start
+// rendering" on the first form, BEFORE they access the render studio.
+// Validates contact info, then — ONLY if they opted into matching
+// ("Yes, match me with designers") — fires the Zapier render-lead webhook
+// immediately, so high-intent leads are captured even if the visitor never
+// finishes a render. A second, richer lead (with the finished render image)
+// still fires later via /render-lead-submit once the render completes.
+// Visitors who chose "No, just exploring" send nothing here.
 app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
   try {
     if (!(await verifyAuth(c))) {
@@ -5223,11 +5227,12 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
     }
 
     const body = await c.req.json();
-    const { name, whatsapp, email, propertyType, budget, timeline } = body || {};
+    const { name, whatsapp, email, propertyType, budget, timeline, findingId } = body || {};
 
     const cleanName = sanitizeString(name || "", 100);
     const cleanEmail = sanitizeString(email || "", 200).toLowerCase();
     const cleanWhatsapp = sanitizeString(whatsapp || "", 20);
+    const cleanFindingId = sanitizeString(findingId || "", 50);
     if (!cleanName || cleanName.length < 2) {
       return c.json({ error: "Please enter your full name." }, 400);
     }
@@ -5247,8 +5252,35 @@ app.post("/make-server-4808de5e/render-lead-gate", async (c) => {
       return c.json({ error: "Invalid timeline" }, 400);
     }
 
-    // NOTE: no Zapier send here. The "wants match" lead is forwarded later via
-    // /render-gate-lead, only after the visitor actually starts a render.
+    // Only opted-in visitors ("Yes, match me with designers") forward a lead.
+    if (cleanFindingId.toLowerCase().startsWith("yes")) {
+      try {
+        const zapierUrl = ZAPIER_WEBHOOKS["render-lead"];
+        if (zapierUrl) {
+          // Fire-and-forget so the user isn't blocked on the Zapier round-trip.
+          fetch(zapierUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              Name: cleanName,
+              Email: cleanEmail,
+              "Phone Number": cleanWhatsapp,
+              "Property Type": propertyType || "",
+              "Key Collection Date": timeline || "",
+              "Renovation Budget": budget || "",
+              "Looking for Designers": cleanFindingId,
+              "3D Render Image": "",
+              "Lead Form": "Network 3D AI Render — Wants Match (started form)",
+              "Lead Stage": "Pre-Render (clicked Start rendering)",
+              "Submitted At": new Date().toISOString(),
+            }),
+          }).catch((zErr) => console.log("Zapier render-lead-gate webhook error:", zErr));
+        }
+      } catch (zapErr) {
+        console.log("Zapier render-lead-gate exception:", zapErr);
+      }
+    }
+
     return c.json({ success: true });
   } catch (err) {
     console.log("Unexpected error in /render-lead-gate:", err);
