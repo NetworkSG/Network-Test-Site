@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { GOOGLE_REVIEWS } from "./homepage/v8/sections/GoogleReviews";
 import { COMPLETION, TRUST_STATS, TESTIMONIALS } from "./homepage/content";
-import { submitHomepageLead } from "./homepage/v8/submitHomepageLead";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { sendToZapier } from "@/app/utils/zapier";
+import { recordAttribution } from "@/app/utils/attribution";
 import { trackLead } from "@/app/utils/metaPixel";
 import { isValid8DigitPhone } from "../utils/phone-validation";
 import { isValidEmail } from "../utils/sanitize";
@@ -53,6 +55,39 @@ const AVATARS = ["/Profile/avatar-1.webp", "/Profile/avatar-2.webp", "/Profile/a
 
 const img = (src: string, w: number) => thumbnailUrl(src, w, 72);
 
+/** Persist an ad-LP lead: dedicated `ad_lp_leads` table (slim — the page
+ *  captures no qualifying answers), ad attribution, and the "ad-lp-lead"
+ *  Zapier hook with the same field names the CRM maps for hero leads. */
+function submitAdLpLead(form: { name: string; phone: string; email: string }): void {
+  fetch(`https://${projectId}.supabase.co/rest/v1/ad_lp_leads`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${publicAnonKey}`,
+    },
+    body: JSON.stringify({
+      name: form.name,
+      phone: form.phone,
+      email: form.email || null,
+      source: "/match",
+    }),
+  })
+    .then((r) => {
+      if (!r.ok) console.error("Ad LP lead save failed:", r.status);
+    })
+    .catch((err) => console.error("Ad LP lead save error:", err));
+
+  recordAttribution("homepage-lead", form.email);
+
+  sendToZapier("ad-lp-lead", {
+    "First Name": form.name,
+    "Contact Phone": form.phone,
+    "Email Address": form.email || "",
+    "Lead Form": "Ad Landing Page",
+  });
+}
+
 /* ── Lead funnel: LP-styled contact card → completion. Name / phone /
  *    email only — no qualifying questions on the ad LP, so the lead
  *    fires the moment the contact card is submitted. Same pipeline as
@@ -82,7 +117,7 @@ function AdLeadFunnel({ compact = false }: { compact?: boolean }) {
     }
     setState("complete");
     trackLead("ad-lp-lead");
-    submitHomepageLead(form, {}, { leadFormLabel: "Ad Landing Page", zapierHook: "ad-lp-lead" });
+    submitAdLpLead(form);
   };
 
   return (
