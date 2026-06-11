@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Search, Star, ChevronDown, ChevronLeft, ChevronRight, ArrowRight, SlidersHorizontal, X, Calculator, Check } from "lucide-react";
@@ -8,6 +8,7 @@ import { HeroMatchForm, type HeroLeadFormData } from "./shared/HeroMatchForm";
 import { QualifyingFlow } from "./homepage/v8/sections/HeroSection";
 import { COMPLETION } from "./homepage/content";
 import { sendToZapier } from "@/app/utils/zapier";
+import { recordAttribution } from "@/app/utils/attribution";
 import { trackLead } from "@/app/utils/metaPixel";
 import logoImg from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 
@@ -588,6 +589,7 @@ function DirectoryLeadFunnel() {
               ...answers,
             }),
           }).catch((err) => console.error("Lead save error:", err));
+          recordAttribution("homepage-lead", contact.email);
           sendToZapier("hero-lead", {
             "First Name": contact.name,
             "Contact Phone": contact.phone,
@@ -790,42 +792,83 @@ function DesignerCoverCarousel({ designer }: { designer: DesignerCard }) {
   // can fade in from a cream placeholder instead of flashing white while
   // the network request is in flight.
   const [loaded, setLoaded] = useState<Set<string>>(() => new Set());
+  const markLoaded = (src: string) =>
+    setLoaded((prev) => {
+      if (prev.has(src)) return prev;
+      const out = new Set(prev);
+      out.add(src);
+      return out;
+    });
   const currentSrc = safeSlides[index];
   const isLoaded = loaded.has(currentSrc);
 
-  // Warm the browser cache for non-visible slides so swiping/auto-advance
-  // doesn't restart the flash cycle. Runs once per src after first paint.
+  // Cached-image race: when the visible <img> is served from cache, the
+  // browser can finish before React attaches onLoad, leaving the slide at
+  // opacity 0. After each src swap, check the element directly.
+  const imgRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    const next = rawSlides.filter((s) => !loaded.has(s));
-    if (next.length === 0) return;
-    const imgs = next.map((src) => {
-      const i = new Image();
-      i.decoding = "async";
-      i.src = thumbnailUrl(resolveAsset(src), 480, 70);
-      const done = () =>
-        setLoaded((prev) => {
-          if (prev.has(src)) return prev;
-          const out = new Set(prev);
-          out.add(src);
-          return out;
-        });
-      i.onload = done;
-      i.onerror = () => markFailed(src);
-      // If the image was already cached, onload may never fire — check now.
-      if (i.complete && i.naturalWidth > 0) done();
-      return i;
-    });
+    const el = imgRef.current;
+    if (el && el.complete && el.naturalWidth > 0) markLoaded(currentSrc);
+  }, [currentSrc]);
+
+  // Only warm hidden slides once the card has actually scrolled near the
+  // viewport. Previously every card preloaded all of its slides on mount,
+  // which fired dozens of concurrent weserv resize requests on page load
+  // and starved the covers the user could actually see.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Warm the browser cache for non-visible slides so swiping doesn't
+  // restart the flash cycle — but one at a time, at low fetch priority,
+  // and only after the visible slide has finished. Each completed warm
+  // updates `loaded`, which re-runs the effect and pulls the next slide.
+  useEffect(() => {
+    if (!inView || !isLoaded) return;
+    const next = rawSlides.find((s) => !loaded.has(s) && !failed.has(s));
+    if (!next) return;
+    const img = new Image();
+    let settled = false;
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (ok) markLoaded(next);
+      else markFailed(next);
+    };
+    img.decoding = "async";
+    (img as any).fetchPriority = "low";
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = thumbnailUrl(resolveAsset(next), 480, 70);
+    // If the image was already cached, onload may never fire — check now.
+    if (img.complete && img.naturalWidth > 0) done(true);
     return () => {
-      imgs.forEach((i) => {
-        i.onload = null;
-        i.onerror = null;
-      });
+      img.onload = null;
+      img.onerror = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawSlides.join("|")]);
+  }, [inView, isLoaded, loaded, failed, rawSlides.join("|")]);
 
   return (
     <div
+      ref={rootRef}
       className="absolute inset-0"
       style={{
         background:
@@ -837,22 +880,18 @@ function DesignerCoverCarousel({ designer }: { designer: DesignerCard }) {
           but the DOM node is reused — avoids the AnimatePresence
           removeChild race we hit on iOS Safari with popLayout mode.
           opacity is driven by `loaded` so the image fades in instead
-          of popping after the cream placeholder. */}
+          of popping after the cream placeholder. loading="lazy" keeps
+          below-the-fold cards from competing with visible covers. */}
       <img
         key={`${designer.id}-${currentSrc}`}
+        ref={imgRef}
         src={thumbnailUrl(resolveAsset(currentSrc), 480, 70)}
         alt=""
         className="absolute inset-0 w-full h-full object-cover"
         style={{ opacity: isLoaded ? 1 : 0, transition: "opacity 0.35s ease" }}
         decoding="async"
-        onLoad={() =>
-          setLoaded((prev) => {
-            if (prev.has(currentSrc)) return prev;
-            const out = new Set(prev);
-            out.add(currentSrc);
-            return out;
-          })
-        }
+        loading="lazy"
+        onLoad={() => markLoaded(currentSrc)}
         onError={() => markFailed(currentSrc)}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
