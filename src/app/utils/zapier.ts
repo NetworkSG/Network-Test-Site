@@ -7,7 +7,7 @@ const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-4808
  * Webhook URLs are never exposed to the frontend.
  */
 export async function sendToZapier(
-  hook: "hero-lead" | "render-lead" | "cost-guide-lead" | "handshake-lead",
+  hook: "hero-lead" | "render-lead" | "cost-guide-lead" | "handshake-lead" | "ad-lp-lead",
   data: Record<string, string>
 ): Promise<void> {
   try {

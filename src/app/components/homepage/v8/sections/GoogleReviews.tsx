@@ -5,7 +5,9 @@ import { AnimatePresence, motion } from "motion/react";
 const sans = "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const serif = "'EB Garamond', Georgia, serif";
 
-const reviews = [
+// Exported so other landing pages (e.g. the ad LP) can reuse the same
+// verified review pool instead of duplicating quotes.
+export const GOOGLE_REVIEWS = [
   {
     name: "LYDIA Poh",
     initial: "L",
@@ -55,6 +57,8 @@ const reviews = [
     link: "https://maps.app.goo.gl/TYvBaZ2VKXSTfgjh7",
   },
 ];
+
+const reviews = GOOGLE_REVIEWS;
 
 function Stars() {
   return (

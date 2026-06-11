@@ -1523,6 +1523,8 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
   "concierge-match-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmm8f4/",
   "designer-profile-lead": "https://hooks.zapier.com/hooks/catch/20249199/uvmnj1y/",
+  // Ad landing page (/match) — name/phone/email only, no qualifying flow.
+  "ad-lp-lead": "https://hooks.zapier.com/hooks/catch/20249199/43h0nmm/",
 };
 
 // Upload a Cost Guide PDF (base64) to public storage, return its URL so the

@@ -46,6 +46,7 @@ const LazyBlogIndex = lazy(() => import("./components/BlogIndex").then((m) => ({
 const LazyBlogArticle = lazy(() => import("./components/BlogArticle").then((m) => ({ default: m.BlogArticle })));
 const LazyAdminBlogEditor = lazy(() => import("./components/AdminBlogEditor").then((m) => ({ default: m.AdminBlogEditor })));
 const LazyTestHomepage = lazy(() => import("./components/homepage/test/TestHomepage").then((m) => ({ default: m.TestHomepage })));
+const LazyAdLandingPage = lazy(() => import("./components/AdLandingPage").then((m) => ({ default: m.AdLandingPage })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -107,6 +108,8 @@ export const router = createBrowserRouter([
   { path: "/test-homepage", element: createElement(LazyRoute, { component: LazyTestHomepage }) },
   { path: "/old-homepage", element: createElement(LazyRoute, { component: LazyHomePage }) },
   { path: "/get-matched", element: createElement(LazyRoute, { component: LazyGetMatchedForm }) },
+  // Ad landing page — standalone direct-response page for paid traffic (noindex).
+  { path: "/match", element: createElement(LazyRoute, { component: LazyAdLandingPage }) },
   { path: "/render-tool", element: createElement(LazyRoute, { component: LazyRenderLanding }) },
   { path: "/render-tool/studio", element: createElement(LazyRoute, { component: LazyRenderStudioPage }) },
   { path: "/cost-guide", element: createElement(LazyRoute, { component: LazyCostGuide }) },

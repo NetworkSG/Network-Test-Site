@@ -991,6 +991,7 @@ const ALLOWED_ORIGINS = [
   "https://test-site.networksg.net",
   "https://www.test-site.networksg.net",
   "https://site-admin.networksg.net",
+  "https://network-website-admin.vercel.app",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
@@ -1029,6 +1030,7 @@ const ZAPIER_WEBHOOKS: Record<string, string> = {
   "render-lead": "https://hooks.zapier.com/hooks/catch/20249199/uzpio2p/",
   "cost-guide-lead": "https://hooks.zapier.com/hooks/catch/20249199/u5ds4ij/",
   "handshake-lead": "https://hooks.zapier.com/hooks/catch/20249199/u72cnij/",
+  "ad-lp-lead": "https://hooks.zapier.com/hooks/catch/20249199/43h0nmm/",
 };
 
 app.post("/make-server-4808de5e/zapier-proxy", async (c) => {

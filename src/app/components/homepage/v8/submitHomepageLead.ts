@@ -1,5 +1,6 @@
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
+import { recordAttribution } from "@/app/utils/attribution";
 import type { LeadFormData } from "../types";
 
 export type QualifyingAnswers = {
@@ -16,7 +17,7 @@ export type QualifyingAnswers = {
 export async function submitHomepageLead(
   form: LeadFormData,
   answers: QualifyingAnswers,
-  opts: { leadFormLabel?: string } = {},
+  opts: { leadFormLabel?: string; zapierHook?: "hero-lead" | "ad-lp-lead" } = {},
 ): Promise<void> {
   const sbUrl = `https://${projectId}.supabase.co`;
   const sbKey = publicAnonKey;
@@ -42,8 +43,12 @@ export async function submitHomepageLead(
     })
     .catch((err) => console.error("Lead save error:", err));
 
-  // 2) Zapier hero-lead hook — same payload shape the CRM already maps
-  sendToZapier("hero-lead", {
+  // Attach ad attribution (no-op if the visitor didn't arrive via a tagged ad)
+  recordAttribution("homepage-lead", form.email);
+
+  // 2) Zapier hook — same payload shape the CRM already maps. Defaults to
+  // the hero-lead hook; the ad LP routes to its own dedicated Zap.
+  sendToZapier(opts.zapierHook || "hero-lead", {
     "First Name": form.name,
     "Contact Phone": form.phone,
     "Email Address": form.email || "",
