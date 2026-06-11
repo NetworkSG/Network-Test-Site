@@ -274,7 +274,7 @@ export function Navbar() {
           {/* Get Matched — hidden on mobile */}
           <div className="hidden md:block bg-[#f6f6f6] border border-white rounded-[100px] p-[7px]">
             <button
-              onClick={() => navigate("/get-matched")}
+              onClick={() => navigate("/")}
               className="bg-[#09090b] text-white rounded-[100px] px-8 py-2 font-['Inter',sans-serif] font-medium text-[14px] tracking-[-0.7px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)]"
             >
               Get Matched
@@ -422,7 +422,7 @@ export function Navbar() {
             <div className="px-5 py-4 border-t border-[#f3f4f6] flex flex-col gap-2.5">
               {/* Get Matched CTA */}
               <button
-                onClick={() => { setMobileMenuOpen(false); navigate("/get-matched"); }}
+                onClick={() => { setMobileMenuOpen(false); navigate("/"); }}
                 className="w-full bg-[#09090b] text-white rounded-[100px] py-3 font-['Inter',sans-serif] font-medium text-[14px] tracking-[-0.5px] shadow-[0px_4px_4px_0px_rgba(0,0,0,0.25)] cursor-pointer"
               >
                 Get Matched

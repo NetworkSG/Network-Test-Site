@@ -294,7 +294,7 @@ function ExploreDropdown() {
 interface HomepageNavProps {
   /**
    * Click handler for the "Get matched" CTA. On the homepage this scrolls to
-   * the lead form; on inner pages it falls back to navigating to /get-matched.
+   * the lead form; on inner pages it falls back to navigating to the homepage.
    */
   onCtaClick?: () => void;
   ctaLabel?: string;
@@ -374,7 +374,7 @@ export function HomepageNav({ onCtaClick, ctaLabel = "Get matched" }: HomepageNa
 
   const handleCta = () => {
     if (onCtaClick) onCtaClick();
-    else window.location.href = "/get-matched";
+    else window.location.href = "/";
   };
 
   // Avatar trigger — minimal-footprint button that opens the side sheet.

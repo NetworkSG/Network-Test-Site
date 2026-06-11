@@ -3,6 +3,7 @@ import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validati
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from "motion/react";
 import { supabase } from "./supabaseClient";
 import { sendToZapier } from "@/app/utils/zapier";
+import { recordAttribution } from "@/app/utils/attribution";
 import imgNetworkLogo from "figma:asset/4efe71925f3a6fffbde21078b4b09260acf5eec2.png";
 const imgHandshakeLogo = "/handshake-logo.webp";
 import { ReactLenis } from "lenis/react";
@@ -896,6 +897,7 @@ function LeadCaptureForm() {
       });
       if (error) throw error;
       setSubmitted(true);
+      recordAttribution("handshake-lead", form.email);
       toast.success("We'll be in touch soon!");
 
       // Send to Zapier via server proxy

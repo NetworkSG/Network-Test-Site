@@ -100,6 +100,18 @@ export function LeadModal({ open, onOpenChange, taskId = null, resultUrl = null 
           setSubmitting(false);
           return;
         }
+        // Persist the modal submission so the admin can track who started the
+        // Room Designer but never produced a render (make-server saves nothing).
+        fetch(`https://${projectId}.supabase.co/functions/v1/render-gate-capture`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${publicAnonKey}` },
+          body: JSON.stringify({
+            name: sanitizeInput(name, 100),
+            email: sanitizeEmail(email),
+            whatsapp: sanitizeInput(whatsapp, 20),
+            propertyType, budget, timeline, wantsMatch: findingId,
+          }),
+        }).catch(() => {});
         // Save contact info for studio's "Send to designer" auto-submit
         try {
           sessionStorage.setItem(

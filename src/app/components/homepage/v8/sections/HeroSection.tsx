@@ -6,6 +6,7 @@ import { useHomeownerCount } from "../useHomeownerCount";
 import type { FormState, LeadFormData } from "../../types";
 import { projectId, publicAnonKey } from "/utils/supabase/info";
 import { sendToZapier } from "@/app/utils/zapier";
+import { recordAttribution } from "@/app/utils/attribution";
 import { trackLead } from "@/app/utils/metaPixel";
 import { isValid8DigitPhone } from "../../../../utils/phone-validation";
 
@@ -388,6 +389,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                     }),
                   }).then(r => { if (!r.ok) console.error("Lead save failed:", r.status); else console.log("Lead saved to homepage_leads"); })
                     .catch(err => console.error("Lead save error:", err));
+                  recordAttribution("homepage-lead", form.email);
                   // Send to Zapier via server proxy
                   sendToZapier("hero-lead", {
                     "First Name": form.name,

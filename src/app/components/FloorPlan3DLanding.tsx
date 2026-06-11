@@ -3,6 +3,7 @@ import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validati
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
+import { recordAttribution } from "../utils/attribution";
 // FloorPlan3DLanding — updated
 import { motion, AnimatePresence, useInView, useReducedMotion } from "motion/react";
 import {
@@ -382,6 +383,7 @@ function LeadCaptureSection() {
       });
       if (error) throw error;
       setStatus("success");
+      recordAttribution("homepage-lead", form.email);
     } catch { setStatus("error"); }
   };
 

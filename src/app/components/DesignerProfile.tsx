@@ -3,6 +3,7 @@ import { isValid8DigitPhone, PHONE_ERROR_MESSAGE } from "../utils/phone-validati
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, Link } from "react-router";
 import { sanitizeInput, sanitizeEmail } from "../utils/sanitize";
+import { recordAttribution } from "../utils/attribution";
 import { Navbar } from "./Navbar";
 import { DesignerProfileFooter } from "./DesignerProfileFooter";
 import { SiteNav } from "./SiteNav";
@@ -668,7 +669,7 @@ export function QuoteCard({ compact = false }: { compact?: boolean } = {}) {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error || "Failed to submit. Please try again."); }
-      else { setSubmitted(true); }
+      else { setSubmitted(true); recordAttribution("designer-inquiry", form.email); }
     } catch (err: any) {
       setError("Network error. Please try again.");
     }
