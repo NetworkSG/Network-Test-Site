@@ -373,7 +373,7 @@ export function HeroSection({ formState, setFormState, form, setForm, isSubmitti
                 transition={{ duration: 0.3 }} className="flex items-center justify-center min-h-[70vh] py-8">
                 <QualifyingFlow onComplete={(answers) => {
                   setFormState("complete");
-                  trackLead("homepage-hero-lead");
+                  trackLead("homepage-hero-lead", { email: form.email, phone: form.phone });
                   heroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   // Save lead to Supabase homepage_leads table
                   const sbUrl = `https://${projectId}.supabase.co`;

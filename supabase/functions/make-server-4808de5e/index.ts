@@ -1913,6 +1913,89 @@ app.post("/make-server-4808de5e/cost-guide-upload", async (c) => {
   }
 });
 
+// --- Meta Conversions API relay (server-side, deduped Lead events) ---
+// Mirrors the browser pixel's `Lead` via Meta's Conversions API so leads
+// dropped by ad blockers / iOS still register. Deduped against the browser
+// event by a shared `eventId`. Token + pixel id come from Supabase secrets
+// (META_CAPI_TOKEN / META_PIXEL_ID) — never the repo. Raw email/phone are
+// SHA-256 hashed here (Meta's required normalisation) and never stored.
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+app.post("/make-server-4808de5e/capi-lead", async (c) => {
+  try {
+    if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);
+    const ip = getClientIp(c);
+    const rl = checkRateLimit(ip, "capi-lead");
+    if (!rl.allowed) return c.json({ error: "Too many requests" }, 429);
+
+    const token = Deno.env.get("META_CAPI_TOKEN");
+    const pixelId = Deno.env.get("META_PIXEL_ID");
+    // Soft no-op (200) when unconfigured so the browser's fire-and-forget call
+    // never surfaces an error to the user.
+    if (!token || !pixelId) return c.json({ ok: false, reason: "capi_not_configured" });
+
+    const body = await c.req.json().catch(() => ({}));
+    const { eventId, source, value, currency, email, phone, eventSourceUrl, fbp, fbc, testEventCode } = body || {};
+
+    const user_data: Record<string, any> = {};
+    if (typeof email === "string" && email.includes("@")) {
+      user_data.em = [await sha256Hex(email.trim().toLowerCase())];
+    }
+    if (typeof phone === "string") {
+      const digits = phone.replace(/\D/g, "");
+      if (digits.length >= 8) {
+        // SG numbers arrive as 8 digits; prefix country code 65 for matching.
+        user_data.ph = [await sha256Hex(digits.length === 8 ? `65${digits}` : digits)];
+      }
+    }
+    user_data.client_ip_address = ip;
+    user_data.client_user_agent = c.req.header("user-agent") || "";
+    if (typeof fbp === "string" && fbp) user_data.fbp = fbp;
+    if (typeof fbc === "string" && fbc) user_data.fbc = fbc;
+
+    const event: Record<string, any> = {
+      event_name: "Lead",
+      event_time: Math.floor(Date.now() / 1000),
+      action_source: "website",
+      user_data,
+      custom_data: {
+        value: typeof value === "number" ? value : Number(value) || 0,
+        currency: typeof currency === "string" ? currency : "SGD",
+        source: typeof source === "string" ? sanitizeString(source, 60) : "",
+      },
+    };
+    if (typeof eventId === "string") event.event_id = eventId.slice(0, 100);
+    if (typeof eventSourceUrl === "string") event.event_source_url = eventSourceUrl.slice(0, 500);
+
+    const payload: Record<string, any> = { data: [event] };
+    if (typeof testEventCode === "string" && testEventCode) payload.test_event_code = testEventCode.slice(0, 40);
+
+    let ok = false;
+    let received = 0;
+    let errorMsg: string | undefined;
+    try {
+      const resp = await fetch(
+        `https://graph.facebook.com/v21.0/${pixelId}/events?access_token=${encodeURIComponent(token)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+      );
+      const json = await resp.json().catch(() => ({}));
+      ok = resp.ok;
+      received = json?.events_received ?? 0;
+      if (!resp.ok) errorMsg = JSON.stringify(json?.error || json).slice(0, 300);
+    } catch (e: any) {
+      errorMsg = String(e?.message || e).slice(0, 200);
+    }
+    if (errorMsg) console.log("CAPI lead error:", errorMsg);
+    return c.json({ ok, events_received: received });
+  } catch (err) {
+    console.log("capi-lead error:", err);
+    return c.json({ error: "Internal server error" }, 500);
+  }
+});
+
 app.post("/make-server-4808de5e/zapier-proxy", async (c) => {
   try {
     if (!(await verifyAuth(c))) return c.json({ error: "Unauthorized" }, 401);

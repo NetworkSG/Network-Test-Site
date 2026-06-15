@@ -574,7 +574,7 @@ function DirectoryLeadFunnel() {
       <QualifyingFlow
         onComplete={(answers) => {
           setState("complete");
-          trackLead("directory-hero-lead");
+          trackLead("directory-hero-lead", { email: contact.email, phone: contact.phone });
           // Persist to Supabase homepage_leads — same table the homepage
           // funnel writes to, so ops only watches one stream.
           const sbUrl = `https://${projectId}.supabase.co`;

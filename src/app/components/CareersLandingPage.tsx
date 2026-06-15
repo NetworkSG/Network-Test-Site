@@ -169,7 +169,7 @@ function ApplyForm({ presetRole, onRoleConsumed }: { presetRole?: string; onRole
       .catch((err) => console.error("Careers application save error:", err))
       .finally(() => {
         setDone(true);
-        trackLead("careers-application");
+        trackLead("careers-application", { phone: form.phone });
       });
   };
 

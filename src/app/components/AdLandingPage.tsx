@@ -116,7 +116,7 @@ function AdLeadFunnel({ compact = false }: { compact?: boolean }) {
       return;
     }
     setState("complete");
-    trackLead("ad-lp-lead");
+    trackLead("ad-lp-lead", { email: form.email, phone: form.phone });
     submitAdLpLead(form);
   };
 
