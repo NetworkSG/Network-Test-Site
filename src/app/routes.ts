@@ -48,6 +48,7 @@ const LazyAdminBlogEditor = lazy(() => import("./components/AdminBlogEditor").th
 const LazyTestHomepage = lazy(() => import("./components/homepage/test/TestHomepage").then((m) => ({ default: m.TestHomepage })));
 const LazyAdLandingPage = lazy(() => import("./components/AdLandingPage").then((m) => ({ default: m.AdLandingPage })));
 const LazyCareersLandingPage = lazy(() => import("./components/CareersLandingPage").then((m) => ({ default: m.CareersLandingPage })));
+const LazyRelayHomepage = lazy(() => import("./components/RelayHomepage").then((m) => ({ default: m.RelayHomepage })));
 
 // ── Shared loading fallback ───────────────────────────────────────
 const pageFallback = createElement("div", {
@@ -107,6 +108,8 @@ export const router = createBrowserRouter([
   { Component: RootLayout, children: [
   { path: "/", Component: HomepageV8 },
   { path: "/test-homepage", element: createElement(LazyRoute, { component: LazyTestHomepage }) },
+  // Relay-layout homepage variant — faithful port of the Claude Design handoff (noindex).
+  { path: "/test-homepage-v1", element: createElement(LazyRoute, { component: LazyRelayHomepage }) },
   { path: "/old-homepage", element: createElement(LazyRoute, { component: LazyHomePage }) },
   { path: "/get-matched", element: createElement(LazyRoute, { component: LazyGetMatchedForm }) },
   // Ad landing page — standalone direct-response page for paid traffic (noindex).
